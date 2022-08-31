@@ -8,12 +8,16 @@ RUN if [ "${NODE_VERSION}" != "none" ]; then su vscode -c "umask 0002 && . /usr/
 
 # [Optional] Uncomment this section to install additional OS packages.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y install --no-install-recommends createrepo
+    && apt-get -y install --no-install-recommends createrepo-c libostree-dev
 
 # [Optional] Uncomment the next lines to use go get to install anything else you need
-# USER vscode
-# RUN go get -x <your-dependency-or-tool>
-# USER root
+USER vscode
+RUN go install github.com/bufbuild/buf/cmd/buf@latest
+RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install github.com/bufbuild/connect-go/cmd/protoc-gen-connect-go@latest
+RUN mkdir -p storage
+USER root
 
 # [Optional] Uncomment this line to install global node packages.
 # RUN su vscode -c "source /usr/local/share/nvm/nvm.sh && npm install -g <your-package-here>" 2>&1
