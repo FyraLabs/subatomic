@@ -10,7 +10,7 @@ import (
 
 	"github.com/FyraLabs/subatomic/ent/migrate"
 
-	"github.com/FyraLabs/subatomic/ent/repository"
+	"github.com/FyraLabs/subatomic/ent/repo"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -21,8 +21,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
-	// Repository is the client for interacting with the Repository builders.
-	Repository *RepositoryClient
+	// Repo is the client for interacting with the Repo builders.
+	Repo *RepoClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -36,7 +36,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
-	c.Repository = NewRepositoryClient(c.config)
+	c.Repo = NewRepoClient(c.config)
 }
 
 // Open opens a database/sql.DB specified by the driver name and
@@ -68,9 +68,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:        ctx,
-		config:     cfg,
-		Repository: NewRepositoryClient(cfg),
+		ctx:    ctx,
+		config: cfg,
+		Repo:   NewRepoClient(cfg),
 	}, nil
 }
 
@@ -88,16 +88,16 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:        ctx,
-		config:     cfg,
-		Repository: NewRepositoryClient(cfg),
+		ctx:    ctx,
+		config: cfg,
+		Repo:   NewRepoClient(cfg),
 	}, nil
 }
 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Repository.
+//		Repo.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -119,87 +119,87 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.Repository.Use(hooks...)
+	c.Repo.Use(hooks...)
 }
 
-// RepositoryClient is a client for the Repository schema.
-type RepositoryClient struct {
+// RepoClient is a client for the Repo schema.
+type RepoClient struct {
 	config
 }
 
-// NewRepositoryClient returns a client for the Repository from the given config.
-func NewRepositoryClient(c config) *RepositoryClient {
-	return &RepositoryClient{config: c}
+// NewRepoClient returns a client for the Repo from the given config.
+func NewRepoClient(c config) *RepoClient {
+	return &RepoClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `repository.Hooks(f(g(h())))`.
-func (c *RepositoryClient) Use(hooks ...Hook) {
-	c.hooks.Repository = append(c.hooks.Repository, hooks...)
+// A call to `Use(f, g, h)` equals to `repo.Hooks(f(g(h())))`.
+func (c *RepoClient) Use(hooks ...Hook) {
+	c.hooks.Repo = append(c.hooks.Repo, hooks...)
 }
 
-// Create returns a builder for creating a Repository entity.
-func (c *RepositoryClient) Create() *RepositoryCreate {
-	mutation := newRepositoryMutation(c.config, OpCreate)
-	return &RepositoryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a Repo entity.
+func (c *RepoClient) Create() *RepoCreate {
+	mutation := newRepoMutation(c.config, OpCreate)
+	return &RepoCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of Repository entities.
-func (c *RepositoryClient) CreateBulk(builders ...*RepositoryCreate) *RepositoryCreateBulk {
-	return &RepositoryCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of Repo entities.
+func (c *RepoClient) CreateBulk(builders ...*RepoCreate) *RepoCreateBulk {
+	return &RepoCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for Repository.
-func (c *RepositoryClient) Update() *RepositoryUpdate {
-	mutation := newRepositoryMutation(c.config, OpUpdate)
-	return &RepositoryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for Repo.
+func (c *RepoClient) Update() *RepoUpdate {
+	mutation := newRepoMutation(c.config, OpUpdate)
+	return &RepoUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *RepositoryClient) UpdateOne(r *Repository) *RepositoryUpdateOne {
-	mutation := newRepositoryMutation(c.config, OpUpdateOne, withRepository(r))
-	return &RepositoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *RepoClient) UpdateOne(r *Repo) *RepoUpdateOne {
+	mutation := newRepoMutation(c.config, OpUpdateOne, withRepo(r))
+	return &RepoUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *RepositoryClient) UpdateOneID(id int) *RepositoryUpdateOne {
-	mutation := newRepositoryMutation(c.config, OpUpdateOne, withRepositoryID(id))
-	return &RepositoryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *RepoClient) UpdateOneID(id string) *RepoUpdateOne {
+	mutation := newRepoMutation(c.config, OpUpdateOne, withRepoID(id))
+	return &RepoUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for Repository.
-func (c *RepositoryClient) Delete() *RepositoryDelete {
-	mutation := newRepositoryMutation(c.config, OpDelete)
-	return &RepositoryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for Repo.
+func (c *RepoClient) Delete() *RepoDelete {
+	mutation := newRepoMutation(c.config, OpDelete)
+	return &RepoDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *RepositoryClient) DeleteOne(r *Repository) *RepositoryDeleteOne {
+func (c *RepoClient) DeleteOne(r *Repo) *RepoDeleteOne {
 	return c.DeleteOneID(r.ID)
 }
 
 // DeleteOne returns a builder for deleting the given entity by its id.
-func (c *RepositoryClient) DeleteOneID(id int) *RepositoryDeleteOne {
-	builder := c.Delete().Where(repository.ID(id))
+func (c *RepoClient) DeleteOneID(id string) *RepoDeleteOne {
+	builder := c.Delete().Where(repo.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &RepositoryDeleteOne{builder}
+	return &RepoDeleteOne{builder}
 }
 
-// Query returns a query builder for Repository.
-func (c *RepositoryClient) Query() *RepositoryQuery {
-	return &RepositoryQuery{
+// Query returns a query builder for Repo.
+func (c *RepoClient) Query() *RepoQuery {
+	return &RepoQuery{
 		config: c.config,
 	}
 }
 
-// Get returns a Repository entity by its id.
-func (c *RepositoryClient) Get(ctx context.Context, id int) (*Repository, error) {
-	return c.Query().Where(repository.ID(id)).Only(ctx)
+// Get returns a Repo entity by its id.
+func (c *RepoClient) Get(ctx context.Context, id string) (*Repo, error) {
+	return c.Query().Where(repo.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *RepositoryClient) GetX(ctx context.Context, id int) *Repository {
+func (c *RepoClient) GetX(ctx context.Context, id string) *Repo {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -208,6 +208,6 @@ func (c *RepositoryClient) GetX(ctx context.Context, id int) *Repository {
 }
 
 // Hooks returns the client hooks.
-func (c *RepositoryClient) Hooks() []Hook {
-	return c.hooks.Repository
+func (c *RepoClient) Hooks() []Hook {
+	return c.hooks.Repo
 }

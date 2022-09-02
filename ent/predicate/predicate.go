@@ -6,5 +6,5 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// Repository is the predicate function for repository builders.
-type Repository func(*sql.Selector)
+// Repo is the predicate function for repo builders.
+type Repo func(*sql.Selector)

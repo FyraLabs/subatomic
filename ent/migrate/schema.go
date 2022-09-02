@@ -8,21 +8,20 @@ import (
 )
 
 var (
-	// RepositoriesColumns holds the columns for the "repositories" table.
-	RepositoriesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
+	// ReposColumns holds the columns for the "repos" table.
+	ReposColumns = []*schema.Column{
 		{Name: "oid", Type: field.TypeString, Unique: true},
-		{Name: "type", Type: field.TypeEnum, Enums: []string{"LOW", "HIGH"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"dnf", "ostree"}},
 	}
-	// RepositoriesTable holds the schema information for the "repositories" table.
-	RepositoriesTable = &schema.Table{
-		Name:       "repositories",
-		Columns:    RepositoriesColumns,
-		PrimaryKey: []*schema.Column{RepositoriesColumns[0]},
+	// ReposTable holds the schema information for the "repos" table.
+	ReposTable = &schema.Table{
+		Name:       "repos",
+		Columns:    ReposColumns,
+		PrimaryKey: []*schema.Column{ReposColumns[0]},
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
-		RepositoriesTable,
+		ReposTable,
 	}
 )
 

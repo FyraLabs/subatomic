@@ -12,10 +12,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 # [Optional] Uncomment the next lines to use go get to install anything else you need
 USER vscode
-RUN go install github.com/bufbuild/buf/cmd/buf@latest
-RUN go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-RUN go install github.com/bufbuild/connect-go/cmd/protoc-gen-connect-go@latest
+RUN go install github.com/cosmtrek/air@latest\
+RUN go install github.com/swaggo/swag/cmd/swag@latest
 RUN mkdir -p storage
 USER root
 

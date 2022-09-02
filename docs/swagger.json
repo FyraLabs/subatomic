@@ -1,0 +1,191 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "A modern package delivery server.",
+        "title": "Subatomic",
+        "contact": {},
+        "license": {
+            "name": "GPL3",
+            "url": "https://choosealicense.com/licenses/gpl-3.0/"
+        },
+        "version": "1.0"
+    },
+    "basePath": "/api",
+    "paths": {
+        "/repos": {
+            "get": {
+                "description": "get repos",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Get all repos",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ent.Repo"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create repo",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Create a new repo",
+                "parameters": [
+                    {
+                        "description": "id for the new repository",
+                        "name": "id",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "type for the new repository",
+                        "name": "id",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "description": "Type holds the value of the \"type\" field.",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{id}": {
+            "put": {
+                "description": "upload to repo",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Upload files to a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "files to upload to this reposiutory",
+                        "name": "file_upload",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete repo",
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Delete a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "ent.Repo": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "ID of the ent.",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type holds the value of the \"type\" field.",
+                    "type": "string"
+                }
+            }
+        },
+        "main.ErrResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "application-specific error code",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "application-level error message, for debugging",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "user-level status message",
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,128 @@
+basePath: /api
+definitions:
+  ent.Repo:
+    properties:
+      id:
+        description: ID of the ent.
+        type: string
+      type:
+        description: Type holds the value of the "type" field.
+        type: string
+    type: object
+  main.ErrResponse:
+    properties:
+      code:
+        description: application-specific error code
+        type: integer
+      error:
+        description: application-level error message, for debugging
+        type: string
+      status:
+        description: user-level status message
+        type: string
+    type: object
+info:
+  contact: {}
+  description: A modern package delivery server.
+  license:
+    name: GPL3
+    url: https://choosealicense.com/licenses/gpl-3.0/
+  title: Subatomic
+  version: "1.0"
+paths:
+  /repos:
+    get:
+      description: get repos
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ent.Repo'
+            type: array
+      summary: Get all repos
+      tags:
+      - repos
+    post:
+      consumes:
+      - application/json
+      description: create repo
+      parameters:
+      - description: id for the new repository
+        in: body
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: type for the new repository
+        in: body
+        name: id
+        required: true
+        schema:
+          description: Type holds the value of the "type" field.
+          type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/main.ErrResponse'
+      summary: Create a new repo
+      tags:
+      - repos
+  /repos/{id}:
+    delete:
+      description: delete repo
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrResponse'
+      summary: Delete a repo
+      tags:
+      - repos
+    put:
+      consumes:
+      - multipart/form-data
+      description: upload to repo
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: files to upload to this reposiutory
+        in: formData
+        name: file_upload
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/main.ErrResponse'
+      summary: Upload files to a repo
+      tags:
+      - repos
+swagger: "2.0"

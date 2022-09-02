@@ -9,8 +9,7 @@ import (
 	"sync"
 
 	"github.com/FyraLabs/subatomic/ent/predicate"
-	"github.com/FyraLabs/subatomic/ent/repository"
-	"github.com/FyraLabs/subatomic/property"
+	"github.com/FyraLabs/subatomic/ent/repo"
 
 	"entgo.io/ent"
 )
@@ -24,34 +23,33 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeRepository = "Repository"
+	TypeRepo = "Repo"
 )
 
-// RepositoryMutation represents an operation that mutates the Repository nodes in the graph.
-type RepositoryMutation struct {
+// RepoMutation represents an operation that mutates the Repo nodes in the graph.
+type RepoMutation struct {
 	config
 	op            Op
 	typ           string
-	id            *int
-	name          *string
-	_type         *property.RepositoryType
+	id            *string
+	_type         *repo.Type
 	clearedFields map[string]struct{}
 	done          bool
-	oldValue      func(context.Context) (*Repository, error)
-	predicates    []predicate.Repository
+	oldValue      func(context.Context) (*Repo, error)
+	predicates    []predicate.Repo
 }
 
-var _ ent.Mutation = (*RepositoryMutation)(nil)
+var _ ent.Mutation = (*RepoMutation)(nil)
 
-// repositoryOption allows management of the mutation configuration using functional options.
-type repositoryOption func(*RepositoryMutation)
+// repoOption allows management of the mutation configuration using functional options.
+type repoOption func(*RepoMutation)
 
-// newRepositoryMutation creates new mutation for the Repository entity.
-func newRepositoryMutation(c config, op Op, opts ...repositoryOption) *RepositoryMutation {
-	m := &RepositoryMutation{
+// newRepoMutation creates new mutation for the Repo entity.
+func newRepoMutation(c config, op Op, opts ...repoOption) *RepoMutation {
+	m := &RepoMutation{
 		config:        c,
 		op:            op,
-		typ:           TypeRepository,
+		typ:           TypeRepo,
 		clearedFields: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
@@ -60,20 +58,20 @@ func newRepositoryMutation(c config, op Op, opts ...repositoryOption) *Repositor
 	return m
 }
 
-// withRepositoryID sets the ID field of the mutation.
-func withRepositoryID(id int) repositoryOption {
-	return func(m *RepositoryMutation) {
+// withRepoID sets the ID field of the mutation.
+func withRepoID(id string) repoOption {
+	return func(m *RepoMutation) {
 		var (
 			err   error
 			once  sync.Once
-			value *Repository
+			value *Repo
 		)
-		m.oldValue = func(ctx context.Context) (*Repository, error) {
+		m.oldValue = func(ctx context.Context) (*Repo, error) {
 			once.Do(func() {
 				if m.done {
 					err = errors.New("querying old values post mutation is not allowed")
 				} else {
-					value, err = m.Client().Repository.Get(ctx, id)
+					value, err = m.Client().Repo.Get(ctx, id)
 				}
 			})
 			return value, err
@@ -82,10 +80,10 @@ func withRepositoryID(id int) repositoryOption {
 	}
 }
 
-// withRepository sets the old Repository of the mutation.
-func withRepository(node *Repository) repositoryOption {
-	return func(m *RepositoryMutation) {
-		m.oldValue = func(context.Context) (*Repository, error) {
+// withRepo sets the old Repo of the mutation.
+func withRepo(node *Repo) repoOption {
+	return func(m *RepoMutation) {
+		m.oldValue = func(context.Context) (*Repo, error) {
 			return node, nil
 		}
 		m.id = &node.ID
@@ -94,7 +92,7 @@ func withRepository(node *Repository) repositoryOption {
 
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
-func (m RepositoryMutation) Client() *Client {
+func (m RepoMutation) Client() *Client {
 	client := &Client{config: m.config}
 	client.init()
 	return client
@@ -102,7 +100,7 @@ func (m RepositoryMutation) Client() *Client {
 
 // Tx returns an `ent.Tx` for mutations that were executed in transactions;
 // it returns an error otherwise.
-func (m RepositoryMutation) Tx() (*Tx, error) {
+func (m RepoMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
 		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
@@ -111,9 +109,15 @@ func (m RepositoryMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
+// SetID sets the value of the id field. Note that this
+// operation is only accepted on creation of Repo entities.
+func (m *RepoMutation) SetID(id string) {
+	m.id = &id
+}
+
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *RepositoryMutation) ID() (id int, exists bool) {
+func (m *RepoMutation) ID() (id string, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -124,64 +128,28 @@ func (m *RepositoryMutation) ID() (id int, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *RepositoryMutation) IDs(ctx context.Context) ([]int, error) {
+func (m *RepoMutation) IDs(ctx context.Context) ([]string, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
 		if exists {
-			return []int{id}, nil
+			return []string{id}, nil
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().Repository.Query().Where(m.predicates...).IDs(ctx)
+		return m.Client().Repo.Query().Where(m.predicates...).IDs(ctx)
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
 }
 
-// SetName sets the "name" field.
-func (m *RepositoryMutation) SetName(s string) {
-	m.name = &s
-}
-
-// Name returns the value of the "name" field in the mutation.
-func (m *RepositoryMutation) Name() (r string, exists bool) {
-	v := m.name
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldName returns the old "name" field's value of the Repository entity.
-// If the Repository object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RepositoryMutation) OldName(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldName is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldName requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldName: %w", err)
-	}
-	return oldValue.Name, nil
-}
-
-// ResetName resets all changes to the "name" field.
-func (m *RepositoryMutation) ResetName() {
-	m.name = nil
-}
-
 // SetType sets the "type" field.
-func (m *RepositoryMutation) SetType(pt property.RepositoryType) {
-	m._type = &pt
+func (m *RepoMutation) SetType(r repo.Type) {
+	m._type = &r
 }
 
 // GetType returns the value of the "type" field in the mutation.
-func (m *RepositoryMutation) GetType() (r property.RepositoryType, exists bool) {
+func (m *RepoMutation) GetType() (r repo.Type, exists bool) {
 	v := m._type
 	if v == nil {
 		return
@@ -189,10 +157,10 @@ func (m *RepositoryMutation) GetType() (r property.RepositoryType, exists bool) 
 	return *v, true
 }
 
-// OldType returns the old "type" field's value of the Repository entity.
-// If the Repository object wasn't provided to the builder, the object is fetched from the database.
+// OldType returns the old "type" field's value of the Repo entity.
+// If the Repo object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RepositoryMutation) OldType(ctx context.Context) (v property.RepositoryType, err error) {
+func (m *RepoMutation) OldType(ctx context.Context) (v repo.Type, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldType is only allowed on UpdateOne operations")
 	}
@@ -207,35 +175,32 @@ func (m *RepositoryMutation) OldType(ctx context.Context) (v property.Repository
 }
 
 // ResetType resets all changes to the "type" field.
-func (m *RepositoryMutation) ResetType() {
+func (m *RepoMutation) ResetType() {
 	m._type = nil
 }
 
-// Where appends a list predicates to the RepositoryMutation builder.
-func (m *RepositoryMutation) Where(ps ...predicate.Repository) {
+// Where appends a list predicates to the RepoMutation builder.
+func (m *RepoMutation) Where(ps ...predicate.Repo) {
 	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
-func (m *RepositoryMutation) Op() Op {
+func (m *RepoMutation) Op() Op {
 	return m.op
 }
 
-// Type returns the node type of this mutation (Repository).
-func (m *RepositoryMutation) Type() string {
+// Type returns the node type of this mutation (Repo).
+func (m *RepoMutation) Type() string {
 	return m.typ
 }
 
 // Fields returns all fields that were changed during this mutation. Note that in
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
-func (m *RepositoryMutation) Fields() []string {
-	fields := make([]string, 0, 2)
-	if m.name != nil {
-		fields = append(fields, repository.FieldName)
-	}
+func (m *RepoMutation) Fields() []string {
+	fields := make([]string, 0, 1)
 	if m._type != nil {
-		fields = append(fields, repository.FieldType)
+		fields = append(fields, repo.FieldType)
 	}
 	return fields
 }
@@ -243,11 +208,9 @@ func (m *RepositoryMutation) Fields() []string {
 // Field returns the value of a field with the given name. The second boolean
 // return value indicates that this field was not set, or was not defined in the
 // schema.
-func (m *RepositoryMutation) Field(name string) (ent.Value, bool) {
+func (m *RepoMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case repository.FieldName:
-		return m.Name()
-	case repository.FieldType:
+	case repo.FieldType:
 		return m.GetType()
 	}
 	return nil, false
@@ -256,138 +219,126 @@ func (m *RepositoryMutation) Field(name string) (ent.Value, bool) {
 // OldField returns the old value of the field from the database. An error is
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
-func (m *RepositoryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+func (m *RepoMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case repository.FieldName:
-		return m.OldName(ctx)
-	case repository.FieldType:
+	case repo.FieldType:
 		return m.OldType(ctx)
 	}
-	return nil, fmt.Errorf("unknown Repository field %s", name)
+	return nil, fmt.Errorf("unknown Repo field %s", name)
 }
 
 // SetField sets the value of a field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *RepositoryMutation) SetField(name string, value ent.Value) error {
+func (m *RepoMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case repository.FieldName:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetName(v)
-		return nil
-	case repository.FieldType:
-		v, ok := value.(property.RepositoryType)
+	case repo.FieldType:
+		v, ok := value.(repo.Type)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetType(v)
 		return nil
 	}
-	return fmt.Errorf("unknown Repository field %s", name)
+	return fmt.Errorf("unknown Repo field %s", name)
 }
 
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
-func (m *RepositoryMutation) AddedFields() []string {
+func (m *RepoMutation) AddedFields() []string {
 	return nil
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
-func (m *RepositoryMutation) AddedField(name string) (ent.Value, bool) {
+func (m *RepoMutation) AddedField(name string) (ent.Value, bool) {
 	return nil, false
 }
 
 // AddField adds the value to the field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *RepositoryMutation) AddField(name string, value ent.Value) error {
+func (m *RepoMutation) AddField(name string, value ent.Value) error {
 	switch name {
 	}
-	return fmt.Errorf("unknown Repository numeric field %s", name)
+	return fmt.Errorf("unknown Repo numeric field %s", name)
 }
 
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
-func (m *RepositoryMutation) ClearedFields() []string {
+func (m *RepoMutation) ClearedFields() []string {
 	return nil
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
 // cleared in this mutation.
-func (m *RepositoryMutation) FieldCleared(name string) bool {
+func (m *RepoMutation) FieldCleared(name string) bool {
 	_, ok := m.clearedFields[name]
 	return ok
 }
 
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
-func (m *RepositoryMutation) ClearField(name string) error {
-	return fmt.Errorf("unknown Repository nullable field %s", name)
+func (m *RepoMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Repo nullable field %s", name)
 }
 
 // ResetField resets all changes in the mutation for the field with the given name.
 // It returns an error if the field is not defined in the schema.
-func (m *RepositoryMutation) ResetField(name string) error {
+func (m *RepoMutation) ResetField(name string) error {
 	switch name {
-	case repository.FieldName:
-		m.ResetName()
-		return nil
-	case repository.FieldType:
+	case repo.FieldType:
 		m.ResetType()
 		return nil
 	}
-	return fmt.Errorf("unknown Repository field %s", name)
+	return fmt.Errorf("unknown Repo field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
-func (m *RepositoryMutation) AddedEdges() []string {
+func (m *RepoMutation) AddedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
-func (m *RepositoryMutation) AddedIDs(name string) []ent.Value {
+func (m *RepoMutation) AddedIDs(name string) []ent.Value {
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
-func (m *RepositoryMutation) RemovedEdges() []string {
+func (m *RepoMutation) RemovedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
-func (m *RepositoryMutation) RemovedIDs(name string) []ent.Value {
+func (m *RepoMutation) RemovedIDs(name string) []ent.Value {
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *RepositoryMutation) ClearedEdges() []string {
+func (m *RepoMutation) ClearedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
-func (m *RepositoryMutation) EdgeCleared(name string) bool {
+func (m *RepoMutation) EdgeCleared(name string) bool {
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
-func (m *RepositoryMutation) ClearEdge(name string) error {
-	return fmt.Errorf("unknown Repository unique edge %s", name)
+func (m *RepoMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown Repo unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
-func (m *RepositoryMutation) ResetEdge(name string) error {
-	return fmt.Errorf("unknown Repository edge %s", name)
+func (m *RepoMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown Repo edge %s", name)
 }
