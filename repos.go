@@ -63,8 +63,7 @@ func (u *createRepoPayload) Bind(r *http.Request) error {
 // @Description create repo
 // @Tags        repos
 // @Accept      json
-// @Param       id body      string true "id for the new repository"
-// @Param       id body repo.Type true "type for the new repository"
+// @Param       body body createRepoPayload true "options for the new repository"
 // @Success     200
 // @Failure     400 {object} ErrResponse
 // @Failure     409 {object} ErrResponse
