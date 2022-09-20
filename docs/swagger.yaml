@@ -21,6 +21,19 @@ definitions:
         description: user-level status message
         type: string
     type: object
+  main.createRepoPayload:
+    properties:
+      id:
+        type: string
+      type:
+        enum:
+        - dnf
+        - ostree
+        type: string
+    required:
+    - id
+    - type
+    type: object
 info:
   contact: {}
   description: A modern package delivery server.
@@ -50,19 +63,12 @@ paths:
       - application/json
       description: create repo
       parameters:
-      - description: id for the new repository
+      - description: options for the new repository
         in: body
-        name: id
+        name: body
         required: true
         schema:
-          type: string
-      - description: type for the new repository
-        in: body
-        name: id
-        required: true
-        schema:
-          description: Type holds the value of the "type" field.
-          type: string
+          $ref: '#/definitions/main.createRepoPayload'
       responses:
         "200":
           description: OK
@@ -125,4 +131,9 @@ paths:
       summary: Upload files to a repo
       tags:
       - repos
+securityDefinitions:
+  "":
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

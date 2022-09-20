@@ -53,22 +53,12 @@ const docTemplate = `{
                 "summary": "Create a new repo",
                 "parameters": [
                     {
-                        "description": "id for the new repository",
-                        "name": "id",
+                        "description": "options for the new repository",
+                        "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "description": "type for the new repository",
-                        "name": "id",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "description": "Type holds the value of the \"type\" field.",
-                            "type": "string"
+                            "$ref": "#/definitions/main.createRepoPayload"
                         }
                     }
                 ],
@@ -194,6 +184,32 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "main.createRepoPayload": {
+            "type": "object",
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "dnf",
+                        "ostree"
+                    ]
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

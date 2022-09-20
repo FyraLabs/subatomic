@@ -47,7 +47,17 @@ func ErrAlreadyExists(err error) render.Renderer {
 	}
 }
 
+func ErrUnauthorized(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 401,
+		StatusText:     "Unauthorized.",
+		ErrorText:      err.Error(),
+	}
+}
+
 type Enviroment struct {
 	StorageDirectory string `env:"STORAGE_DIRECTORY,required=true"`
 	DatabaseOptions  string `env:"DATABASE_OPTIONS,required=true"`
+	JWTSecret        string `env:"JWT_SECRET,required=true"`
 }
