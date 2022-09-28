@@ -34,5 +34,13 @@
 
 	// Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "vscode",
-	"remoteEnv": { "POSTGRES_PASSWORD": "postgres", "DATABASE_OPTIONS": "host=db port=5432 user=postgres dbname=postgres password=postgres sslmode=disable", "STORAGE_DIRECTORY": "storage", "JWT_SECRET": "averysecretsecret" }
+	"remoteEnv": {
+		"POSTGRES_PASSWORD": "postgres",
+		"DATABASE_OPTIONS": "host=db port=5432 user=postgres dbname=postgres password=postgres sslmode=disable",
+		"STORAGE_DIRECTORY": "storage",
+		"JWT_SECRET": "averysecretsecret"
+	},
+	"features": {
+		"docker-from-docker": "latest"
+	}
 }
