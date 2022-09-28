@@ -17,6 +17,27 @@ type Repo struct {
 	ID string `json:"id,omitempty"`
 	// Type holds the value of the "type" field.
 	Type repo.Type `json:"type,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the RepoQuery when eager-loading is set.
+	Edges RepoEdges `json:"edges"`
+}
+
+// RepoEdges holds the relations/edges for other nodes in the graph.
+type RepoEdges struct {
+	// Rpms holds the value of the rpms edge.
+	Rpms []*RpmPackage `json:"rpms,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// RpmsOrErr returns the Rpms value or an error if the edge
+// was not loaded in eager-loading.
+func (e RepoEdges) RpmsOrErr() ([]*RpmPackage, error) {
+	if e.loadedTypes[0] {
+		return e.Rpms, nil
+	}
+	return nil, &NotLoadedError{edge: "rpms"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -56,6 +77,11 @@ func (r *Repo) assignValues(columns []string, values []interface{}) error {
 		}
 	}
 	return nil
+}
+
+// QueryRpms queries the "rpms" edge of the Repo entity.
+func (r *Repo) QueryRpms() *RpmPackageQuery {
+	return (&RepoClient{config: r.config}).QueryRpms(r)
 }
 
 // Update returns a builder for updating this Repo.

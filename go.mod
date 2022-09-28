@@ -15,10 +15,12 @@ require (
 require (
 	ariga.io/atlas v0.7.0 // indirect
 	github.com/14rcole/gopopulate v0.0.0-20180821133914-b175b219e774 // indirect
+	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/apparentlymart/go-textseg/v13 v13.0.0 // indirect
+	github.com/cavaliergopher/rpm v1.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/go-openapi/inflect v0.19.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -29,6 +31,7 @@ require (
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/hashicorp/hcl/v2 v2.14.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/klauspost/compress v1.11.7 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.1 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
@@ -38,6 +41,9 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/sassoftware/go-rpmutils v0.2.0 // indirect
+	github.com/ulikunitz/xz v0.5.9 // indirect
+	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/zclconf/go-cty v1.11.0 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20220919232410-f2f64ebce3c1 // indirect
@@ -56,6 +62,7 @@ require (
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/lib/pq v1.10.7
 	github.com/ostreedev/ostree-go v0.0.0-20210805093236-719684c64e4f
+	github.com/samber/lo v1.28.2
 	golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0 // indirect
 	golang.org/x/exp v0.0.0-20220916125017-b168a2c6b86b
 	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect

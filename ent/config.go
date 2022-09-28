@@ -24,7 +24,8 @@ type config struct {
 
 // hooks per client, for fast access.
 type hooks struct {
-	Repo []ent.Hook
+	Repo       []ent.Hook
+	RpmPackage []ent.Hook
 }
 
 // Options applies the options on the config object.

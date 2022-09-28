@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/ent/predicate"
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 )
 
 // RepoUpdate is the builder for updating Repo entities.
@@ -33,9 +34,45 @@ func (ru *RepoUpdate) SetType(r repo.Type) *RepoUpdate {
 	return ru
 }
 
+// AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
+func (ru *RepoUpdate) AddRpmIDs(ids ...int) *RepoUpdate {
+	ru.mutation.AddRpmIDs(ids...)
+	return ru
+}
+
+// AddRpms adds the "rpms" edges to the RpmPackage entity.
+func (ru *RepoUpdate) AddRpms(r ...*RpmPackage) *RepoUpdate {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return ru.AddRpmIDs(ids...)
+}
+
 // Mutation returns the RepoMutation object of the builder.
 func (ru *RepoUpdate) Mutation() *RepoMutation {
 	return ru.mutation
+}
+
+// ClearRpms clears all "rpms" edges to the RpmPackage entity.
+func (ru *RepoUpdate) ClearRpms() *RepoUpdate {
+	ru.mutation.ClearRpms()
+	return ru
+}
+
+// RemoveRpmIDs removes the "rpms" edge to RpmPackage entities by IDs.
+func (ru *RepoUpdate) RemoveRpmIDs(ids ...int) *RepoUpdate {
+	ru.mutation.RemoveRpmIDs(ids...)
+	return ru
+}
+
+// RemoveRpms removes "rpms" edges to RpmPackage entities.
+func (ru *RepoUpdate) RemoveRpms(r ...*RpmPackage) *RepoUpdate {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return ru.RemoveRpmIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -133,6 +170,60 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Column: repo.FieldType,
 		})
 	}
+	if ru.mutation.RpmsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ru.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !ru.mutation.RpmsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ru.mutation.RpmsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, ru.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{repo.Label}
@@ -158,9 +249,45 @@ func (ruo *RepoUpdateOne) SetType(r repo.Type) *RepoUpdateOne {
 	return ruo
 }
 
+// AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
+func (ruo *RepoUpdateOne) AddRpmIDs(ids ...int) *RepoUpdateOne {
+	ruo.mutation.AddRpmIDs(ids...)
+	return ruo
+}
+
+// AddRpms adds the "rpms" edges to the RpmPackage entity.
+func (ruo *RepoUpdateOne) AddRpms(r ...*RpmPackage) *RepoUpdateOne {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return ruo.AddRpmIDs(ids...)
+}
+
 // Mutation returns the RepoMutation object of the builder.
 func (ruo *RepoUpdateOne) Mutation() *RepoMutation {
 	return ruo.mutation
+}
+
+// ClearRpms clears all "rpms" edges to the RpmPackage entity.
+func (ruo *RepoUpdateOne) ClearRpms() *RepoUpdateOne {
+	ruo.mutation.ClearRpms()
+	return ruo
+}
+
+// RemoveRpmIDs removes the "rpms" edge to RpmPackage entities by IDs.
+func (ruo *RepoUpdateOne) RemoveRpmIDs(ids ...int) *RepoUpdateOne {
+	ruo.mutation.RemoveRpmIDs(ids...)
+	return ruo
+}
+
+// RemoveRpms removes "rpms" edges to RpmPackage entities.
+func (ruo *RepoUpdateOne) RemoveRpms(r ...*RpmPackage) *RepoUpdateOne {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return ruo.RemoveRpmIDs(ids...)
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
@@ -287,6 +414,60 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Value:  value,
 			Column: repo.FieldType,
 		})
+	}
+	if ruo.mutation.RpmsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ruo.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !ruo.mutation.RpmsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ruo.mutation.RpmsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Repo{config: ruo.config}
 	_spec.Assign = _node.assignValues

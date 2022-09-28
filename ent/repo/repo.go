@@ -13,8 +13,19 @@ const (
 	FieldID = "oid"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
+	// EdgeRpms holds the string denoting the rpms edge name in mutations.
+	EdgeRpms = "rpms"
+	// RpmPackageFieldID holds the string denoting the ID field of the RpmPackage.
+	RpmPackageFieldID = "id"
 	// Table holds the table name of the repo in the database.
 	Table = "repos"
+	// RpmsTable is the table that holds the rpms relation/edge.
+	RpmsTable = "rpm_packages"
+	// RpmsInverseTable is the table name for the RpmPackage entity.
+	// It exists in this package in order to avoid circular dependency with the "rpmpackage" package.
+	RpmsInverseTable = "rpm_packages"
+	// RpmsColumn is the table column denoting the rpms relation/edge.
+	RpmsColumn = "repo_rpms"
 )
 
 // Columns holds all SQL columns for repo fields.
@@ -38,7 +49,7 @@ type Type string
 
 // Type values.
 const (
-	TypeDnf    Type = "dnf"
+	TypeRpm    Type = "rpm"
 	TypeOstree Type = "ostree"
 )
 
@@ -49,7 +60,7 @@ func (_type Type) String() string {
 // TypeValidator is a validator for the "type" field enum values. It is called by the builders before save.
 func TypeValidator(_type Type) error {
 	switch _type {
-	case TypeDnf, TypeOstree:
+	case TypeRpm, TypeOstree:
 		return nil
 	default:
 		return fmt.Errorf("repo: invalid enum value for type field: %q", _type)

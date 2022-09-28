@@ -11,7 +11,7 @@ var (
 	// ReposColumns holds the columns for the "repos" table.
 	ReposColumns = []*schema.Column{
 		{Name: "oid", Type: field.TypeString, Unique: true},
-		{Name: "type", Type: field.TypeEnum, Enums: []string{"dnf", "ostree"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"rpm", "ostree"}},
 	}
 	// ReposTable holds the schema information for the "repos" table.
 	ReposTable = &schema.Table{
@@ -19,11 +19,45 @@ var (
 		Columns:    ReposColumns,
 		PrimaryKey: []*schema.Column{ReposColumns[0]},
 	}
+	// RpmPackagesColumns holds the columns for the "rpm_packages" table.
+	RpmPackagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "name", Type: field.TypeString},
+		{Name: "epoch", Type: field.TypeString},
+		{Name: "version", Type: field.TypeString},
+		{Name: "release", Type: field.TypeString},
+		{Name: "arch", Type: field.TypeString},
+		{Name: "file_path", Type: field.TypeString, Unique: true},
+		{Name: "repo_rpms", Type: field.TypeString, Nullable: true},
+	}
+	// RpmPackagesTable holds the schema information for the "rpm_packages" table.
+	RpmPackagesTable = &schema.Table{
+		Name:       "rpm_packages",
+		Columns:    RpmPackagesColumns,
+		PrimaryKey: []*schema.Column{RpmPackagesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "rpm_packages_repos_rpms",
+				Columns:    []*schema.Column{RpmPackagesColumns[7]},
+				RefColumns: []*schema.Column{ReposColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "rpmpackage_name_epoch_version_release_arch",
+				Unique:  true,
+				Columns: []*schema.Column{RpmPackagesColumns[1], RpmPackagesColumns[2], RpmPackagesColumns[3], RpmPackagesColumns[4], RpmPackagesColumns[5]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ReposTable,
+		RpmPackagesTable,
 	}
 )
 
 func init() {
+	RpmPackagesTable.ForeignKeys[0].RefTable = ReposTable
 }

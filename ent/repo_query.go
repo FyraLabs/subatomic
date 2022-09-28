@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -12,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/ent/predicate"
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 )
 
 // RepoQuery is the builder for querying Repo entities.
@@ -23,6 +25,7 @@ type RepoQuery struct {
 	order      []OrderFunc
 	fields     []string
 	predicates []predicate.Repo
+	withRpms   *RpmPackageQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -57,6 +60,28 @@ func (rq *RepoQuery) Unique(unique bool) *RepoQuery {
 func (rq *RepoQuery) Order(o ...OrderFunc) *RepoQuery {
 	rq.order = append(rq.order, o...)
 	return rq
+}
+
+// QueryRpms chains the current query on the "rpms" edge.
+func (rq *RepoQuery) QueryRpms() *RpmPackageQuery {
+	query := &RpmPackageQuery{config: rq.config}
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := rq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := rq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(repo.Table, repo.FieldID, selector),
+			sqlgraph.To(rpmpackage.Table, rpmpackage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, repo.RpmsTable, repo.RpmsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(rq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first Repo entity from the query.
@@ -240,11 +265,23 @@ func (rq *RepoQuery) Clone() *RepoQuery {
 		offset:     rq.offset,
 		order:      append([]OrderFunc{}, rq.order...),
 		predicates: append([]predicate.Repo{}, rq.predicates...),
+		withRpms:   rq.withRpms.Clone(),
 		// clone intermediate query.
 		sql:    rq.sql.Clone(),
 		path:   rq.path,
 		unique: rq.unique,
 	}
+}
+
+// WithRpms tells the query-builder to eager-load the nodes that are connected to
+// the "rpms" edge. The optional arguments are used to configure the query builder of the edge.
+func (rq *RepoQuery) WithRpms(opts ...func(*RpmPackageQuery)) *RepoQuery {
+	query := &RpmPackageQuery{config: rq.config}
+	for _, opt := range opts {
+		opt(query)
+	}
+	rq.withRpms = query
+	return rq
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -313,8 +350,11 @@ func (rq *RepoQuery) prepareQuery(ctx context.Context) error {
 
 func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, error) {
 	var (
-		nodes = []*Repo{}
-		_spec = rq.querySpec()
+		nodes       = []*Repo{}
+		_spec       = rq.querySpec()
+		loadedTypes = [1]bool{
+			rq.withRpms != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		return (*Repo).scanValues(nil, columns)
@@ -322,6 +362,7 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 	_spec.Assign = func(columns []string, values []interface{}) error {
 		node := &Repo{config: rq.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -333,7 +374,46 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := rq.withRpms; query != nil {
+		if err := rq.loadRpms(ctx, query, nodes,
+			func(n *Repo) { n.Edges.Rpms = []*RpmPackage{} },
+			func(n *Repo, e *RpmPackage) { n.Edges.Rpms = append(n.Edges.Rpms, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *RpmPackage)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*Repo)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.RpmPackage(func(s *sql.Selector) {
+		s.Where(sql.InValues(repo.RpmsColumn, fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.repo_rpms
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "repo_rpms" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "repo_rpms" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (rq *RepoQuery) sqlCount(ctx context.Context) (int, error) {

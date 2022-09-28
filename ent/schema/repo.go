@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
 
@@ -14,11 +15,13 @@ type Repo struct {
 func (Repo) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Unique().StorageKey("oid"),
-		field.Enum("type").Values("dnf", "ostree"),
+		field.Enum("type").Values("rpm", "ostree"),
 	}
 }
 
 // Edges of the Repo.
 func (Repo) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		edge.To("rpms", RpmPackage.Type),
+	}
 }

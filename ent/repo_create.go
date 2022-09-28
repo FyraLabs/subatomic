@@ -10,6 +10,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 )
 
 // RepoCreate is the builder for creating a Repo entity.
@@ -29,6 +30,21 @@ func (rc *RepoCreate) SetType(r repo.Type) *RepoCreate {
 func (rc *RepoCreate) SetID(s string) *RepoCreate {
 	rc.mutation.SetID(s)
 	return rc
+}
+
+// AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
+func (rc *RepoCreate) AddRpmIDs(ids ...int) *RepoCreate {
+	rc.mutation.AddRpmIDs(ids...)
+	return rc
+}
+
+// AddRpms adds the "rpms" edges to the RpmPackage entity.
+func (rc *RepoCreate) AddRpms(r ...*RpmPackage) *RepoCreate {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return rc.AddRpmIDs(ids...)
 }
 
 // Mutation returns the RepoMutation object of the builder.
@@ -158,6 +174,25 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 			Column: repo.FieldType,
 		})
 		_node.Type = value
+	}
+	if nodes := rc.mutation.RpmsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   repo.RpmsTable,
+			Columns: []string{repo.RpmsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

@@ -4,6 +4,7 @@ package repo
 
 import (
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/FyraLabs/subatomic/ent/predicate"
 )
 
@@ -111,6 +112,34 @@ func TypeNotIn(vs ...Type) predicate.Repo {
 	}
 	return predicate.Repo(func(s *sql.Selector) {
 		s.Where(sql.NotIn(s.C(FieldType), v...))
+	})
+}
+
+// HasRpms applies the HasEdge predicate on the "rpms" edge.
+func HasRpms() predicate.Repo {
+	return predicate.Repo(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.To(RpmsTable, RpmPackageFieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, RpmsTable, RpmsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasRpmsWith applies the HasEdge predicate on the "rpms" edge with a given conditions (other predicates).
+func HasRpmsWith(preds ...predicate.RpmPackage) predicate.Repo {
+	return predicate.Repo(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.To(RpmsInverseTable, RpmPackageFieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, RpmsTable, RpmsColumn),
+		)
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
 	})
 }
 

@@ -8,3 +8,6 @@ import (
 
 // Repo is the predicate function for repo builders.
 type Repo func(*sql.Selector)
+
+// RpmPackage is the predicate function for rpmpackage builders.
+type RpmPackage func(*sql.Selector)

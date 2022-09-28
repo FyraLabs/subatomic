@@ -11,9 +11,11 @@ import (
 	"github.com/FyraLabs/subatomic/ent/migrate"
 
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 // Client is the client that holds all ent builders.
@@ -23,6 +25,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// Repo is the client for interacting with the Repo builders.
 	Repo *RepoClient
+	// RpmPackage is the client for interacting with the RpmPackage builders.
+	RpmPackage *RpmPackageClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -37,6 +41,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Repo = NewRepoClient(c.config)
+	c.RpmPackage = NewRpmPackageClient(c.config)
 }
 
 // Open opens a database/sql.DB specified by the driver name and
@@ -68,9 +73,10 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:    ctx,
-		config: cfg,
-		Repo:   NewRepoClient(cfg),
+		ctx:        ctx,
+		config:     cfg,
+		Repo:       NewRepoClient(cfg),
+		RpmPackage: NewRpmPackageClient(cfg),
 	}, nil
 }
 
@@ -88,9 +94,10 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:    ctx,
-		config: cfg,
-		Repo:   NewRepoClient(cfg),
+		ctx:        ctx,
+		config:     cfg,
+		Repo:       NewRepoClient(cfg),
+		RpmPackage: NewRpmPackageClient(cfg),
 	}, nil
 }
 
@@ -120,6 +127,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	c.Repo.Use(hooks...)
+	c.RpmPackage.Use(hooks...)
 }
 
 // RepoClient is a client for the Repo schema.
@@ -207,7 +215,129 @@ func (c *RepoClient) GetX(ctx context.Context, id string) *Repo {
 	return obj
 }
 
+// QueryRpms queries the rpms edge of a Repo.
+func (c *RepoClient) QueryRpms(r *Repo) *RpmPackageQuery {
+	query := &RpmPackageQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := r.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(repo.Table, repo.FieldID, id),
+			sqlgraph.To(rpmpackage.Table, rpmpackage.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, repo.RpmsTable, repo.RpmsColumn),
+		)
+		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *RepoClient) Hooks() []Hook {
 	return c.hooks.Repo
+}
+
+// RpmPackageClient is a client for the RpmPackage schema.
+type RpmPackageClient struct {
+	config
+}
+
+// NewRpmPackageClient returns a client for the RpmPackage from the given config.
+func NewRpmPackageClient(c config) *RpmPackageClient {
+	return &RpmPackageClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rpmpackage.Hooks(f(g(h())))`.
+func (c *RpmPackageClient) Use(hooks ...Hook) {
+	c.hooks.RpmPackage = append(c.hooks.RpmPackage, hooks...)
+}
+
+// Create returns a builder for creating a RpmPackage entity.
+func (c *RpmPackageClient) Create() *RpmPackageCreate {
+	mutation := newRpmPackageMutation(c.config, OpCreate)
+	return &RpmPackageCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RpmPackage entities.
+func (c *RpmPackageClient) CreateBulk(builders ...*RpmPackageCreate) *RpmPackageCreateBulk {
+	return &RpmPackageCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RpmPackage.
+func (c *RpmPackageClient) Update() *RpmPackageUpdate {
+	mutation := newRpmPackageMutation(c.config, OpUpdate)
+	return &RpmPackageUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RpmPackageClient) UpdateOne(rp *RpmPackage) *RpmPackageUpdateOne {
+	mutation := newRpmPackageMutation(c.config, OpUpdateOne, withRpmPackage(rp))
+	return &RpmPackageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RpmPackageClient) UpdateOneID(id int) *RpmPackageUpdateOne {
+	mutation := newRpmPackageMutation(c.config, OpUpdateOne, withRpmPackageID(id))
+	return &RpmPackageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RpmPackage.
+func (c *RpmPackageClient) Delete() *RpmPackageDelete {
+	mutation := newRpmPackageMutation(c.config, OpDelete)
+	return &RpmPackageDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RpmPackageClient) DeleteOne(rp *RpmPackage) *RpmPackageDeleteOne {
+	return c.DeleteOneID(rp.ID)
+}
+
+// DeleteOne returns a builder for deleting the given entity by its id.
+func (c *RpmPackageClient) DeleteOneID(id int) *RpmPackageDeleteOne {
+	builder := c.Delete().Where(rpmpackage.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RpmPackageDeleteOne{builder}
+}
+
+// Query returns a query builder for RpmPackage.
+func (c *RpmPackageClient) Query() *RpmPackageQuery {
+	return &RpmPackageQuery{
+		config: c.config,
+	}
+}
+
+// Get returns a RpmPackage entity by its id.
+func (c *RpmPackageClient) Get(ctx context.Context, id int) (*RpmPackage, error) {
+	return c.Query().Where(rpmpackage.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RpmPackageClient) GetX(ctx context.Context, id int) *RpmPackage {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryRepo queries the repo edge of a RpmPackage.
+func (c *RpmPackageClient) QueryRepo(rp *RpmPackage) *RepoQuery {
+	query := &RepoQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := rp.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rpmpackage.Table, rpmpackage.FieldID, id),
+			sqlgraph.To(repo.Table, repo.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, rpmpackage.RepoTable, rpmpackage.RepoColumn),
+		)
+		fromV = sqlgraph.Neighbors(rp.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *RpmPackageClient) Hooks() []Hook {
+	return c.hooks.RpmPackage
 }

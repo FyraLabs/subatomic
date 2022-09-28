@@ -14,6 +14,8 @@ type Tx struct {
 	config
 	// Repo is the client for interacting with the Repo builders.
 	Repo *RepoClient
+	// RpmPackage is the client for interacting with the RpmPackage builders.
+	RpmPackage *RpmPackageClient
 
 	// lazily loaded.
 	client     *Client
@@ -150,6 +152,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Repo = NewRepoClient(tx.config)
+	tx.RpmPackage = NewRpmPackageClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

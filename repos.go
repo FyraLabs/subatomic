@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -11,10 +12,12 @@ import (
 	"github.com/FyraLabs/subatomic/ent"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/google/uuid"
 	"github.com/ostreedev/ostree-go/pkg/otbuiltin"
+	"github.com/samber/lo"
 
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
+	rpm "github.com/sassoftware/go-rpmutils"
 )
 
 type reposRouter struct {
@@ -30,6 +33,14 @@ func (router *reposRouter) setup() {
 	router.Post("/", router.createRepo)
 	router.Delete("/{repoID}", router.deleteRepo)
 	router.Put("/{repoID}", router.uploadToRepo)
+
+	// RPM Specific Endpoints
+	router.Get("/{repoID}/rpms", router.getRPMs)
+}
+
+type repoResponse struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
 }
 
 // getRepos godoc
@@ -46,12 +57,19 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	render.JSON(w, r, repos)
+	res := lo.Map(repos, func(repo *ent.Repo, _ int) *repoResponse {
+		return &repoResponse{
+			ID:   repo.ID,
+			Type: string(repo.Type),
+		}
+	})
+
+	render.JSON(w, r, res)
 }
 
 type createRepoPayload struct {
 	ID       string `json:"id" validate:"required,alphanum"`
-	RepoType string `json:"type" validate:"required,oneof='dnf' 'ostree'"`
+	RepoType string `json:"type" validate:"required,oneof='rpm' 'ostree'"`
 }
 
 func (u *createRepoPayload) Bind(r *http.Request) error {
@@ -76,6 +94,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: Make atomic
 	exists, err := router.database.Repo.Query().Where(repo.IDEQ(payload.ID)).Exist(r.Context())
 
 	if err != nil {
@@ -90,7 +109,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 	repositoryDir := path.Join(router.enviroment.StorageDirectory, payload.ID)
 
 	switch payload.RepoType {
-	case "dnf":
+	case "rpm":
 		if err := os.MkdirAll(repositoryDir, os.ModePerm); err != nil {
 			panic(err)
 		}
@@ -180,7 +199,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 	}
 
 	switch re.Type {
-	case repo.TypeDnf:
+	case repo.TypeRpm:
 		if r.ParseMultipartForm(32 << 20); err != nil {
 			panic(err)
 		}
@@ -196,7 +215,51 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 			defer reqFile.Close()
 
-			file, err := os.Create(path.Join(targetDirectory, uuid.NewString()+".rpm"))
+			rpmPackage, err := rpm.ReadRpm(reqFile)
+			if err != nil {
+				render.Render(w, r, ErrInvalidRequest(fmt.Errorf("rpm %s not valid", fileHeader.Filename)))
+				return
+			}
+
+			nevra, err := rpmPackage.Header.GetNEVRA()
+			if err != nil {
+				render.Render(w, r, ErrInvalidRequest(fmt.Errorf("rpm %s nevra not valid", fileHeader.Filename)))
+				return
+			}
+
+			nevraString := nevra.String()
+
+			exists, err := re.QueryRpms().Where(
+				rpmpackage.And(
+					rpmpackage.NameEQ(nevra.Name),
+					rpmpackage.EpochEQ(nevra.Epoch),
+					rpmpackage.VersionEQ(nevra.Version),
+					rpmpackage.ReleaseEQ(nevra.Release),
+					rpmpackage.ArchEQ(nevra.Arch),
+				)).Exist(r.Context())
+			if err != nil {
+				panic(err)
+			}
+
+			if exists {
+				render.Render(w, r, ErrAlreadyExists(fmt.Errorf("rpm %s already exists", nevra)))
+				return
+			}
+
+			_, err = router.database.RpmPackage.Create().
+				SetName(nevra.Name).
+				SetEpoch(nevra.Epoch).
+				SetVersion(nevra.Version).
+				SetRelease(nevra.Release).
+				SetArch(nevra.Arch).
+				SetRepo(re).
+				SetFilePath(nevraString).
+				Save(r.Context())
+			if err != nil {
+				panic(err)
+			}
+
+			file, err := os.Create(path.Join(targetDirectory, nevraString))
 
 			if err != nil {
 				panic(err)
@@ -224,4 +287,62 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 	case repo.TypeOstree:
 		panic("not supported")
 	}
+}
+
+// TODO: maybe we could add support for other package types
+type rpmResponse struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Epoch    string `json:"epoch"`
+	Version  string `json:"version"`
+	Release  string `json:"release"`
+	Arch     string `json:"arch"`
+	FilePath string `json:"file_path"`
+}
+
+// uploadToRepo godoc
+// @Summary     Get list of RPMs in a repo
+// @Description rpms in repo
+// @Tags        repos
+// @Param       id          path     string true "id for the repository"
+// @Success     200
+// @Failure     404 {object} ErrResponse
+// @Router      /repos/{id}/rpms [get]
+func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Type != repo.TypeRpm {
+		render.Render(w, r, ErrInvalidRequest(errors.New("can't query RPMs for a non-rpm repo")))
+		return
+	}
+
+	packages, err := re.QueryRpms().All(r.Context())
+	if err != nil {
+		panic(err)
+	}
+
+	res := lo.Map(packages, func(pkg *ent.RpmPackage, _ int) *rpmResponse {
+		return &rpmResponse{
+			ID:       pkg.ID,
+			Name:     pkg.Name,
+			Epoch:    pkg.Epoch,
+			Version:  pkg.Version,
+			Release:  pkg.Release,
+			Arch:     pkg.Arch,
+			FilePath: pkg.FilePath,
+		}
+	})
+
+	render.JSON(w, r, res)
 }

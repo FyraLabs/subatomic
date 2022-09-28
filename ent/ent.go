@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/FyraLabs/subatomic/ent/repo"
+	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -31,7 +32,8 @@ type OrderFunc func(*sql.Selector)
 // columnChecker returns a function indicates if the column exists in the given column.
 func columnChecker(table string) func(string) error {
 	checks := map[string]func(string) bool{
-		repo.Table: repo.ValidColumn,
+		repo.Table:       repo.ValidColumn,
+		rpmpackage.Table: rpmpackage.ValidColumn,
 	}
 	check, ok := checks[table]
 	if !ok {
