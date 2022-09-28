@@ -3,7 +3,7 @@ module github.com/FyraLabs/subatomic
 go 1.19
 
 require (
-	entgo.io/ent v0.11.2
+	entgo.io/ent v0.11.3
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-playground/validator/v10 v10.11.1
 	github.com/lestrrat-go/jwx v1.2.25
@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	ariga.io/atlas v0.7.0 // indirect
+	ariga.io/atlas v0.7.2-0.20220927111110-867ee0cca56a // indirect
 	github.com/14rcole/gopopulate v0.0.0-20180821133914-b175b219e774 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
