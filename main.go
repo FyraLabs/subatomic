@@ -9,6 +9,7 @@ import (
 	"github.com/FyraLabs/subatomic/ent"
 	"github.com/Netflix/go-env"
 	"github.com/go-chi/jwtauth/v5"
+	"github.com/go-playground/form/v4"
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 
@@ -18,6 +19,7 @@ import (
 )
 
 var validate *validator.Validate
+var decoder *form.Decoder
 
 // @title       Subatomic
 // @version     1.0
@@ -38,6 +40,7 @@ func main() {
 
 func run() error {
 	validate = validator.New()
+	decoder = form.NewDecoder()
 	var enviroment Enviroment
 
 	_ = godotenv.Load()

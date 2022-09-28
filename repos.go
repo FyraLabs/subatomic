@@ -15,6 +15,7 @@ import (
 	"github.com/ostreedev/ostree-go/pkg/otbuiltin"
 	"github.com/samber/lo"
 
+	"github.com/FyraLabs/subatomic/ent/predicate"
 	"github.com/FyraLabs/subatomic/ent/repo"
 	"github.com/FyraLabs/subatomic/ent/rpmpackage"
 	rpm "github.com/sassoftware/go-rpmutils"
@@ -300,6 +301,15 @@ type rpmResponse struct {
 	FilePath string `json:"file_path"`
 }
 
+type queryRpmParams struct {
+	Name         *string `form:"name"`
+	NameContains *string `form:"name_contains"`
+	Epoch        *string `form:"epoch"`
+	Version      *string `form:"version"`
+	Release      *string `form:"release"`
+	Arch         *string `form:"arch"`
+}
+
 // uploadToRepo godoc
 // @Summary     Get list of RPMs in a repo
 // @Description rpms in repo
@@ -310,6 +320,13 @@ type rpmResponse struct {
 // @Router      /repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+
+	query := &queryRpmParams{}
+
+	if err := decoder.Decode(query, r.URL.Query()); err != nil {
+		render.Render(w, r, ErrInvalidRequest(err))
+		return
+	}
 
 	re, err := router.database.Repo.Get(r.Context(), id)
 
@@ -327,12 +344,45 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	packages, err := re.QueryRpms().All(r.Context())
+	predicates := []predicate.RpmPackage{}
+
+	if query.Name != nil {
+		predicates = append(predicates, rpmpackage.NameEQ(*query.Name))
+	}
+
+	if query.NameContains != nil {
+		predicates = append(predicates, rpmpackage.NameContains(*query.NameContains))
+	}
+
+	if query.Epoch != nil {
+		predicates = append(predicates, rpmpackage.EpochEQ(*query.Epoch))
+	}
+
+	if query.Version != nil {
+		predicates = append(predicates, rpmpackage.VersionEQ(*query.Version))
+	}
+
+	if query.Release != nil {
+		predicates = append(predicates, rpmpackage.ReleaseEQ(*query.Release))
+	}
+
+	if query.Arch != nil {
+		predicates = append(predicates, rpmpackage.ArchEQ(*query.Arch))
+	}
+
+	var rpms []*ent.RpmPackage
+
+	if len(predicates) == 0 {
+		rpms, err = re.QueryRpms().All(r.Context())
+	} else {
+		rpms, err = re.QueryRpms().Where(rpmpackage.And(predicates...)).All(r.Context())
+	}
+
 	if err != nil {
 		panic(err)
 	}
 
-	res := lo.Map(packages, func(pkg *ent.RpmPackage, _ int) *rpmResponse {
+	res := lo.Map(rpms, func(pkg *ent.RpmPackage, _ int) *rpmResponse {
 		return &rpmResponse{
 			ID:       pkg.ID,
 			Name:     pkg.Name,
