@@ -152,12 +152,45 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/repos/{id}/rpms": {
+            "get": {
+                "description": "rpms in repo",
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Get list of RPMs in a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
         "ent.Repo": {
             "type": "object",
             "properties": {
+                "edges": {
+                    "description": "Edges holds the relations/edges for other nodes in the graph.\nThe values are being populated by the RepoQuery when eager-loading is set.",
+                    "$ref": "#/definitions/ent.RepoEdges"
+                },
                 "id": {
                     "description": "ID of the ent.",
                     "type": "string"
@@ -165,6 +198,64 @@ const docTemplate = `{
                 "type": {
                     "description": "Type holds the value of the \"type\" field.",
                     "type": "string"
+                }
+            }
+        },
+        "ent.RepoEdges": {
+            "type": "object",
+            "properties": {
+                "rpms": {
+                    "description": "Rpms holds the value of the rpms edge.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/ent.RpmPackage"
+                    }
+                }
+            }
+        },
+        "ent.RpmPackage": {
+            "type": "object",
+            "properties": {
+                "arch": {
+                    "description": "Arch holds the value of the \"arch\" field.",
+                    "type": "string"
+                },
+                "edges": {
+                    "description": "Edges holds the relations/edges for other nodes in the graph.\nThe values are being populated by the RpmPackageQuery when eager-loading is set.",
+                    "$ref": "#/definitions/ent.RpmPackageEdges"
+                },
+                "epoch": {
+                    "description": "Epoch holds the value of the \"epoch\" field.",
+                    "type": "string"
+                },
+                "file_path": {
+                    "description": "FilePath holds the value of the \"file_path\" field.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID of the ent.",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "Name holds the value of the \"name\" field.",
+                    "type": "string"
+                },
+                "release": {
+                    "description": "Release holds the value of the \"release\" field.",
+                    "type": "string"
+                },
+                "version": {
+                    "description": "Version holds the value of the \"version\" field.",
+                    "type": "string"
+                }
+            }
+        },
+        "ent.RpmPackageEdges": {
+            "type": "object",
+            "properties": {
+                "repo": {
+                    "description": "Repo holds the value of the repo edge.",
+                    "$ref": "#/definitions/ent.Repo"
                 }
             }
         },
@@ -198,7 +289,7 @@ const docTemplate = `{
                 "type": {
                     "type": "string",
                     "enum": [
-                        "dnf",
+                        "rpm",
                         "ostree"
                     ]
                 }

@@ -314,7 +314,7 @@ type queryRpmParams struct {
 // @Summary     Get list of RPMs in a repo
 // @Description rpms in repo
 // @Tags        repos
-// @Param       id          path     string true "id for the repository"
+// @Param       id path string true "id for the repository"
 // @Success     200
 // @Failure     404 {object} ErrResponse
 // @Router      /repos/{id}/rpms [get]
