@@ -2,3 +2,4 @@ storage
 .env
 !.devcontainer/.env
 tmp/
+subatomic.json
