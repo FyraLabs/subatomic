@@ -13,7 +13,7 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "subatomic",
+	Use:   "subatomic-cli",
 	Short: "A modern package delivery server",
 	Long: `Subatomic is a package delivery server made for ease of use.
 	

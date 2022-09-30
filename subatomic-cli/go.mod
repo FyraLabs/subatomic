@@ -1,4 +1,4 @@
-module github.com/FyraLabs/subatomic/cli
+module github.com/FyraLabs/subatomic/subatomic-cli
 
 go 1.19
 
