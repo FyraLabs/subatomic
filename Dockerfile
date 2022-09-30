@@ -12,7 +12,7 @@ FROM golang:1.19-alpine
 
 COPY --from=builder /subatomic /subatomic
 
-RUN apk add --no-cache ostree createrepo_c
+RUN apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ ostree createrepo_c
 
 EXPOSE 3000
 
