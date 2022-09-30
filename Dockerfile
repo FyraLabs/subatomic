@@ -1,18 +1,18 @@
-FROM golang:1.19-alpine as builder
+FROM golang:1.19-bullseye as builder
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc pkgconfig ostree-dev musl-dev
+RUN apt update && apt install -y gcc pkgconfig ostree-dev
 
 COPY . .
 
 RUN go build -o /subatomic ./server
 
-FROM golang:1.19-alpine
+FROM golang:1.19-bullseye
 
 COPY --from=builder /subatomic /subatomic
 
-RUN apk add --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ ostree createrepo_c
+RUN apt update && apt install -y ostree createrepo-c
 
 EXPOSE 3000
 
