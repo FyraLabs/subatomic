@@ -238,6 +238,10 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
+			if _, err := reqFile.Seek(0, io.SeekStart); err != nil {
+				panic(err)
+			}
+
 			nevraString := nevra.String()
 
 			exists, err := re.QueryRpms().Where(
