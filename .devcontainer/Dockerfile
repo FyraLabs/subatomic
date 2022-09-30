@@ -14,6 +14,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 USER vscode
 RUN go install github.com/cosmtrek/air@latest
 RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/spf13/cobra-cli@latest
 RUN mkdir -p storage
 USER root
 

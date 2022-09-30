@@ -4,13 +4,13 @@ WORKDIR /app
 
 RUN apk add --no-cache gcc pkgconfig ostree-dev musl-dev
 
-COPY go.mod ./
-COPY go.sum ./
+COPY server/go.mod ./
+COPY server/go.sum ./
 RUN go mod download
 
-COPY *.go ./
-COPY ent ./ent
-COPY docs ./docs
+COPY server/*.go ./
+COPY server/ent ./ent
+COPY server/docs ./docs
 
 RUN go build -o /subatomic
 
