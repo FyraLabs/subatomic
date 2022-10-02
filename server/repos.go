@@ -290,7 +290,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 		// TODO: Remember to lock this
 		// TODO: Also siging the repodata
-		if _, err := exec.Command("createrepo_c", "--update", targetDirectory).Output(); err != nil {
+		if _, err := exec.Command("createrepo_c", "--update", "--deltas", "--zck", "--xz", targetDirectory).Output(); err != nil {
 			panic(err)
 		}
 
