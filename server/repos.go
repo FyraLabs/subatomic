@@ -239,7 +239,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
-			isSource := rpmPackage.Header.HasTag(rpm.SOURCERPM)
+			isSource := !rpmPackage.Header.HasTag(rpm.SOURCERPM)
 
 			if _, err := reqFile.Seek(0, io.SeekStart); err != nil {
 				panic(err)
