@@ -121,6 +121,13 @@ func FilePath(v string) predicate.RpmPackage {
 	})
 }
 
+// IsSource applies equality check predicate on the "is_source" field. It's identical to IsSourceEQ.
+func IsSource(v bool) predicate.RpmPackage {
+	return predicate.RpmPackage(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldIsSource), v))
+	})
+}
+
 // NameEQ applies the EQ predicate on the "name" field.
 func NameEQ(v string) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
@@ -712,6 +719,20 @@ func FilePathEqualFold(v string) predicate.RpmPackage {
 func FilePathContainsFold(v string) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.ContainsFold(s.C(FieldFilePath), v))
+	})
+}
+
+// IsSourceEQ applies the EQ predicate on the "is_source" field.
+func IsSourceEQ(v bool) predicate.RpmPackage {
+	return predicate.RpmPackage(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldIsSource), v))
+	})
+}
+
+// IsSourceNEQ applies the NEQ predicate on the "is_source" field.
+func IsSourceNEQ(v bool) predicate.RpmPackage {
+	return predicate.RpmPackage(func(s *sql.Selector) {
+		s.Where(sql.NEQ(s.C(FieldIsSource), v))
 	})
 }
 

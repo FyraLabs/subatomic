@@ -64,6 +64,12 @@ func (rpu *RpmPackageUpdate) SetFilePath(s string) *RpmPackageUpdate {
 	return rpu
 }
 
+// SetIsSource sets the "is_source" field.
+func (rpu *RpmPackageUpdate) SetIsSource(b bool) *RpmPackageUpdate {
+	rpu.mutation.SetIsSource(b)
+	return rpu
+}
+
 // SetRepoID sets the "repo" edge to the Repo entity by ID.
 func (rpu *RpmPackageUpdate) SetRepoID(id string) *RpmPackageUpdate {
 	rpu.mutation.SetRepoID(id)
@@ -208,6 +214,13 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Column: rpmpackage.FieldFilePath,
 		})
 	}
+	if value, ok := rpu.mutation.IsSource(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeBool,
+			Value:  value,
+			Column: rpmpackage.FieldIsSource,
+		})
+	}
 	if rpu.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -295,6 +308,12 @@ func (rpuo *RpmPackageUpdateOne) SetArch(s string) *RpmPackageUpdateOne {
 // SetFilePath sets the "file_path" field.
 func (rpuo *RpmPackageUpdateOne) SetFilePath(s string) *RpmPackageUpdateOne {
 	rpuo.mutation.SetFilePath(s)
+	return rpuo
+}
+
+// SetIsSource sets the "is_source" field.
+func (rpuo *RpmPackageUpdateOne) SetIsSource(b bool) *RpmPackageUpdateOne {
+	rpuo.mutation.SetIsSource(b)
 	return rpuo
 }
 
@@ -470,6 +489,13 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 			Type:   field.TypeString,
 			Value:  value,
 			Column: rpmpackage.FieldFilePath,
+		})
+	}
+	if value, ok := rpuo.mutation.IsSource(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeBool,
+			Value:  value,
+			Column: rpmpackage.FieldIsSource,
 		})
 	}
 	if rpuo.mutation.RepoCleared() {

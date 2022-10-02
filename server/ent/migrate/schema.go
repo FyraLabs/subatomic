@@ -28,6 +28,7 @@ var (
 		{Name: "release", Type: field.TypeString},
 		{Name: "arch", Type: field.TypeString},
 		{Name: "file_path", Type: field.TypeString, Unique: true},
+		{Name: "is_source", Type: field.TypeBool},
 		{Name: "repo_rpms", Type: field.TypeString, Nullable: true},
 	}
 	// RpmPackagesTable holds the schema information for the "rpm_packages" table.
@@ -38,16 +39,16 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "rpm_packages_repos_rpms",
-				Columns:    []*schema.Column{RpmPackagesColumns[7]},
+				Columns:    []*schema.Column{RpmPackagesColumns[8]},
 				RefColumns: []*schema.Column{ReposColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "rpmpackage_name_epoch_version_release_arch",
+				Name:    "rpmpackage_name_epoch_version_release_arch_is_source",
 				Unique:  true,
-				Columns: []*schema.Column{RpmPackagesColumns[1], RpmPackagesColumns[2], RpmPackagesColumns[3], RpmPackagesColumns[4], RpmPackagesColumns[5]},
+				Columns: []*schema.Column{RpmPackagesColumns[1], RpmPackagesColumns[2], RpmPackagesColumns[3], RpmPackagesColumns[4], RpmPackagesColumns[5], RpmPackagesColumns[7]},
 			},
 		},
 	}

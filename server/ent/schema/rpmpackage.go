@@ -21,6 +21,7 @@ func (RpmPackage) Fields() []ent.Field {
 		field.String("release"),
 		field.String("arch"),
 		field.String("file_path").Unique(),
+		field.Bool("is_source"),
 	}
 }
 
@@ -36,7 +37,7 @@ func (RpmPackage) Edges() []ent.Edge {
 // Indexes of the RpmPackage.
 func (RpmPackage) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("name", "epoch", "version", "release", "arch").
+		index.Fields("name", "epoch", "version", "release", "arch", "is_source").
 			Unique(),
 	}
 }

@@ -56,6 +56,12 @@ func (rpc *RpmPackageCreate) SetFilePath(s string) *RpmPackageCreate {
 	return rpc
 }
 
+// SetIsSource sets the "is_source" field.
+func (rpc *RpmPackageCreate) SetIsSource(b bool) *RpmPackageCreate {
+	rpc.mutation.SetIsSource(b)
+	return rpc
+}
+
 // SetRepoID sets the "repo" edge to the Repo entity by ID.
 func (rpc *RpmPackageCreate) SetRepoID(id string) *RpmPackageCreate {
 	rpc.mutation.SetRepoID(id)
@@ -169,6 +175,9 @@ func (rpc *RpmPackageCreate) check() error {
 	if _, ok := rpc.mutation.FilePath(); !ok {
 		return &ValidationError{Name: "file_path", err: errors.New(`ent: missing required field "RpmPackage.file_path"`)}
 	}
+	if _, ok := rpc.mutation.IsSource(); !ok {
+		return &ValidationError{Name: "is_source", err: errors.New(`ent: missing required field "RpmPackage.is_source"`)}
+	}
 	return nil
 }
 
@@ -243,6 +252,14 @@ func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 			Column: rpmpackage.FieldFilePath,
 		})
 		_node.FilePath = value
+	}
+	if value, ok := rpc.mutation.IsSource(); ok {
+		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
+			Type:   field.TypeBool,
+			Value:  value,
+			Column: rpmpackage.FieldIsSource,
+		})
+		_node.IsSource = value
 	}
 	if nodes := rpc.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

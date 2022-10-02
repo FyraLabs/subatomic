@@ -450,6 +450,7 @@ type RpmPackageMutation struct {
 	release       *string
 	arch          *string
 	file_path     *string
+	is_source     *bool
 	clearedFields map[string]struct{}
 	repo          *string
 	clearedrepo   bool
@@ -772,6 +773,42 @@ func (m *RpmPackageMutation) ResetFilePath() {
 	m.file_path = nil
 }
 
+// SetIsSource sets the "is_source" field.
+func (m *RpmPackageMutation) SetIsSource(b bool) {
+	m.is_source = &b
+}
+
+// IsSource returns the value of the "is_source" field in the mutation.
+func (m *RpmPackageMutation) IsSource() (r bool, exists bool) {
+	v := m.is_source
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsSource returns the old "is_source" field's value of the RpmPackage entity.
+// If the RpmPackage object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RpmPackageMutation) OldIsSource(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsSource is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsSource requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsSource: %w", err)
+	}
+	return oldValue.IsSource, nil
+}
+
+// ResetIsSource resets all changes to the "is_source" field.
+func (m *RpmPackageMutation) ResetIsSource() {
+	m.is_source = nil
+}
+
 // SetRepoID sets the "repo" edge to the Repo entity by id.
 func (m *RpmPackageMutation) SetRepoID(id string) {
 	m.repo = &id
@@ -830,7 +867,7 @@ func (m *RpmPackageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RpmPackageMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
 	if m.name != nil {
 		fields = append(fields, rpmpackage.FieldName)
 	}
@@ -848,6 +885,9 @@ func (m *RpmPackageMutation) Fields() []string {
 	}
 	if m.file_path != nil {
 		fields = append(fields, rpmpackage.FieldFilePath)
+	}
+	if m.is_source != nil {
+		fields = append(fields, rpmpackage.FieldIsSource)
 	}
 	return fields
 }
@@ -869,6 +909,8 @@ func (m *RpmPackageMutation) Field(name string) (ent.Value, bool) {
 		return m.Arch()
 	case rpmpackage.FieldFilePath:
 		return m.FilePath()
+	case rpmpackage.FieldIsSource:
+		return m.IsSource()
 	}
 	return nil, false
 }
@@ -890,6 +932,8 @@ func (m *RpmPackageMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldArch(ctx)
 	case rpmpackage.FieldFilePath:
 		return m.OldFilePath(ctx)
+	case rpmpackage.FieldIsSource:
+		return m.OldIsSource(ctx)
 	}
 	return nil, fmt.Errorf("unknown RpmPackage field %s", name)
 }
@@ -940,6 +984,13 @@ func (m *RpmPackageMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFilePath(v)
+		return nil
+	case rpmpackage.FieldIsSource:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsSource(v)
 		return nil
 	}
 	return fmt.Errorf("unknown RpmPackage field %s", name)
@@ -1007,6 +1058,9 @@ func (m *RpmPackageMutation) ResetField(name string) error {
 		return nil
 	case rpmpackage.FieldFilePath:
 		m.ResetFilePath()
+		return nil
+	case rpmpackage.FieldIsSource:
+		m.ResetIsSource()
 		return nil
 	}
 	return fmt.Errorf("unknown RpmPackage field %s", name)
