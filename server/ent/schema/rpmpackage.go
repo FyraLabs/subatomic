@@ -36,6 +36,9 @@ func (RpmPackage) Edges() []ent.Edge {
 // Indexes of the RpmPackage.
 func (RpmPackage) Indexes() []ent.Index {
 	return []ent.Index{
+		index.Fields("file_path").
+			Edges("repo").
+			Unique(),
 		index.Fields("name", "epoch", "version", "release", "arch").
 			Unique(),
 	}

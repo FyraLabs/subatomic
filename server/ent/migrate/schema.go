@@ -27,7 +27,7 @@ var (
 		{Name: "version", Type: field.TypeString},
 		{Name: "release", Type: field.TypeString},
 		{Name: "arch", Type: field.TypeString},
-		{Name: "file_path", Type: field.TypeString, Unique: false},
+		{Name: "file_path", Type: field.TypeString},
 		{Name: "repo_rpms", Type: field.TypeString, Nullable: true},
 	}
 	// RpmPackagesTable holds the schema information for the "rpm_packages" table.
@@ -44,6 +44,11 @@ var (
 			},
 		},
 		Indexes: []*schema.Index{
+			{
+				Name:    "rpmpackage_file_path_repo_rpms",
+				Unique:  true,
+				Columns: []*schema.Column{RpmPackagesColumns[6], RpmPackagesColumns[7]},
+			},
 			{
 				Name:    "rpmpackage_name_epoch_version_release_arch",
 				Unique:  true,
