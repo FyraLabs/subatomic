@@ -20,7 +20,7 @@ func (RpmPackage) Fields() []ent.Field {
 		field.String("version"),
 		field.String("release"),
 		field.String("arch"),
-		field.String("file_path").Unique(),
+		field.String("file_path"),
 	}
 }
 

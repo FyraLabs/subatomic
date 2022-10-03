@@ -27,7 +27,7 @@ var (
 		{Name: "version", Type: field.TypeString},
 		{Name: "release", Type: field.TypeString},
 		{Name: "arch", Type: field.TypeString},
-		{Name: "file_path", Type: field.TypeString, Unique: true},
+		{Name: "file_path", Type: field.TypeString, Unique: false},
 		{Name: "repo_rpms", Type: field.TypeString, Nullable: true},
 	}
 	// RpmPackagesTable holds the schema information for the "rpm_packages" table.
