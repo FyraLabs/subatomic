@@ -40,6 +40,7 @@ func (router *reposRouter) setup() {
 
 	// RPM Specific Endpoints
 	router.Get("/{repoID}/rpms", router.getRPMs)
+	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
 }
 
 type repoResponse struct {
@@ -335,7 +336,7 @@ type queryRpmParams struct {
 	FilePath     *string `json:"file_path"`
 }
 
-// uploadToRepo godoc
+// getRPMs godoc
 // @Summary     Get list of RPMs in a repo
 // @Description rpms in repo
 // @Tags        repos
@@ -424,4 +425,65 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	})
 
 	render.JSON(w, r, res)
+}
+
+// deleteRPM godoc
+// @Summary     Delete RPM in a repo
+// @Description delete rpm
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Param       rpmId path string true "rpm id in the repository"
+// @Success     200
+// @Failure     404 {object} ErrResponse
+// @Router      /repos/{id}/rpms/{rpmId} [delete]
+func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	rpmId, err := strconv.Atoi(chi.URLParam(r, "repoID"))
+	if err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Type != repo.TypeRpm {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("can't query RPMs for a non-rpm repo")))
+		return
+	}
+
+	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmId)).First(r.Context())
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("rpm not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := router.database.RpmPackage.DeleteOne(rpm).Exec(r.Context()); err != nil {
+		panic(err)
+	}
+
+	targetDirectory := path.Join(router.enviroment.StorageDirectory, id, rpm.FilePath)
+
+	if err := os.Remove(targetDirectory); err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
 }
