@@ -445,12 +445,12 @@ type RpmPackageMutation struct {
 	typ           string
 	id            *int
 	name          *string
-	epoch         *string
+	epoch         *int
+	addepoch      *int
 	version       *string
 	release       *string
 	arch          *string
 	file_path     *string
-	is_source     *bool
 	clearedFields map[string]struct{}
 	repo          *string
 	clearedrepo   bool
@@ -594,12 +594,13 @@ func (m *RpmPackageMutation) ResetName() {
 }
 
 // SetEpoch sets the "epoch" field.
-func (m *RpmPackageMutation) SetEpoch(s string) {
-	m.epoch = &s
+func (m *RpmPackageMutation) SetEpoch(i int) {
+	m.epoch = &i
+	m.addepoch = nil
 }
 
 // Epoch returns the value of the "epoch" field in the mutation.
-func (m *RpmPackageMutation) Epoch() (r string, exists bool) {
+func (m *RpmPackageMutation) Epoch() (r int, exists bool) {
 	v := m.epoch
 	if v == nil {
 		return
@@ -610,7 +611,7 @@ func (m *RpmPackageMutation) Epoch() (r string, exists bool) {
 // OldEpoch returns the old "epoch" field's value of the RpmPackage entity.
 // If the RpmPackage object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RpmPackageMutation) OldEpoch(ctx context.Context) (v string, err error) {
+func (m *RpmPackageMutation) OldEpoch(ctx context.Context) (v int, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEpoch is only allowed on UpdateOne operations")
 	}
@@ -624,9 +625,28 @@ func (m *RpmPackageMutation) OldEpoch(ctx context.Context) (v string, err error)
 	return oldValue.Epoch, nil
 }
 
+// AddEpoch adds i to the "epoch" field.
+func (m *RpmPackageMutation) AddEpoch(i int) {
+	if m.addepoch != nil {
+		*m.addepoch += i
+	} else {
+		m.addepoch = &i
+	}
+}
+
+// AddedEpoch returns the value that was added to the "epoch" field in this mutation.
+func (m *RpmPackageMutation) AddedEpoch() (r int, exists bool) {
+	v := m.addepoch
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
 // ResetEpoch resets all changes to the "epoch" field.
 func (m *RpmPackageMutation) ResetEpoch() {
 	m.epoch = nil
+	m.addepoch = nil
 }
 
 // SetVersion sets the "version" field.
@@ -773,42 +793,6 @@ func (m *RpmPackageMutation) ResetFilePath() {
 	m.file_path = nil
 }
 
-// SetIsSource sets the "is_source" field.
-func (m *RpmPackageMutation) SetIsSource(b bool) {
-	m.is_source = &b
-}
-
-// IsSource returns the value of the "is_source" field in the mutation.
-func (m *RpmPackageMutation) IsSource() (r bool, exists bool) {
-	v := m.is_source
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldIsSource returns the old "is_source" field's value of the RpmPackage entity.
-// If the RpmPackage object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *RpmPackageMutation) OldIsSource(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIsSource is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIsSource requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIsSource: %w", err)
-	}
-	return oldValue.IsSource, nil
-}
-
-// ResetIsSource resets all changes to the "is_source" field.
-func (m *RpmPackageMutation) ResetIsSource() {
-	m.is_source = nil
-}
-
 // SetRepoID sets the "repo" edge to the Repo entity by id.
 func (m *RpmPackageMutation) SetRepoID(id string) {
 	m.repo = &id
@@ -867,7 +851,7 @@ func (m *RpmPackageMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RpmPackageMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 6)
 	if m.name != nil {
 		fields = append(fields, rpmpackage.FieldName)
 	}
@@ -885,9 +869,6 @@ func (m *RpmPackageMutation) Fields() []string {
 	}
 	if m.file_path != nil {
 		fields = append(fields, rpmpackage.FieldFilePath)
-	}
-	if m.is_source != nil {
-		fields = append(fields, rpmpackage.FieldIsSource)
 	}
 	return fields
 }
@@ -909,8 +890,6 @@ func (m *RpmPackageMutation) Field(name string) (ent.Value, bool) {
 		return m.Arch()
 	case rpmpackage.FieldFilePath:
 		return m.FilePath()
-	case rpmpackage.FieldIsSource:
-		return m.IsSource()
 	}
 	return nil, false
 }
@@ -932,8 +911,6 @@ func (m *RpmPackageMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldArch(ctx)
 	case rpmpackage.FieldFilePath:
 		return m.OldFilePath(ctx)
-	case rpmpackage.FieldIsSource:
-		return m.OldIsSource(ctx)
 	}
 	return nil, fmt.Errorf("unknown RpmPackage field %s", name)
 }
@@ -951,7 +928,7 @@ func (m *RpmPackageMutation) SetField(name string, value ent.Value) error {
 		m.SetName(v)
 		return nil
 	case rpmpackage.FieldEpoch:
-		v, ok := value.(string)
+		v, ok := value.(int)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -985,13 +962,6 @@ func (m *RpmPackageMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetFilePath(v)
 		return nil
-	case rpmpackage.FieldIsSource:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetIsSource(v)
-		return nil
 	}
 	return fmt.Errorf("unknown RpmPackage field %s", name)
 }
@@ -999,13 +969,21 @@ func (m *RpmPackageMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *RpmPackageMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addepoch != nil {
+		fields = append(fields, rpmpackage.FieldEpoch)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *RpmPackageMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case rpmpackage.FieldEpoch:
+		return m.AddedEpoch()
+	}
 	return nil, false
 }
 
@@ -1014,6 +992,13 @@ func (m *RpmPackageMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *RpmPackageMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case rpmpackage.FieldEpoch:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEpoch(v)
+		return nil
 	}
 	return fmt.Errorf("unknown RpmPackage numeric field %s", name)
 }
@@ -1058,9 +1043,6 @@ func (m *RpmPackageMutation) ResetField(name string) error {
 		return nil
 	case rpmpackage.FieldFilePath:
 		m.ResetFilePath()
-		return nil
-	case rpmpackage.FieldIsSource:
-		m.ResetIsSource()
 		return nil
 	}
 	return fmt.Errorf("unknown RpmPackage field %s", name)

@@ -19,8 +19,6 @@ const (
 	FieldArch = "arch"
 	// FieldFilePath holds the string denoting the file_path field in the database.
 	FieldFilePath = "file_path"
-	// FieldIsSource holds the string denoting the is_source field in the database.
-	FieldIsSource = "is_source"
 	// EdgeRepo holds the string denoting the repo edge name in mutations.
 	EdgeRepo = "repo"
 	// RepoFieldID holds the string denoting the ID field of the Repo.
@@ -45,7 +43,6 @@ var Columns = []string{
 	FieldRelease,
 	FieldArch,
 	FieldFilePath,
-	FieldIsSource,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "rpm_packages"
@@ -68,3 +65,8 @@ func ValidColumn(column string) bool {
 	}
 	return false
 }
+
+var (
+	// EpochValidator is a validator for the "epoch" field. It is called by the builders before save.
+	EpochValidator func(int) error
+)

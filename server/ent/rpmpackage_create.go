@@ -27,8 +27,8 @@ func (rpc *RpmPackageCreate) SetName(s string) *RpmPackageCreate {
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpc *RpmPackageCreate) SetEpoch(s string) *RpmPackageCreate {
-	rpc.mutation.SetEpoch(s)
+func (rpc *RpmPackageCreate) SetEpoch(i int) *RpmPackageCreate {
+	rpc.mutation.SetEpoch(i)
 	return rpc
 }
 
@@ -53,12 +53,6 @@ func (rpc *RpmPackageCreate) SetArch(s string) *RpmPackageCreate {
 // SetFilePath sets the "file_path" field.
 func (rpc *RpmPackageCreate) SetFilePath(s string) *RpmPackageCreate {
 	rpc.mutation.SetFilePath(s)
-	return rpc
-}
-
-// SetIsSource sets the "is_source" field.
-func (rpc *RpmPackageCreate) SetIsSource(b bool) *RpmPackageCreate {
-	rpc.mutation.SetIsSource(b)
 	return rpc
 }
 
@@ -163,6 +157,11 @@ func (rpc *RpmPackageCreate) check() error {
 	if _, ok := rpc.mutation.Epoch(); !ok {
 		return &ValidationError{Name: "epoch", err: errors.New(`ent: missing required field "RpmPackage.epoch"`)}
 	}
+	if v, ok := rpc.mutation.Epoch(); ok {
+		if err := rpmpackage.EpochValidator(v); err != nil {
+			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
+		}
+	}
 	if _, ok := rpc.mutation.Version(); !ok {
 		return &ValidationError{Name: "version", err: errors.New(`ent: missing required field "RpmPackage.version"`)}
 	}
@@ -174,9 +173,6 @@ func (rpc *RpmPackageCreate) check() error {
 	}
 	if _, ok := rpc.mutation.FilePath(); !ok {
 		return &ValidationError{Name: "file_path", err: errors.New(`ent: missing required field "RpmPackage.file_path"`)}
-	}
-	if _, ok := rpc.mutation.IsSource(); !ok {
-		return &ValidationError{Name: "is_source", err: errors.New(`ent: missing required field "RpmPackage.is_source"`)}
 	}
 	return nil
 }
@@ -215,7 +211,7 @@ func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := rpc.mutation.Epoch(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
+			Type:   field.TypeInt,
 			Value:  value,
 			Column: rpmpackage.FieldEpoch,
 		})
@@ -252,14 +248,6 @@ func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 			Column: rpmpackage.FieldFilePath,
 		})
 		_node.FilePath = value
-	}
-	if value, ok := rpc.mutation.IsSource(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeBool,
-			Value:  value,
-			Column: rpmpackage.FieldIsSource,
-		})
-		_node.IsSource = value
 	}
 	if nodes := rpc.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

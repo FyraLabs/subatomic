@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/FyraLabs/subatomic/server/ent"
@@ -239,6 +240,12 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 
+			epoch, err := strconv.Atoi(nevra.Epoch)
+			if err != nil {
+				render.Render(w, r, types.ErrInvalidRequest(fmt.Errorf("rpm %s epoch not valid", fileHeader.Filename)))
+				return
+			}
+
 			isSource := !rpmPackage.Header.HasTag(rpm.SOURCERPM)
 
 			if _, err := reqFile.Seek(0, io.SeekStart); err != nil {
@@ -250,11 +257,10 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			exists, err := re.QueryRpms().Where(
 				rpmpackage.And(
 					rpmpackage.NameEQ(nevra.Name),
-					rpmpackage.EpochEQ(nevra.Epoch),
+					rpmpackage.EpochEQ(epoch),
 					rpmpackage.VersionEQ(nevra.Version),
 					rpmpackage.ReleaseEQ(nevra.Release),
-					rpmpackage.ArchEQ(nevra.Arch),
-					rpmpackage.IsSourceEQ(isSource),
+					rpmpackage.ArchEQ(lo.Ternary(isSource, "src", nevra.Arch)),
 				)).Exist(r.Context())
 			if err != nil {
 				panic(err)
@@ -267,13 +273,12 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 			_, err = router.database.RpmPackage.Create().
 				SetName(nevra.Name).
-				SetEpoch(nevra.Epoch).
+				SetEpoch(epoch).
 				SetVersion(nevra.Version).
 				SetRelease(nevra.Release).
 				SetArch(nevra.Arch).
 				SetRepo(re).
 				SetFilePath(filePath).
-				SetIsSource(isSource).
 				Save(r.Context())
 			if err != nil {
 				panic(err)
@@ -313,23 +318,21 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 type rpmResponse struct {
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
-	Epoch    string `json:"epoch"`
+	Epoch    int    `json:"epoch"`
 	Version  string `json:"version"`
 	Release  string `json:"release"`
 	Arch     string `json:"arch"`
 	FilePath string `json:"file_path"`
-	IsSource bool   `json:"is_source"`
 }
 
 type queryRpmParams struct {
 	Name         *string `form:"name"`
 	NameContains *string `form:"name_contains"`
-	Epoch        *string `form:"epoch"`
+	Epoch        *int    `form:"epoch"`
 	Version      *string `form:"version"`
 	Release      *string `form:"release"`
 	Arch         *string `form:"arch"`
 	FilePath     *string `json:"file_path"`
-	IsSource     *bool   `form:"is_source"`
 }
 
 // uploadToRepo godoc
@@ -396,10 +399,6 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		predicates = append(predicates, rpmpackage.FilePathEQ(*query.FilePath))
 	}
 
-	if query.IsSource != nil {
-		predicates = append(predicates, rpmpackage.IsSourceEQ(*query.IsSource))
-	}
-
 	var rpms []*ent.RpmPackage
 
 	if len(predicates) == 0 {
@@ -421,7 +420,6 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 			Release:  pkg.Release,
 			Arch:     pkg.Arch,
 			FilePath: pkg.FilePath,
-			IsSource: pkg.IsSource,
 		}
 	})
 

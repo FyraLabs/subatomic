@@ -87,7 +87,7 @@ func Name(v string) predicate.RpmPackage {
 }
 
 // Epoch applies equality check predicate on the "epoch" field. It's identical to EpochEQ.
-func Epoch(v string) predicate.RpmPackage {
+func Epoch(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(FieldEpoch), v))
 	})
@@ -118,13 +118,6 @@ func Arch(v string) predicate.RpmPackage {
 func FilePath(v string) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(FieldFilePath), v))
-	})
-}
-
-// IsSource applies equality check predicate on the "is_source" field. It's identical to IsSourceEQ.
-func IsSource(v bool) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldIsSource), v))
 	})
 }
 
@@ -228,21 +221,21 @@ func NameContainsFold(v string) predicate.RpmPackage {
 }
 
 // EpochEQ applies the EQ predicate on the "epoch" field.
-func EpochEQ(v string) predicate.RpmPackage {
+func EpochEQ(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(FieldEpoch), v))
 	})
 }
 
 // EpochNEQ applies the NEQ predicate on the "epoch" field.
-func EpochNEQ(v string) predicate.RpmPackage {
+func EpochNEQ(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.NEQ(s.C(FieldEpoch), v))
 	})
 }
 
 // EpochIn applies the In predicate on the "epoch" field.
-func EpochIn(vs ...string) predicate.RpmPackage {
+func EpochIn(vs ...int) predicate.RpmPackage {
 	v := make([]interface{}, len(vs))
 	for i := range v {
 		v[i] = vs[i]
@@ -253,7 +246,7 @@ func EpochIn(vs ...string) predicate.RpmPackage {
 }
 
 // EpochNotIn applies the NotIn predicate on the "epoch" field.
-func EpochNotIn(vs ...string) predicate.RpmPackage {
+func EpochNotIn(vs ...int) predicate.RpmPackage {
 	v := make([]interface{}, len(vs))
 	for i := range v {
 		v[i] = vs[i]
@@ -264,65 +257,30 @@ func EpochNotIn(vs ...string) predicate.RpmPackage {
 }
 
 // EpochGT applies the GT predicate on the "epoch" field.
-func EpochGT(v string) predicate.RpmPackage {
+func EpochGT(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.GT(s.C(FieldEpoch), v))
 	})
 }
 
 // EpochGTE applies the GTE predicate on the "epoch" field.
-func EpochGTE(v string) predicate.RpmPackage {
+func EpochGTE(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.GTE(s.C(FieldEpoch), v))
 	})
 }
 
 // EpochLT applies the LT predicate on the "epoch" field.
-func EpochLT(v string) predicate.RpmPackage {
+func EpochLT(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.LT(s.C(FieldEpoch), v))
 	})
 }
 
 // EpochLTE applies the LTE predicate on the "epoch" field.
-func EpochLTE(v string) predicate.RpmPackage {
+func EpochLTE(v int) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.LTE(s.C(FieldEpoch), v))
-	})
-}
-
-// EpochContains applies the Contains predicate on the "epoch" field.
-func EpochContains(v string) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.Contains(s.C(FieldEpoch), v))
-	})
-}
-
-// EpochHasPrefix applies the HasPrefix predicate on the "epoch" field.
-func EpochHasPrefix(v string) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.HasPrefix(s.C(FieldEpoch), v))
-	})
-}
-
-// EpochHasSuffix applies the HasSuffix predicate on the "epoch" field.
-func EpochHasSuffix(v string) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.HasSuffix(s.C(FieldEpoch), v))
-	})
-}
-
-// EpochEqualFold applies the EqualFold predicate on the "epoch" field.
-func EpochEqualFold(v string) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.EqualFold(s.C(FieldEpoch), v))
-	})
-}
-
-// EpochContainsFold applies the ContainsFold predicate on the "epoch" field.
-func EpochContainsFold(v string) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.ContainsFold(s.C(FieldEpoch), v))
 	})
 }
 
@@ -719,20 +677,6 @@ func FilePathEqualFold(v string) predicate.RpmPackage {
 func FilePathContainsFold(v string) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
 		s.Where(sql.ContainsFold(s.C(FieldFilePath), v))
-	})
-}
-
-// IsSourceEQ applies the EQ predicate on the "is_source" field.
-func IsSourceEQ(v bool) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldIsSource), v))
-	})
-}
-
-// IsSourceNEQ applies the NEQ predicate on the "is_source" field.
-func IsSourceNEQ(v bool) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldIsSource), v))
 	})
 }
 

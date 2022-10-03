@@ -2,8 +2,19 @@
 
 package ent
 
+import (
+	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/schema"
+)
+
 // The init function reads all schema descriptors with runtime code
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	rpmpackageFields := schema.RpmPackage{}.Fields()
+	_ = rpmpackageFields
+	// rpmpackageDescEpoch is the schema descriptor for epoch field.
+	rpmpackageDescEpoch := rpmpackageFields[1].Descriptor()
+	// rpmpackage.EpochValidator is a validator for the "epoch" field. It is called by the builders before save.
+	rpmpackage.EpochValidator = rpmpackageDescEpoch.Validators[0].(func(int) error)
 }

@@ -19,7 +19,7 @@ type RpmPackage struct {
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
 	// Epoch holds the value of the "epoch" field.
-	Epoch string `json:"epoch,omitempty"`
+	Epoch int `json:"epoch,omitempty"`
 	// Version holds the value of the "version" field.
 	Version string `json:"version,omitempty"`
 	// Release holds the value of the "release" field.
@@ -28,8 +28,6 @@ type RpmPackage struct {
 	Arch string `json:"arch,omitempty"`
 	// FilePath holds the value of the "file_path" field.
 	FilePath string `json:"file_path,omitempty"`
-	// IsSource holds the value of the "is_source" field.
-	IsSource bool `json:"is_source,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RpmPackageQuery when eager-loading is set.
 	Edges     RpmPackageEdges `json:"edges"`
@@ -63,11 +61,9 @@ func (*RpmPackage) scanValues(columns []string) ([]interface{}, error) {
 	values := make([]interface{}, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case rpmpackage.FieldIsSource:
-			values[i] = new(sql.NullBool)
-		case rpmpackage.FieldID:
+		case rpmpackage.FieldID, rpmpackage.FieldEpoch:
 			values[i] = new(sql.NullInt64)
-		case rpmpackage.FieldName, rpmpackage.FieldEpoch, rpmpackage.FieldVersion, rpmpackage.FieldRelease, rpmpackage.FieldArch, rpmpackage.FieldFilePath:
+		case rpmpackage.FieldName, rpmpackage.FieldVersion, rpmpackage.FieldRelease, rpmpackage.FieldArch, rpmpackage.FieldFilePath:
 			values[i] = new(sql.NullString)
 		case rpmpackage.ForeignKeys[0]: // repo_rpms
 			values[i] = new(sql.NullString)
@@ -99,10 +95,10 @@ func (rp *RpmPackage) assignValues(columns []string, values []interface{}) error
 				rp.Name = value.String
 			}
 		case rpmpackage.FieldEpoch:
-			if value, ok := values[i].(*sql.NullString); !ok {
+			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field epoch", values[i])
 			} else if value.Valid {
-				rp.Epoch = value.String
+				rp.Epoch = int(value.Int64)
 			}
 		case rpmpackage.FieldVersion:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -127,12 +123,6 @@ func (rp *RpmPackage) assignValues(columns []string, values []interface{}) error
 				return fmt.Errorf("unexpected type %T for field file_path", values[i])
 			} else if value.Valid {
 				rp.FilePath = value.String
-			}
-		case rpmpackage.FieldIsSource:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field is_source", values[i])
-			} else if value.Valid {
-				rp.IsSource = value.Bool
 			}
 		case rpmpackage.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -178,7 +168,7 @@ func (rp *RpmPackage) String() string {
 	builder.WriteString(rp.Name)
 	builder.WriteString(", ")
 	builder.WriteString("epoch=")
-	builder.WriteString(rp.Epoch)
+	builder.WriteString(fmt.Sprintf("%v", rp.Epoch))
 	builder.WriteString(", ")
 	builder.WriteString("version=")
 	builder.WriteString(rp.Version)
@@ -191,9 +181,6 @@ func (rp *RpmPackage) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("file_path=")
 	builder.WriteString(rp.FilePath)
-	builder.WriteString(", ")
-	builder.WriteString("is_source=")
-	builder.WriteString(fmt.Sprintf("%v", rp.IsSource))
 	builder.WriteByte(')')
 	return builder.String()
 }

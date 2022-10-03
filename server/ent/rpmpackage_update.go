@@ -35,8 +35,15 @@ func (rpu *RpmPackageUpdate) SetName(s string) *RpmPackageUpdate {
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpu *RpmPackageUpdate) SetEpoch(s string) *RpmPackageUpdate {
-	rpu.mutation.SetEpoch(s)
+func (rpu *RpmPackageUpdate) SetEpoch(i int) *RpmPackageUpdate {
+	rpu.mutation.ResetEpoch()
+	rpu.mutation.SetEpoch(i)
+	return rpu
+}
+
+// AddEpoch adds i to the "epoch" field.
+func (rpu *RpmPackageUpdate) AddEpoch(i int) *RpmPackageUpdate {
+	rpu.mutation.AddEpoch(i)
 	return rpu
 }
 
@@ -61,12 +68,6 @@ func (rpu *RpmPackageUpdate) SetArch(s string) *RpmPackageUpdate {
 // SetFilePath sets the "file_path" field.
 func (rpu *RpmPackageUpdate) SetFilePath(s string) *RpmPackageUpdate {
 	rpu.mutation.SetFilePath(s)
-	return rpu
-}
-
-// SetIsSource sets the "is_source" field.
-func (rpu *RpmPackageUpdate) SetIsSource(b bool) *RpmPackageUpdate {
-	rpu.mutation.SetIsSource(b)
 	return rpu
 }
 
@@ -107,12 +108,18 @@ func (rpu *RpmPackageUpdate) Save(ctx context.Context) (int, error) {
 		affected int
 	)
 	if len(rpu.hooks) == 0 {
+		if err = rpu.check(); err != nil {
+			return 0, err
+		}
 		affected, err = rpu.sqlSave(ctx)
 	} else {
 		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 			mutation, ok := m.(*RpmPackageMutation)
 			if !ok {
 				return nil, fmt.Errorf("unexpected mutation type %T", m)
+			}
+			if err = rpu.check(); err != nil {
+				return 0, err
 			}
 			rpu.mutation = mutation
 			affected, err = rpu.sqlSave(ctx)
@@ -154,6 +161,16 @@ func (rpu *RpmPackageUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (rpu *RpmPackageUpdate) check() error {
+	if v, ok := rpu.mutation.Epoch(); ok {
+		if err := rpmpackage.EpochValidator(v); err != nil {
+			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	_spec := &sqlgraph.UpdateSpec{
 		Node: &sqlgraph.NodeSpec{
@@ -181,7 +198,14 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := rpu.mutation.Epoch(); ok {
 		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
+			Type:   field.TypeInt,
+			Value:  value,
+			Column: rpmpackage.FieldEpoch,
+		})
+	}
+	if value, ok := rpu.mutation.AddedEpoch(); ok {
+		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
+			Type:   field.TypeInt,
 			Value:  value,
 			Column: rpmpackage.FieldEpoch,
 		})
@@ -212,13 +236,6 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Type:   field.TypeString,
 			Value:  value,
 			Column: rpmpackage.FieldFilePath,
-		})
-	}
-	if value, ok := rpu.mutation.IsSource(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeBool,
-			Value:  value,
-			Column: rpmpackage.FieldIsSource,
 		})
 	}
 	if rpu.mutation.RepoCleared() {
@@ -282,8 +299,15 @@ func (rpuo *RpmPackageUpdateOne) SetName(s string) *RpmPackageUpdateOne {
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpuo *RpmPackageUpdateOne) SetEpoch(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetEpoch(s)
+func (rpuo *RpmPackageUpdateOne) SetEpoch(i int) *RpmPackageUpdateOne {
+	rpuo.mutation.ResetEpoch()
+	rpuo.mutation.SetEpoch(i)
+	return rpuo
+}
+
+// AddEpoch adds i to the "epoch" field.
+func (rpuo *RpmPackageUpdateOne) AddEpoch(i int) *RpmPackageUpdateOne {
+	rpuo.mutation.AddEpoch(i)
 	return rpuo
 }
 
@@ -308,12 +332,6 @@ func (rpuo *RpmPackageUpdateOne) SetArch(s string) *RpmPackageUpdateOne {
 // SetFilePath sets the "file_path" field.
 func (rpuo *RpmPackageUpdateOne) SetFilePath(s string) *RpmPackageUpdateOne {
 	rpuo.mutation.SetFilePath(s)
-	return rpuo
-}
-
-// SetIsSource sets the "is_source" field.
-func (rpuo *RpmPackageUpdateOne) SetIsSource(b bool) *RpmPackageUpdateOne {
-	rpuo.mutation.SetIsSource(b)
 	return rpuo
 }
 
@@ -361,12 +379,18 @@ func (rpuo *RpmPackageUpdateOne) Save(ctx context.Context) (*RpmPackage, error) 
 		node *RpmPackage
 	)
 	if len(rpuo.hooks) == 0 {
+		if err = rpuo.check(); err != nil {
+			return nil, err
+		}
 		node, err = rpuo.sqlSave(ctx)
 	} else {
 		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 			mutation, ok := m.(*RpmPackageMutation)
 			if !ok {
 				return nil, fmt.Errorf("unexpected mutation type %T", m)
+			}
+			if err = rpuo.check(); err != nil {
+				return nil, err
 			}
 			rpuo.mutation = mutation
 			node, err = rpuo.sqlSave(ctx)
@@ -414,6 +438,16 @@ func (rpuo *RpmPackageUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (rpuo *RpmPackageUpdateOne) check() error {
+	if v, ok := rpuo.mutation.Epoch(); ok {
+		if err := rpmpackage.EpochValidator(v); err != nil {
+			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage, err error) {
 	_spec := &sqlgraph.UpdateSpec{
 		Node: &sqlgraph.NodeSpec{
@@ -458,7 +492,14 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 	}
 	if value, ok := rpuo.mutation.Epoch(); ok {
 		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
+			Type:   field.TypeInt,
+			Value:  value,
+			Column: rpmpackage.FieldEpoch,
+		})
+	}
+	if value, ok := rpuo.mutation.AddedEpoch(); ok {
+		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
+			Type:   field.TypeInt,
 			Value:  value,
 			Column: rpmpackage.FieldEpoch,
 		})
@@ -489,13 +530,6 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 			Type:   field.TypeString,
 			Value:  value,
 			Column: rpmpackage.FieldFilePath,
-		})
-	}
-	if value, ok := rpuo.mutation.IsSource(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeBool,
-			Value:  value,
-			Column: rpmpackage.FieldIsSource,
 		})
 	}
 	if rpuo.mutation.RepoCleared() {
