@@ -12,7 +12,7 @@ jobs:
   anda:
     uses: andaman-common-pkgs/github-actions/.github/workflows/anda-rpm.yml@main
     with:
-      name: "anda"
+      name: "subatomic"
       subatomicServer: "https://subatomic.fyralabs.com"
       subatomicRepo: ad37
       mockConfig: anda-37-x86_64
