@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/FyraLabs/subatomic/server/types"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
@@ -68,7 +69,17 @@ var uploadCmd = &cobra.Command{
 					return err
 				}
 
-				if _, err := io.Copy(formWriter, file); err != nil {
+				stat, err := file.Stat()
+				if err != nil {
+					return err
+				}
+
+				bar := progressbar.DefaultBytes(
+					stat.Size(),
+					"Upload "+file.Name(),
+				)
+
+				if _, err := io.Copy(io.MultiWriter(formWriter, bar), file); err != nil {
 					return err
 				}
 			}

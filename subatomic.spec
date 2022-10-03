@@ -2,7 +2,7 @@
 %define _build_id_links none
 Name:           subatomic
 Version:        0.1.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        A compose tool
 
 License:        MIT
