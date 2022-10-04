@@ -52,7 +52,7 @@ func AddRpmToRepo(repoPath string, rpmFile io.ReadSeeker) error {
 }
 
 func SignRepo(repoPath string, ring *pgp.KeyRing) error {
-	file, err := os.Create(path.Join(repoPath, "repodata/repomd.xml"))
+	file, err := os.Open(path.Join(repoPath, "repodata/repomd.xml"))
 	if err != nil {
 		return err
 	}
