@@ -65,7 +65,7 @@ func run() error {
 		database:         client,
 		enviroment:       &enviroment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
-		repoMutex:        &keyedmutex.KeyedMutex{},
+		repoMutex:        keyedmutex.New(),
 	}
 	router.setup()
 
