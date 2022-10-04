@@ -30,7 +30,12 @@ func UpdateRepo(repoPath string) error {
 }
 
 func AddRpmToRepo(repoPath string, rpmFile io.ReadSeeker) error {
-	file, err := os.Create(repoPath)
+	info, err := GetRpmInfo(rpmFile)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Create(path.Join(repoPath, info.FileName))
 
 	if err != nil {
 		return err
