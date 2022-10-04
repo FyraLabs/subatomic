@@ -20,6 +20,105 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/keys": {
+            "get": {
+                "description": "get keys",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keys"
+                ],
+                "summary": "Get all keys",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/main.keyResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create key",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keys"
+                ],
+                "summary": "Create a new key",
+                "parameters": [
+                    {
+                        "description": "options for the new key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.createKeyPayload"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/keys/{id}": {
+            "get": {
+                "description": "get key",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "keys"
+                ],
+                "summary": "Get a key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the key",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos": {
             "get": {
                 "description": "get repos",
@@ -36,7 +135,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/ent.Repo"
+                                "$ref": "#/definitions/main.repoResponse"
                             }
                         }
                     }
@@ -69,13 +168,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     }
                 }
@@ -114,13 +213,13 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     }
                 }
@@ -147,7 +246,7 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     }
                 }
@@ -176,7 +275,43 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/main.ErrResponse"
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/repos/{id}/rpms/{rpmId}": {
+            "delete": {
+                "description": "delete rpm",
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Delete RPM in a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "rpm id in the repository",
+                        "name": "rpmId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
                         }
                     }
                 }
@@ -184,94 +319,21 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "ent.Repo": {
+        "main.createKeyPayload": {
             "type": "object",
+            "required": [
+                "email",
+                "id",
+                "name"
+            ],
             "properties": {
-                "edges": {
-                    "description": "Edges holds the relations/edges for other nodes in the graph.\nThe values are being populated by the RepoQuery when eager-loading is set.",
-                    "$ref": "#/definitions/ent.RepoEdges"
-                },
-                "id": {
-                    "description": "ID of the ent.",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "Type holds the value of the \"type\" field.",
-                    "type": "string"
-                }
-            }
-        },
-        "ent.RepoEdges": {
-            "type": "object",
-            "properties": {
-                "rpms": {
-                    "description": "Rpms holds the value of the rpms edge.",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/ent.RpmPackage"
-                    }
-                }
-            }
-        },
-        "ent.RpmPackage": {
-            "type": "object",
-            "properties": {
-                "arch": {
-                    "description": "Arch holds the value of the \"arch\" field.",
-                    "type": "string"
-                },
-                "edges": {
-                    "description": "Edges holds the relations/edges for other nodes in the graph.\nThe values are being populated by the RpmPackageQuery when eager-loading is set.",
-                    "$ref": "#/definitions/ent.RpmPackageEdges"
-                },
-                "epoch": {
-                    "description": "Epoch holds the value of the \"epoch\" field.",
-                    "type": "string"
-                },
-                "file_path": {
-                    "description": "FilePath holds the value of the \"file_path\" field.",
+                "email": {
                     "type": "string"
                 },
                 "id": {
-                    "description": "ID of the ent.",
-                    "type": "integer"
+                    "type": "string"
                 },
                 "name": {
-                    "description": "Name holds the value of the \"name\" field.",
-                    "type": "string"
-                },
-                "release": {
-                    "description": "Release holds the value of the \"release\" field.",
-                    "type": "string"
-                },
-                "version": {
-                    "description": "Version holds the value of the \"version\" field.",
-                    "type": "string"
-                }
-            }
-        },
-        "ent.RpmPackageEdges": {
-            "type": "object",
-            "properties": {
-                "repo": {
-                    "description": "Repo holds the value of the repo edge.",
-                    "$ref": "#/definitions/ent.Repo"
-                }
-            }
-        },
-        "main.ErrResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "description": "application-specific error code",
-                    "type": "integer"
-                },
-                "error": {
-                    "description": "application-level error message, for debugging",
-                    "type": "string"
-                },
-                "status": {
-                    "description": "user-level status message",
                     "type": "string"
                 }
             }
@@ -292,6 +354,48 @@ const docTemplate = `{
                         "rpm",
                         "ostree"
                     ]
+                }
+            }
+        },
+        "main.keyResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.repoResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.ErrResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "application-specific error code",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "application-level error message, for debugging",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "user-level status message",
+                    "type": "string"
                 }
             }
         }

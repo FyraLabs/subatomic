@@ -87,8 +87,8 @@ func (u *createRepoPayload) Bind(r *http.Request) error {
 // @Accept      json
 // @Param       body body createRepoPayload true "options for the new repository"
 // @Success     200
-// @Failure     400 {object} ErrResponse
-// @Failure     409 {object} ErrResponse
+// @Failure     400 {object} types.ErrResponse
+// @Failure     409 {object} types.ErrResponse
 // @Router      /repos [post]
 func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 	payload := &createRepoPayload{}
@@ -143,7 +143,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 // @Tags        repos
 // @Param       id path string true "id for the repository"
 // @Success     200
-// @Failure     404 {object} ErrResponse
+// @Failure     404 {object} types.ErrResponse
 // @Router      /repos/{id} [delete]
 func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
@@ -188,8 +188,8 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 // @Param       file_upload formData string true "files to upload to this reposiutory"
 // @Accept      mpfd
 // @Success     200
-// @Failure     400 {object} ErrResponse
-// @Failure     404 {object} ErrResponse
+// @Failure     400 {object} types.ErrResponse
+// @Failure     404 {object} types.ErrResponse
 // @Router      /repos/{id} [put]
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
@@ -322,7 +322,7 @@ type queryRpmParams struct {
 // @Tags        repos
 // @Param       id path string true "id for the repository"
 // @Success     200
-// @Failure     404 {object} ErrResponse
+// @Failure     404 {object} types.ErrResponse
 // @Router      /repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
@@ -415,10 +415,10 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 // @Summary     Delete RPM in a repo
 // @Description delete rpm
 // @Tags        repos
-// @Param       id path string true "id for the repository"
+// @Param       id    path string true "id for the repository"
 // @Param       rpmId path string true "rpm id in the repository"
 // @Success     200
-// @Failure     404 {object} ErrResponse
+// @Failure     404 {object} types.ErrResponse
 // @Router      /repos/{id}/rpms/{rpmId} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")

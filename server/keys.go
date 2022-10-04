@@ -75,8 +75,8 @@ func (u *createKeyPayload) Bind(r *http.Request) error {
 // @Accept      json
 // @Param       body body createKeyPayload true "options for the new key"
 // @Success     200
-// @Failure     400 {object} ErrResponse
-// @Failure     409 {object} ErrResponse
+// @Failure     400 {object} types.ErrResponse
+// @Failure     409 {object} types.ErrResponse
 // @Router      /keys [post]
 func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 	payload := &createKeyPayload{}
@@ -131,8 +131,8 @@ type fullKeyResponse struct {
 // @Param       id path string true "id for the key"
 // @Accept      json
 // @Success     200
-// @Failure     400 {object} ErrResponse
-// @Failure     409 {object} ErrResponse
+// @Failure     400 {object} types.ErrResponse
+// @Failure     409 {object} types.ErrResponse
 // @Router      /keys/{id} [get]
 func (router *keysRouter) getKey(w http.ResponseWriter, r *http.Request) {
 	keyID := chi.URLParam(r, "keyID")
