@@ -147,6 +147,10 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 // @Router      /repos/{id} [delete]
 func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
 
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
@@ -189,6 +193,10 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 // @Router      /repos/{id} [put]
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
 
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
@@ -318,6 +326,10 @@ type queryRpmParams struct {
 // @Router      /repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
 
 	query := &queryRpmParams{}
 
@@ -410,6 +422,10 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 // @Router      /repos/{id}/rpms/{rpmId} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
 
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
