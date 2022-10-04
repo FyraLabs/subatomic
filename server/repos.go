@@ -52,7 +52,7 @@ type repoResponse struct {
 // @Description get repos
 // @Tags        repos
 // @Produce     json
-// @Success     200 {array} ent.Repo
+// @Success     200 {array} repoResponse
 // @Router      /repos [get]
 func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 	repos, err := router.database.Repo.Query().All(r.Context())

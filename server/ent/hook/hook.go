@@ -35,6 +35,19 @@ func (f RpmPackageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return f(ctx, mv)
 }
 
+// The SigningKeyFunc type is an adapter to allow the use of ordinary
+// function as SigningKey mutator.
+type SigningKeyFunc func(context.Context, *ent.SigningKeyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SigningKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	mv, ok := m.(*ent.SigningKeyMutation)
+	if !ok {
+		return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SigningKeyMutation", m)
+	}
+	return f(ctx, mv)
+}
+
 // Condition is a hook condition function.
 type Condition func(context.Context, ent.Mutation) bool
 

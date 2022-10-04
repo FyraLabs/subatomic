@@ -12,6 +12,7 @@ import (
 
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
@@ -27,6 +28,8 @@ type Client struct {
 	Repo *RepoClient
 	// RpmPackage is the client for interacting with the RpmPackage builders.
 	RpmPackage *RpmPackageClient
+	// SigningKey is the client for interacting with the SigningKey builders.
+	SigningKey *SigningKeyClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -42,6 +45,7 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Repo = NewRepoClient(c.config)
 	c.RpmPackage = NewRpmPackageClient(c.config)
+	c.SigningKey = NewSigningKeyClient(c.config)
 }
 
 // Open opens a database/sql.DB specified by the driver name and
@@ -77,6 +81,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:     cfg,
 		Repo:       NewRepoClient(cfg),
 		RpmPackage: NewRpmPackageClient(cfg),
+		SigningKey: NewSigningKeyClient(cfg),
 	}, nil
 }
 
@@ -98,6 +103,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:     cfg,
 		Repo:       NewRepoClient(cfg),
 		RpmPackage: NewRpmPackageClient(cfg),
+		SigningKey: NewSigningKeyClient(cfg),
 	}, nil
 }
 
@@ -128,6 +134,7 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	c.Repo.Use(hooks...)
 	c.RpmPackage.Use(hooks...)
+	c.SigningKey.Use(hooks...)
 }
 
 // RepoClient is a client for the Repo schema.
@@ -340,4 +347,94 @@ func (c *RpmPackageClient) QueryRepo(rp *RpmPackage) *RepoQuery {
 // Hooks returns the client hooks.
 func (c *RpmPackageClient) Hooks() []Hook {
 	return c.hooks.RpmPackage
+}
+
+// SigningKeyClient is a client for the SigningKey schema.
+type SigningKeyClient struct {
+	config
+}
+
+// NewSigningKeyClient returns a client for the SigningKey from the given config.
+func NewSigningKeyClient(c config) *SigningKeyClient {
+	return &SigningKeyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `signingkey.Hooks(f(g(h())))`.
+func (c *SigningKeyClient) Use(hooks ...Hook) {
+	c.hooks.SigningKey = append(c.hooks.SigningKey, hooks...)
+}
+
+// Create returns a builder for creating a SigningKey entity.
+func (c *SigningKeyClient) Create() *SigningKeyCreate {
+	mutation := newSigningKeyMutation(c.config, OpCreate)
+	return &SigningKeyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SigningKey entities.
+func (c *SigningKeyClient) CreateBulk(builders ...*SigningKeyCreate) *SigningKeyCreateBulk {
+	return &SigningKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SigningKey.
+func (c *SigningKeyClient) Update() *SigningKeyUpdate {
+	mutation := newSigningKeyMutation(c.config, OpUpdate)
+	return &SigningKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SigningKeyClient) UpdateOne(sk *SigningKey) *SigningKeyUpdateOne {
+	mutation := newSigningKeyMutation(c.config, OpUpdateOne, withSigningKey(sk))
+	return &SigningKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SigningKeyClient) UpdateOneID(id string) *SigningKeyUpdateOne {
+	mutation := newSigningKeyMutation(c.config, OpUpdateOne, withSigningKeyID(id))
+	return &SigningKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SigningKey.
+func (c *SigningKeyClient) Delete() *SigningKeyDelete {
+	mutation := newSigningKeyMutation(c.config, OpDelete)
+	return &SigningKeyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SigningKeyClient) DeleteOne(sk *SigningKey) *SigningKeyDeleteOne {
+	return c.DeleteOneID(sk.ID)
+}
+
+// DeleteOne returns a builder for deleting the given entity by its id.
+func (c *SigningKeyClient) DeleteOneID(id string) *SigningKeyDeleteOne {
+	builder := c.Delete().Where(signingkey.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SigningKeyDeleteOne{builder}
+}
+
+// Query returns a query builder for SigningKey.
+func (c *SigningKeyClient) Query() *SigningKeyQuery {
+	return &SigningKeyQuery{
+		config: c.config,
+	}
+}
+
+// Get returns a SigningKey entity by its id.
+func (c *SigningKeyClient) Get(ctx context.Context, id string) (*SigningKey, error) {
+	return c.Query().Where(signingkey.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SigningKeyClient) GetX(ctx context.Context, id string) *SigningKey {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SigningKeyClient) Hooks() []Hook {
+	return c.hooks.SigningKey
 }

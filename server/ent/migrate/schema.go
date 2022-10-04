@@ -56,10 +56,25 @@ var (
 			},
 		},
 	}
+	// SigningKeysColumns holds the columns for the "signing_keys" table.
+	SigningKeysColumns = []*schema.Column{
+		{Name: "oid", Type: field.TypeString, Unique: true},
+		{Name: "private_key", Type: field.TypeString},
+		{Name: "public_key", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "email", Type: field.TypeString},
+	}
+	// SigningKeysTable holds the schema information for the "signing_keys" table.
+	SigningKeysTable = &schema.Table{
+		Name:       "signing_keys",
+		Columns:    SigningKeysColumns,
+		PrimaryKey: []*schema.Column{SigningKeysColumns[0]},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ReposTable,
 		RpmPackagesTable,
+		SigningKeysTable,
 	}
 )
 

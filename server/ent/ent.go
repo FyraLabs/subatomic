@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -34,6 +35,7 @@ func columnChecker(table string) func(string) error {
 	checks := map[string]func(string) bool{
 		repo.Table:       repo.ValidColumn,
 		rpmpackage.Table: rpmpackage.ValidColumn,
+		signingkey.Table: signingkey.ValidColumn,
 	}
 	check, ok := checks[table]
 	if !ok {

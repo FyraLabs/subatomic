@@ -26,6 +26,7 @@ type config struct {
 type hooks struct {
 	Repo       []ent.Hook
 	RpmPackage []ent.Hook
+	SigningKey []ent.Hook
 }
 
 // Options applies the options on the config object.

@@ -34,6 +34,13 @@ func (router *apiRouter) setup() {
 		}
 		repos.setup()
 		r.Mount("/repos", repos)
+
+		keys := keysRouter{
+			database:   router.database,
+			enviroment: router.enviroment,
+		}
+		keys.setup()
+		r.Mount("/keys", keys)
 	})
 
 	// Public
