@@ -3,8 +3,7 @@ name: Package
 on:
   push:
     paths:
-      - subatomic.spec
-      - anda.hcl
+      - subatomic-cli/**/*
     branches: [main]
   workflow_dispatch:
 
