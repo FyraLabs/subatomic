@@ -458,7 +458,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	rpmId, err := strconv.Atoi(chi.URLParam(r, "repoID"))
+	rpmId, err := strconv.Atoi(chi.URLParam(r, "rpmId"))
 	if err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
