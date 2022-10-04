@@ -13,6 +13,7 @@ import (
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // RepoUpdate is the builder for updating Repo entities.
@@ -49,6 +50,25 @@ func (ru *RepoUpdate) AddRpms(r ...*RpmPackage) *RepoUpdate {
 	return ru.AddRpmIDs(ids...)
 }
 
+// SetKeyID sets the "key" edge to the SigningKey entity by ID.
+func (ru *RepoUpdate) SetKeyID(id string) *RepoUpdate {
+	ru.mutation.SetKeyID(id)
+	return ru
+}
+
+// SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
+func (ru *RepoUpdate) SetNillableKeyID(id *string) *RepoUpdate {
+	if id != nil {
+		ru = ru.SetKeyID(*id)
+	}
+	return ru
+}
+
+// SetKey sets the "key" edge to the SigningKey entity.
+func (ru *RepoUpdate) SetKey(s *SigningKey) *RepoUpdate {
+	return ru.SetKeyID(s.ID)
+}
+
 // Mutation returns the RepoMutation object of the builder.
 func (ru *RepoUpdate) Mutation() *RepoMutation {
 	return ru.mutation
@@ -73,6 +93,12 @@ func (ru *RepoUpdate) RemoveRpms(r ...*RpmPackage) *RepoUpdate {
 		ids[i] = r[i].ID
 	}
 	return ru.RemoveRpmIDs(ids...)
+}
+
+// ClearKey clears the "key" edge to the SigningKey entity.
+func (ru *RepoUpdate) ClearKey() *RepoUpdate {
+	ru.mutation.ClearKey()
+	return ru
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -224,6 +250,41 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if ru.mutation.KeyCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   repo.KeyTable,
+			Columns: []string{repo.KeyColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: signingkey.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ru.mutation.KeyIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   repo.KeyTable,
+			Columns: []string{repo.KeyColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: signingkey.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, ru.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{repo.Label}
@@ -264,6 +325,25 @@ func (ruo *RepoUpdateOne) AddRpms(r ...*RpmPackage) *RepoUpdateOne {
 	return ruo.AddRpmIDs(ids...)
 }
 
+// SetKeyID sets the "key" edge to the SigningKey entity by ID.
+func (ruo *RepoUpdateOne) SetKeyID(id string) *RepoUpdateOne {
+	ruo.mutation.SetKeyID(id)
+	return ruo
+}
+
+// SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
+func (ruo *RepoUpdateOne) SetNillableKeyID(id *string) *RepoUpdateOne {
+	if id != nil {
+		ruo = ruo.SetKeyID(*id)
+	}
+	return ruo
+}
+
+// SetKey sets the "key" edge to the SigningKey entity.
+func (ruo *RepoUpdateOne) SetKey(s *SigningKey) *RepoUpdateOne {
+	return ruo.SetKeyID(s.ID)
+}
+
 // Mutation returns the RepoMutation object of the builder.
 func (ruo *RepoUpdateOne) Mutation() *RepoMutation {
 	return ruo.mutation
@@ -288,6 +368,12 @@ func (ruo *RepoUpdateOne) RemoveRpms(r ...*RpmPackage) *RepoUpdateOne {
 		ids[i] = r[i].ID
 	}
 	return ruo.RemoveRpmIDs(ids...)
+}
+
+// ClearKey clears the "key" edge to the SigningKey entity.
+func (ruo *RepoUpdateOne) ClearKey() *RepoUpdateOne {
+	ruo.mutation.ClearKey()
+	return ruo
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
@@ -461,6 +547,41 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 				IDSpec: &sqlgraph.FieldSpec{
 					Type:   field.TypeInt,
 					Column: rpmpackage.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if ruo.mutation.KeyCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   repo.KeyTable,
+			Columns: []string{repo.KeyColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: signingkey.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := ruo.mutation.KeyIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   repo.KeyTable,
+			Columns: []string{repo.KeyColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: signingkey.FieldID,
 				},
 			},
 		}

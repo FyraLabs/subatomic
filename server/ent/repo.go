@@ -8,6 +8,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // Repo is the model entity for the Repo schema.
@@ -19,16 +20,19 @@ type Repo struct {
 	Type repo.Type `json:"type,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RepoQuery when eager-loading is set.
-	Edges RepoEdges `json:"edges"`
+	Edges    RepoEdges `json:"edges"`
+	repo_key *string
 }
 
 // RepoEdges holds the relations/edges for other nodes in the graph.
 type RepoEdges struct {
 	// Rpms holds the value of the rpms edge.
 	Rpms []*RpmPackage `json:"rpms,omitempty"`
+	// Key holds the value of the key edge.
+	Key *SigningKey `json:"key,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
 }
 
 // RpmsOrErr returns the Rpms value or an error if the edge
@@ -40,12 +44,27 @@ func (e RepoEdges) RpmsOrErr() ([]*RpmPackage, error) {
 	return nil, &NotLoadedError{edge: "rpms"}
 }
 
+// KeyOrErr returns the Key value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e RepoEdges) KeyOrErr() (*SigningKey, error) {
+	if e.loadedTypes[1] {
+		if e.Key == nil {
+			// Edge was loaded but was not found.
+			return nil, &NotFoundError{label: signingkey.Label}
+		}
+		return e.Key, nil
+	}
+	return nil, &NotLoadedError{edge: "key"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Repo) scanValues(columns []string) ([]interface{}, error) {
 	values := make([]interface{}, len(columns))
 	for i := range columns {
 		switch columns[i] {
 		case repo.FieldID, repo.FieldType:
+			values[i] = new(sql.NullString)
+		case repo.ForeignKeys[0]: // repo_key
 			values[i] = new(sql.NullString)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type Repo", columns[i])
@@ -74,6 +93,13 @@ func (r *Repo) assignValues(columns []string, values []interface{}) error {
 			} else if value.Valid {
 				r.Type = repo.Type(value.String)
 			}
+		case repo.ForeignKeys[0]:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field repo_key", values[i])
+			} else if value.Valid {
+				r.repo_key = new(string)
+				*r.repo_key = value.String
+			}
 		}
 	}
 	return nil
@@ -82,6 +108,11 @@ func (r *Repo) assignValues(columns []string, values []interface{}) error {
 // QueryRpms queries the "rpms" edge of the Repo entity.
 func (r *Repo) QueryRpms() *RpmPackageQuery {
 	return (&RepoClient{config: r.config}).QueryRpms(r)
+}
+
+// QueryKey queries the "key" edge of the Repo entity.
+func (r *Repo) QueryKey() *SigningKeyQuery {
+	return (&RepoClient{config: r.config}).QueryKey(r)
 }
 
 // Update returns a builder for updating this Repo.

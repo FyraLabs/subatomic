@@ -238,6 +238,22 @@ func (c *RepoClient) QueryRpms(r *Repo) *RpmPackageQuery {
 	return query
 }
 
+// QueryKey queries the key edge of a Repo.
+func (c *RepoClient) QueryKey(r *Repo) *SigningKeyQuery {
+	query := &SigningKeyQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := r.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(repo.Table, repo.FieldID, id),
+			sqlgraph.To(signingkey.Table, signingkey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, repo.KeyTable, repo.KeyColumn),
+		)
+		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *RepoClient) Hooks() []Hook {
 	return c.hooks.Repo
@@ -432,6 +448,22 @@ func (c *SigningKeyClient) GetX(ctx context.Context, id string) *SigningKey {
 		panic(err)
 	}
 	return obj
+}
+
+// QueryRepo queries the repo edge of a SigningKey.
+func (c *SigningKeyClient) QueryRepo(sk *SigningKey) *RepoQuery {
+	query := &RepoQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := sk.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(signingkey.Table, signingkey.FieldID, id),
+			sqlgraph.To(repo.Table, repo.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, signingkey.RepoTable, signingkey.RepoColumn),
+		)
+		fromV = sqlgraph.Neighbors(sk.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
 }
 
 // Hooks returns the client hooks.

@@ -23,5 +23,6 @@ func (Repo) Fields() []ent.Field {
 func (Repo) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("rpms", RpmPackage.Type),
+		edge.To("key", SigningKey.Type).Unique(),
 	}
 }

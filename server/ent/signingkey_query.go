@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -11,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
+	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
@@ -23,6 +25,7 @@ type SigningKeyQuery struct {
 	order      []OrderFunc
 	fields     []string
 	predicates []predicate.SigningKey
+	withRepo   *RepoQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -57,6 +60,28 @@ func (skq *SigningKeyQuery) Unique(unique bool) *SigningKeyQuery {
 func (skq *SigningKeyQuery) Order(o ...OrderFunc) *SigningKeyQuery {
 	skq.order = append(skq.order, o...)
 	return skq
+}
+
+// QueryRepo chains the current query on the "repo" edge.
+func (skq *SigningKeyQuery) QueryRepo() *RepoQuery {
+	query := &RepoQuery{config: skq.config}
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := skq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := skq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(signingkey.Table, signingkey.FieldID, selector),
+			sqlgraph.To(repo.Table, repo.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, signingkey.RepoTable, signingkey.RepoColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(skq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
 }
 
 // First returns the first SigningKey entity from the query.
@@ -240,11 +265,23 @@ func (skq *SigningKeyQuery) Clone() *SigningKeyQuery {
 		offset:     skq.offset,
 		order:      append([]OrderFunc{}, skq.order...),
 		predicates: append([]predicate.SigningKey{}, skq.predicates...),
+		withRepo:   skq.withRepo.Clone(),
 		// clone intermediate query.
 		sql:    skq.sql.Clone(),
 		path:   skq.path,
 		unique: skq.unique,
 	}
+}
+
+// WithRepo tells the query-builder to eager-load the nodes that are connected to
+// the "repo" edge. The optional arguments are used to configure the query builder of the edge.
+func (skq *SigningKeyQuery) WithRepo(opts ...func(*RepoQuery)) *SigningKeyQuery {
+	query := &RepoQuery{config: skq.config}
+	for _, opt := range opts {
+		opt(query)
+	}
+	skq.withRepo = query
+	return skq
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -313,8 +350,11 @@ func (skq *SigningKeyQuery) prepareQuery(ctx context.Context) error {
 
 func (skq *SigningKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*SigningKey, error) {
 	var (
-		nodes = []*SigningKey{}
-		_spec = skq.querySpec()
+		nodes       = []*SigningKey{}
+		_spec       = skq.querySpec()
+		loadedTypes = [1]bool{
+			skq.withRepo != nil,
+		}
 	)
 	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		return (*SigningKey).scanValues(nil, columns)
@@ -322,6 +362,7 @@ func (skq *SigningKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	_spec.Assign = func(columns []string, values []interface{}) error {
 		node := &SigningKey{config: skq.config}
 		nodes = append(nodes, node)
+		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -333,7 +374,46 @@ func (skq *SigningKeyQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
+	if query := skq.withRepo; query != nil {
+		if err := skq.loadRepo(ctx, query, nodes,
+			func(n *SigningKey) { n.Edges.Repo = []*Repo{} },
+			func(n *SigningKey, e *Repo) { n.Edges.Repo = append(n.Edges.Repo, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
+}
+
+func (skq *SigningKeyQuery) loadRepo(ctx context.Context, query *RepoQuery, nodes []*SigningKey, init func(*SigningKey), assign func(*SigningKey, *Repo)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[string]*SigningKey)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.Repo(func(s *sql.Selector) {
+		s.Where(sql.InValues(signingkey.RepoColumn, fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.repo_key
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "repo_key" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "repo_key" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
 }
 
 func (skq *SigningKeyQuery) sqlCount(ctx context.Context) (int, error) {

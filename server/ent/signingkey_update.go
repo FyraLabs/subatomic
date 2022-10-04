@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
+	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
@@ -51,9 +52,45 @@ func (sku *SigningKeyUpdate) SetEmail(s string) *SigningKeyUpdate {
 	return sku
 }
 
+// AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
+func (sku *SigningKeyUpdate) AddRepoIDs(ids ...string) *SigningKeyUpdate {
+	sku.mutation.AddRepoIDs(ids...)
+	return sku
+}
+
+// AddRepo adds the "repo" edges to the Repo entity.
+func (sku *SigningKeyUpdate) AddRepo(r ...*Repo) *SigningKeyUpdate {
+	ids := make([]string, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return sku.AddRepoIDs(ids...)
+}
+
 // Mutation returns the SigningKeyMutation object of the builder.
 func (sku *SigningKeyUpdate) Mutation() *SigningKeyMutation {
 	return sku.mutation
+}
+
+// ClearRepo clears all "repo" edges to the Repo entity.
+func (sku *SigningKeyUpdate) ClearRepo() *SigningKeyUpdate {
+	sku.mutation.ClearRepo()
+	return sku
+}
+
+// RemoveRepoIDs removes the "repo" edge to Repo entities by IDs.
+func (sku *SigningKeyUpdate) RemoveRepoIDs(ids ...string) *SigningKeyUpdate {
+	sku.mutation.RemoveRepoIDs(ids...)
+	return sku
+}
+
+// RemoveRepo removes "repo" edges to Repo entities.
+func (sku *SigningKeyUpdate) RemoveRepo(r ...*Repo) *SigningKeyUpdate {
+	ids := make([]string, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return sku.RemoveRepoIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -156,6 +193,60 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Column: signingkey.FieldEmail,
 		})
 	}
+	if sku.mutation.RepoCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := sku.mutation.RemovedRepoIDs(); len(nodes) > 0 && !sku.mutation.RepoCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := sku.mutation.RepoIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, sku.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{signingkey.Label}
@@ -199,9 +290,45 @@ func (skuo *SigningKeyUpdateOne) SetEmail(s string) *SigningKeyUpdateOne {
 	return skuo
 }
 
+// AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
+func (skuo *SigningKeyUpdateOne) AddRepoIDs(ids ...string) *SigningKeyUpdateOne {
+	skuo.mutation.AddRepoIDs(ids...)
+	return skuo
+}
+
+// AddRepo adds the "repo" edges to the Repo entity.
+func (skuo *SigningKeyUpdateOne) AddRepo(r ...*Repo) *SigningKeyUpdateOne {
+	ids := make([]string, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return skuo.AddRepoIDs(ids...)
+}
+
 // Mutation returns the SigningKeyMutation object of the builder.
 func (skuo *SigningKeyUpdateOne) Mutation() *SigningKeyMutation {
 	return skuo.mutation
+}
+
+// ClearRepo clears all "repo" edges to the Repo entity.
+func (skuo *SigningKeyUpdateOne) ClearRepo() *SigningKeyUpdateOne {
+	skuo.mutation.ClearRepo()
+	return skuo
+}
+
+// RemoveRepoIDs removes the "repo" edge to Repo entities by IDs.
+func (skuo *SigningKeyUpdateOne) RemoveRepoIDs(ids ...string) *SigningKeyUpdateOne {
+	skuo.mutation.RemoveRepoIDs(ids...)
+	return skuo
+}
+
+// RemoveRepo removes "repo" edges to Repo entities.
+func (skuo *SigningKeyUpdateOne) RemoveRepo(r ...*Repo) *SigningKeyUpdateOne {
+	ids := make([]string, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return skuo.RemoveRepoIDs(ids...)
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
@@ -333,6 +460,60 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 			Value:  value,
 			Column: signingkey.FieldEmail,
 		})
+	}
+	if skuo.mutation.RepoCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := skuo.mutation.RemovedRepoIDs(); len(nodes) > 0 && !skuo.mutation.RepoCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := skuo.mutation.RepoIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &SigningKey{config: skuo.config}
 	_spec.Assign = _node.assignValues

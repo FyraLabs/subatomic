@@ -14,6 +14,7 @@ import (
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // RepoQuery is the builder for querying Repo entities.
@@ -26,6 +27,8 @@ type RepoQuery struct {
 	fields     []string
 	predicates []predicate.Repo
 	withRpms   *RpmPackageQuery
+	withKey    *SigningKeyQuery
+	withFKs    bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -77,6 +80,28 @@ func (rq *RepoQuery) QueryRpms() *RpmPackageQuery {
 			sqlgraph.From(repo.Table, repo.FieldID, selector),
 			sqlgraph.To(rpmpackage.Table, rpmpackage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, repo.RpmsTable, repo.RpmsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(rq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryKey chains the current query on the "key" edge.
+func (rq *RepoQuery) QueryKey() *SigningKeyQuery {
+	query := &SigningKeyQuery{config: rq.config}
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := rq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := rq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(repo.Table, repo.FieldID, selector),
+			sqlgraph.To(signingkey.Table, signingkey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, repo.KeyTable, repo.KeyColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(rq.driver.Dialect(), step)
 		return fromU, nil
@@ -266,6 +291,7 @@ func (rq *RepoQuery) Clone() *RepoQuery {
 		order:      append([]OrderFunc{}, rq.order...),
 		predicates: append([]predicate.Repo{}, rq.predicates...),
 		withRpms:   rq.withRpms.Clone(),
+		withKey:    rq.withKey.Clone(),
 		// clone intermediate query.
 		sql:    rq.sql.Clone(),
 		path:   rq.path,
@@ -281,6 +307,17 @@ func (rq *RepoQuery) WithRpms(opts ...func(*RpmPackageQuery)) *RepoQuery {
 		opt(query)
 	}
 	rq.withRpms = query
+	return rq
+}
+
+// WithKey tells the query-builder to eager-load the nodes that are connected to
+// the "key" edge. The optional arguments are used to configure the query builder of the edge.
+func (rq *RepoQuery) WithKey(opts ...func(*SigningKeyQuery)) *RepoQuery {
+	query := &SigningKeyQuery{config: rq.config}
+	for _, opt := range opts {
+		opt(query)
+	}
+	rq.withKey = query
 	return rq
 }
 
@@ -351,11 +388,19 @@ func (rq *RepoQuery) prepareQuery(ctx context.Context) error {
 func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, error) {
 	var (
 		nodes       = []*Repo{}
+		withFKs     = rq.withFKs
 		_spec       = rq.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
 			rq.withRpms != nil,
+			rq.withKey != nil,
 		}
 	)
+	if rq.withKey != nil {
+		withFKs = true
+	}
+	if withFKs {
+		_spec.Node.Columns = append(_spec.Node.Columns, repo.ForeignKeys...)
+	}
 	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		return (*Repo).scanValues(nil, columns)
 	}
@@ -378,6 +423,12 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 		if err := rq.loadRpms(ctx, query, nodes,
 			func(n *Repo) { n.Edges.Rpms = []*RpmPackage{} },
 			func(n *Repo, e *RpmPackage) { n.Edges.Rpms = append(n.Edges.Rpms, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := rq.withKey; query != nil {
+		if err := rq.loadKey(ctx, query, nodes, nil,
+			func(n *Repo, e *SigningKey) { n.Edges.Key = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -412,6 +463,35 @@ func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes
 			return fmt.Errorf(`unexpected foreign-key "repo_rpms" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
+	}
+	return nil
+}
+func (rq *RepoQuery) loadKey(ctx context.Context, query *SigningKeyQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *SigningKey)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*Repo)
+	for i := range nodes {
+		if nodes[i].repo_key == nil {
+			continue
+		}
+		fk := *nodes[i].repo_key
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	query.Where(signingkey.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "repo_key" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
 	}
 	return nil
 }

@@ -12,12 +12,21 @@ var (
 	ReposColumns = []*schema.Column{
 		{Name: "oid", Type: field.TypeString, Unique: true},
 		{Name: "type", Type: field.TypeEnum, Enums: []string{"rpm", "ostree"}},
+		{Name: "repo_key", Type: field.TypeString, Nullable: true},
 	}
 	// ReposTable holds the schema information for the "repos" table.
 	ReposTable = &schema.Table{
 		Name:       "repos",
 		Columns:    ReposColumns,
 		PrimaryKey: []*schema.Column{ReposColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "repos_signing_keys_key",
+				Columns:    []*schema.Column{ReposColumns[2]},
+				RefColumns: []*schema.Column{SigningKeysColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
 	}
 	// RpmPackagesColumns holds the columns for the "rpm_packages" table.
 	RpmPackagesColumns = []*schema.Column{
@@ -79,5 +88,6 @@ var (
 )
 
 func init() {
+	ReposTable.ForeignKeys[0].RefTable = SigningKeysTable
 	RpmPackagesTable.ForeignKeys[0].RefTable = ReposTable
 }

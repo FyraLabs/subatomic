@@ -143,6 +143,34 @@ func HasRpmsWith(preds ...predicate.RpmPackage) predicate.Repo {
 	})
 }
 
+// HasKey applies the HasEdge predicate on the "key" edge.
+func HasKey() predicate.Repo {
+	return predicate.Repo(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.To(KeyTable, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, KeyTable, KeyColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasKeyWith applies the HasEdge predicate on the "key" edge with a given conditions (other predicates).
+func HasKeyWith(preds ...predicate.SigningKey) predicate.Repo {
+	return predicate.Repo(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.To(KeyInverseTable, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, KeyTable, KeyColumn),
+		)
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Repo) predicate.Repo {
 	return predicate.Repo(func(s *sql.Selector) {

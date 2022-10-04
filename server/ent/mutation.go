@@ -41,6 +41,8 @@ type RepoMutation struct {
 	rpms          map[int]struct{}
 	removedrpms   map[int]struct{}
 	clearedrpms   bool
+	key           *string
+	clearedkey    bool
 	done          bool
 	oldValue      func(context.Context) (*Repo, error)
 	predicates    []predicate.Repo
@@ -240,6 +242,45 @@ func (m *RepoMutation) ResetRpms() {
 	m.removedrpms = nil
 }
 
+// SetKeyID sets the "key" edge to the SigningKey entity by id.
+func (m *RepoMutation) SetKeyID(id string) {
+	m.key = &id
+}
+
+// ClearKey clears the "key" edge to the SigningKey entity.
+func (m *RepoMutation) ClearKey() {
+	m.clearedkey = true
+}
+
+// KeyCleared reports if the "key" edge to the SigningKey entity was cleared.
+func (m *RepoMutation) KeyCleared() bool {
+	return m.clearedkey
+}
+
+// KeyID returns the "key" edge ID in the mutation.
+func (m *RepoMutation) KeyID() (id string, exists bool) {
+	if m.key != nil {
+		return *m.key, true
+	}
+	return
+}
+
+// KeyIDs returns the "key" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// KeyID instead. It exists only for internal usage by the builders.
+func (m *RepoMutation) KeyIDs() (ids []string) {
+	if id := m.key; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetKey resets all changes to the "key" edge.
+func (m *RepoMutation) ResetKey() {
+	m.key = nil
+	m.clearedkey = false
+}
+
 // Where appends a list predicates to the RepoMutation builder.
 func (m *RepoMutation) Where(ps ...predicate.Repo) {
 	m.predicates = append(m.predicates, ps...)
@@ -358,9 +399,12 @@ func (m *RepoMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *RepoMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.rpms != nil {
 		edges = append(edges, repo.EdgeRpms)
+	}
+	if m.key != nil {
+		edges = append(edges, repo.EdgeKey)
 	}
 	return edges
 }
@@ -375,13 +419,17 @@ func (m *RepoMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case repo.EdgeKey:
+		if id := m.key; id != nil {
+			return []ent.Value{*id}
+		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *RepoMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.removedrpms != nil {
 		edges = append(edges, repo.EdgeRpms)
 	}
@@ -404,9 +452,12 @@ func (m *RepoMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *RepoMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.clearedrpms {
 		edges = append(edges, repo.EdgeRpms)
+	}
+	if m.clearedkey {
+		edges = append(edges, repo.EdgeKey)
 	}
 	return edges
 }
@@ -417,6 +468,8 @@ func (m *RepoMutation) EdgeCleared(name string) bool {
 	switch name {
 	case repo.EdgeRpms:
 		return m.clearedrpms
+	case repo.EdgeKey:
+		return m.clearedkey
 	}
 	return false
 }
@@ -425,6 +478,9 @@ func (m *RepoMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *RepoMutation) ClearEdge(name string) error {
 	switch name {
+	case repo.EdgeKey:
+		m.ClearKey()
+		return nil
 	}
 	return fmt.Errorf("unknown Repo unique edge %s", name)
 }
@@ -435,6 +491,9 @@ func (m *RepoMutation) ResetEdge(name string) error {
 	switch name {
 	case repo.EdgeRpms:
 		m.ResetRpms()
+		return nil
+	case repo.EdgeKey:
+		m.ResetKey()
 		return nil
 	}
 	return fmt.Errorf("unknown Repo edge %s", name)
@@ -1137,6 +1196,9 @@ type SigningKeyMutation struct {
 	name          *string
 	email         *string
 	clearedFields map[string]struct{}
+	repo          map[string]struct{}
+	removedrepo   map[string]struct{}
+	clearedrepo   bool
 	done          bool
 	oldValue      func(context.Context) (*SigningKey, error)
 	predicates    []predicate.SigningKey
@@ -1390,6 +1452,60 @@ func (m *SigningKeyMutation) ResetEmail() {
 	m.email = nil
 }
 
+// AddRepoIDs adds the "repo" edge to the Repo entity by ids.
+func (m *SigningKeyMutation) AddRepoIDs(ids ...string) {
+	if m.repo == nil {
+		m.repo = make(map[string]struct{})
+	}
+	for i := range ids {
+		m.repo[ids[i]] = struct{}{}
+	}
+}
+
+// ClearRepo clears the "repo" edge to the Repo entity.
+func (m *SigningKeyMutation) ClearRepo() {
+	m.clearedrepo = true
+}
+
+// RepoCleared reports if the "repo" edge to the Repo entity was cleared.
+func (m *SigningKeyMutation) RepoCleared() bool {
+	return m.clearedrepo
+}
+
+// RemoveRepoIDs removes the "repo" edge to the Repo entity by IDs.
+func (m *SigningKeyMutation) RemoveRepoIDs(ids ...string) {
+	if m.removedrepo == nil {
+		m.removedrepo = make(map[string]struct{})
+	}
+	for i := range ids {
+		delete(m.repo, ids[i])
+		m.removedrepo[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedRepo returns the removed IDs of the "repo" edge to the Repo entity.
+func (m *SigningKeyMutation) RemovedRepoIDs() (ids []string) {
+	for id := range m.removedrepo {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// RepoIDs returns the "repo" edge IDs in the mutation.
+func (m *SigningKeyMutation) RepoIDs() (ids []string) {
+	for id := range m.repo {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetRepo resets all changes to the "repo" edge.
+func (m *SigningKeyMutation) ResetRepo() {
+	m.repo = nil
+	m.clearedrepo = false
+	m.removedrepo = nil
+}
+
 // Where appends a list predicates to the SigningKeyMutation builder.
 func (m *SigningKeyMutation) Where(ps ...predicate.SigningKey) {
 	m.predicates = append(m.predicates, ps...)
@@ -1559,48 +1675,84 @@ func (m *SigningKeyMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *SigningKeyMutation) AddedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.repo != nil {
+		edges = append(edges, signingkey.EdgeRepo)
+	}
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
 func (m *SigningKeyMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case signingkey.EdgeRepo:
+		ids := make([]ent.Value, 0, len(m.repo))
+		for id := range m.repo {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *SigningKeyMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.removedrepo != nil {
+		edges = append(edges, signingkey.EdgeRepo)
+	}
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *SigningKeyMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case signingkey.EdgeRepo:
+		ids := make([]ent.Value, 0, len(m.removedrepo))
+		for id := range m.removedrepo {
+			ids = append(ids, id)
+		}
+		return ids
+	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *SigningKeyMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 0)
+	edges := make([]string, 0, 1)
+	if m.clearedrepo {
+		edges = append(edges, signingkey.EdgeRepo)
+	}
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
 func (m *SigningKeyMutation) EdgeCleared(name string) bool {
+	switch name {
+	case signingkey.EdgeRepo:
+		return m.clearedrepo
+	}
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
 func (m *SigningKeyMutation) ClearEdge(name string) error {
+	switch name {
+	}
 	return fmt.Errorf("unknown SigningKey unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
 func (m *SigningKeyMutation) ResetEdge(name string) error {
+	switch name {
+	case signingkey.EdgeRepo:
+		m.ResetRepo()
+		return nil
+	}
 	return fmt.Errorf("unknown SigningKey edge %s", name)
 }

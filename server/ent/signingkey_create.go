@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
@@ -47,6 +48,21 @@ func (skc *SigningKeyCreate) SetEmail(s string) *SigningKeyCreate {
 func (skc *SigningKeyCreate) SetID(s string) *SigningKeyCreate {
 	skc.mutation.SetID(s)
 	return skc
+}
+
+// AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
+func (skc *SigningKeyCreate) AddRepoIDs(ids ...string) *SigningKeyCreate {
+	skc.mutation.AddRepoIDs(ids...)
+	return skc
+}
+
+// AddRepo adds the "repo" edges to the Repo entity.
+func (skc *SigningKeyCreate) AddRepo(r ...*Repo) *SigningKeyCreate {
+	ids := make([]string, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return skc.AddRepoIDs(ids...)
 }
 
 // Mutation returns the SigningKeyMutation object of the builder.
@@ -204,6 +220,25 @@ func (skc *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
 			Column: signingkey.FieldEmail,
 		})
 		_node.Email = value
+	}
+	if nodes := skc.mutation.RepoIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   signingkey.RepoTable,
+			Columns: []string{signingkey.RepoColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: repo.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

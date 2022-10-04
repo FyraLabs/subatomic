@@ -23,6 +23,27 @@ type SigningKey struct {
 	Name string `json:"name,omitempty"`
 	// Email holds the value of the "email" field.
 	Email string `json:"email,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the SigningKeyQuery when eager-loading is set.
+	Edges SigningKeyEdges `json:"edges"`
+}
+
+// SigningKeyEdges holds the relations/edges for other nodes in the graph.
+type SigningKeyEdges struct {
+	// Repo holds the value of the repo edge.
+	Repo []*Repo `json:"repo,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [1]bool
+}
+
+// RepoOrErr returns the Repo value or an error if the edge
+// was not loaded in eager-loading.
+func (e SigningKeyEdges) RepoOrErr() ([]*Repo, error) {
+	if e.loadedTypes[0] {
+		return e.Repo, nil
+	}
+	return nil, &NotLoadedError{edge: "repo"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -80,6 +101,11 @@ func (sk *SigningKey) assignValues(columns []string, values []interface{}) error
 		}
 	}
 	return nil
+}
+
+// QueryRepo queries the "repo" edge of the SigningKey entity.
+func (sk *SigningKey) QueryRepo() *RepoQuery {
+	return (&SigningKeyClient{config: sk.config}).QueryRepo(sk)
 }
 
 // Update returns a builder for updating this SigningKey.

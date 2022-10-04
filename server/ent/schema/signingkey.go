@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 )
 
@@ -23,5 +24,8 @@ func (SigningKey) Fields() []ent.Field {
 
 // Edges of the SigningKey.
 func (SigningKey) Edges() []ent.Edge {
-	return nil
+	return []ent.Edge{
+		edge.From("repo", Repo.Type).
+			Ref("key"),
+	}
 }

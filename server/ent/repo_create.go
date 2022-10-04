@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // RepoCreate is the builder for creating a Repo entity.
@@ -45,6 +46,25 @@ func (rc *RepoCreate) AddRpms(r ...*RpmPackage) *RepoCreate {
 		ids[i] = r[i].ID
 	}
 	return rc.AddRpmIDs(ids...)
+}
+
+// SetKeyID sets the "key" edge to the SigningKey entity by ID.
+func (rc *RepoCreate) SetKeyID(id string) *RepoCreate {
+	rc.mutation.SetKeyID(id)
+	return rc
+}
+
+// SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
+func (rc *RepoCreate) SetNillableKeyID(id *string) *RepoCreate {
+	if id != nil {
+		rc = rc.SetKeyID(*id)
+	}
+	return rc
+}
+
+// SetKey sets the "key" edge to the SigningKey entity.
+func (rc *RepoCreate) SetKey(s *SigningKey) *RepoCreate {
+	return rc.SetKeyID(s.ID)
 }
 
 // Mutation returns the RepoMutation object of the builder.
@@ -192,6 +212,26 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := rc.mutation.KeyIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: false,
+			Table:   repo.KeyTable,
+			Columns: []string{repo.KeyColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeString,
+					Column: signingkey.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.repo_key = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

@@ -15,6 +15,8 @@ const (
 	FieldType = "type"
 	// EdgeRpms holds the string denoting the rpms edge name in mutations.
 	EdgeRpms = "rpms"
+	// EdgeKey holds the string denoting the key edge name in mutations.
+	EdgeKey = "key"
 	// RpmPackageFieldID holds the string denoting the ID field of the RpmPackage.
 	RpmPackageFieldID = "id"
 	// Table holds the table name of the repo in the database.
@@ -26,6 +28,13 @@ const (
 	RpmsInverseTable = "rpm_packages"
 	// RpmsColumn is the table column denoting the rpms relation/edge.
 	RpmsColumn = "repo_rpms"
+	// KeyTable is the table that holds the key relation/edge.
+	KeyTable = "repos"
+	// KeyInverseTable is the table name for the SigningKey entity.
+	// It exists in this package in order to avoid circular dependency with the "signingkey" package.
+	KeyInverseTable = "signing_keys"
+	// KeyColumn is the table column denoting the key relation/edge.
+	KeyColumn = "repo_key"
 )
 
 // Columns holds all SQL columns for repo fields.
@@ -34,10 +43,21 @@ var Columns = []string{
 	FieldType,
 }
 
+// ForeignKeys holds the SQL foreign-keys that are owned by the "repos"
+// table and are not defined as standalone fields in the schema.
+var ForeignKeys = []string{
+	"repo_key",
+}
+
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
 	for i := range Columns {
 		if column == Columns[i] {
+			return true
+		}
+	}
+	for i := range ForeignKeys {
+		if column == ForeignKeys[i] {
 			return true
 		}
 	}

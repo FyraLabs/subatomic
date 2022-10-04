@@ -26,6 +26,17 @@ definitions:
     - id
     - type
     type: object
+  main.fullKeyResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      public_key:
+        type: string
+    type: object
   main.keyResponse:
     properties:
       email:
@@ -214,6 +225,75 @@ paths:
           schema:
             $ref: '#/definitions/types.ErrResponse'
       summary: Upload files to a repo
+      tags:
+      - repos
+  /repos/{id}/key:
+    delete:
+      description: delete repo key
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Delete key for a repo
+      tags:
+      - repos
+    get:
+      description: get repo key
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.fullKeyResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Get key for a repo
+      tags:
+      - repos
+    put:
+      description: set repo key
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: options for the new repository
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/main.createRepoPayload'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Set key for a repo
       tags:
       - repos
   /repos/{id}/rpms:

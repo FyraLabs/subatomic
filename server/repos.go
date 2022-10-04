@@ -37,6 +37,11 @@ func (router *reposRouter) setup() {
 	router.Delete("/{repoID}", router.deleteRepo)
 	router.Put("/{repoID}", router.uploadToRepo)
 
+	// Repo Key
+	router.Get("/{repoID}/key", router.getRepoKey)
+	router.Put("/{repoID}/key", router.setRepoKey)
+	router.Delete("/{repoID}/key", router.deleteRepoKey)
+
 	// RPM Specific Endpoints
 	router.Get("/{repoID}/rpms", router.getRPMs)
 	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
@@ -470,6 +475,154 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	targetDirectory := path.Join(router.enviroment.StorageDirectory, id, rpm.FilePath)
 
 	if err := os.Remove(targetDirectory); err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// getRepoKey godoc
+// @Summary     Get key for a repo
+// @Description get repo key
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Produce     json
+// @Success     200 {object} fullKeyResponse
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/key [get]
+func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	key, err := re.QueryKey().First(r.Context())
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("key not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	render.JSON(w, r, &fullKeyResponse{
+		ID:        key.ID,
+		Name:      key.Name,
+		Email:     key.Email,
+		PublicKey: key.PublicKey,
+	})
+}
+
+type setKeyPayload struct {
+	ID string `json:"id" validate:"required,alphanum"`
+}
+
+func (u *setKeyPayload) Bind(r *http.Request) error {
+	return validate.Struct(u)
+}
+
+// setRepoKey godoc
+// @Summary     Set key for a repo
+// @Description set repo key
+// @Tags        repos
+// @Param       id   path string            true "id for the repository"
+// @Param       body body createRepoPayload true "options for the new repository"
+// @Produce     json
+// @Success     204
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/key [put]
+func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	payload := &setKeyPayload{}
+	if err := render.Bind(r, payload); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	key, err := router.database.SigningKey.Get(r.Context(), payload.ID)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("key not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().SetKey(key).Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// deleteRepoKey godoc
+// @Summary     Delete key for a repo
+// @Description delete repo key
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Produce     json
+// @Success     204
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/key [delete]
+func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().ClearKey().Save(r.Context()); err != nil {
 		panic(err)
 	}
 

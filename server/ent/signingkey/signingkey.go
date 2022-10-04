@@ -15,8 +15,17 @@ const (
 	FieldName = "name"
 	// FieldEmail holds the string denoting the email field in the database.
 	FieldEmail = "email"
+	// EdgeRepo holds the string denoting the repo edge name in mutations.
+	EdgeRepo = "repo"
 	// Table holds the table name of the signingkey in the database.
 	Table = "signing_keys"
+	// RepoTable is the table that holds the repo relation/edge.
+	RepoTable = "repos"
+	// RepoInverseTable is the table name for the Repo entity.
+	// It exists in this package in order to avoid circular dependency with the "repo" package.
+	RepoInverseTable = "repos"
+	// RepoColumn is the table column denoting the repo relation/edge.
+	RepoColumn = "repo_key"
 )
 
 // Columns holds all SQL columns for signingkey fields.
