@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/FyraLabs/subatomic/server/ent"
+	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,6 +16,7 @@ type mainRouter struct {
 	database         *ent.Client
 	enviroment       *types.Enviroment
 	jwtAuthenticator *jwtauth.JWTAuth
+	repoMutex        *keyedmutex.KeyedMutex
 }
 
 func (router *mainRouter) setup() {
@@ -28,6 +30,7 @@ func (router *mainRouter) setup() {
 		database:         router.database,
 		enviroment:       router.enviroment,
 		jwtAuthenticator: router.jwtAuthenticator,
+		repoMutex:        router.repoMutex,
 	}
 	api.setup()
 	router.Mount("/api", api)

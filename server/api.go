@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/FyraLabs/subatomic/server/ent"
+	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -16,6 +17,7 @@ type apiRouter struct {
 	database         *ent.Client
 	enviroment       *types.Enviroment
 	jwtAuthenticator *jwtauth.JWTAuth
+	repoMutex        *keyedmutex.KeyedMutex
 }
 
 func (router *apiRouter) setup() {

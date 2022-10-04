@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/FyraLabs/subatomic/server/ent"
+	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/Netflix/go-env"
 	"github.com/go-chi/jwtauth/v5"
@@ -64,6 +65,7 @@ func run() error {
 		database:         client,
 		enviroment:       &enviroment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
+		repoMutex:        &keyedmutex.KeyedMutex{},
 	}
 	router.setup()
 

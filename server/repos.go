@@ -3,31 +3,30 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"strconv"
-	"strings"
 
 	"github.com/FyraLabs/subatomic/server/ent"
+	"github.com/FyraLabs/subatomic/server/keyedmutex"
+	"github.com/FyraLabs/subatomic/server/ostree"
+	"github.com/FyraLabs/subatomic/server/rpm"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/ostreedev/ostree-go/pkg/otbuiltin"
 	"github.com/samber/lo"
 
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
-	rpm "github.com/sassoftware/go-rpmutils"
 )
 
 type reposRouter struct {
 	*chi.Mux
 	database   *ent.Client
 	enviroment *types.Enviroment
+	repoMutex  *keyedmutex.KeyedMutex
 }
 
 func (router *reposRouter) setup() {
@@ -99,7 +98,9 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Make atomic
+	router.repoMutex.Lock(payload.ID)
+	defer router.repoMutex.Unlock(payload.ID)
+
 	exists, err := router.database.Repo.Query().Where(repo.IDEQ(payload.ID)).Exist(r.Context())
 
 	if err != nil {
@@ -115,17 +116,11 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 
 	switch payload.RepoType {
 	case "rpm":
-		if err := os.MkdirAll(repositoryDir, os.ModePerm); err != nil {
-			panic(err)
-		}
-
-		if _, err := exec.Command("createrepo_c", repositoryDir).Output(); err != nil {
+		if err := rpm.CreateRepo(repositoryDir); err != nil {
 			panic(err)
 		}
 	case "ostree":
-		options := otbuiltin.NewInitOptions()
-		options.Mode = "bare"
-		if _, err := otbuiltin.Init(repositoryDir, options); err != nil {
+		if err := ostree.CreateRepo(repositoryDir); err != nil {
 			panic(err)
 		}
 	}
@@ -152,6 +147,9 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 // @Router      /repos/{id} [delete]
 func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
 
 	repo, err := router.database.Repo.Get(r.Context(), id)
 
@@ -192,6 +190,9 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
 	re, err := router.database.Repo.Get(r.Context(), id)
 
 	if ent.IsNotFound(err) {
@@ -203,24 +204,25 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		panic(err)
 	}
 
+	if r.ParseMultipartForm(32 << 20); err != nil {
+		panic(err)
+	}
+
+	if r.MultipartForm == nil {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("request body must be multipart")))
+		return
+	}
+
+	files, ok := r.MultipartForm.File["file_upload"]
+	if !ok {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("no files passed under key file_upload")))
+		return
+	}
+
+	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+
 	switch re.Type {
 	case repo.TypeRpm:
-		if r.ParseMultipartForm(32 << 20); err != nil {
-			panic(err)
-		}
-
-		if r.MultipartForm == nil {
-			render.Render(w, r, types.ErrInvalidRequest(errors.New("request body must be multipart")))
-			return
-		}
-
-		files, ok := r.MultipartForm.File["file_upload"]
-		if !ok {
-			render.Render(w, r, types.ErrInvalidRequest(errors.New("no files passed under key file_upload")))
-			return
-		}
-		targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
-
 		for _, fileHeader := range files {
 			reqFile, err := fileHeader.Open()
 			if err != nil {
@@ -229,79 +231,49 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 			defer reqFile.Close()
 
-			rpmPackage, err := rpm.ReadRpm(reqFile)
+			info, err := rpm.GetRpmInfo(reqFile)
 			if err != nil {
-				render.Render(w, r, types.ErrInvalidRequest(fmt.Errorf("rpm %s not valid", fileHeader.Filename)))
+				render.Render(w, r, types.ErrInvalidRequest(err))
 				return
 			}
-
-			nevra, err := rpmPackage.Header.GetNEVRA()
-			if err != nil {
-				render.Render(w, r, types.ErrInvalidRequest(fmt.Errorf("rpm %s nevra not valid", fileHeader.Filename)))
-				return
-			}
-
-			epoch, err := strconv.Atoi(nevra.Epoch)
-			if err != nil {
-				render.Render(w, r, types.ErrInvalidRequest(fmt.Errorf("rpm %s epoch not valid", fileHeader.Filename)))
-				return
-			}
-
-			isSource := !rpmPackage.Header.HasTag(rpm.SOURCERPM)
-
-			if _, err := reqFile.Seek(0, io.SeekStart); err != nil {
-				panic(err)
-			}
-
-			filePath := strings.TrimSuffix(nevra.String(), ".rpm") + lo.Ternary(isSource, ".src.rpm", ".rpm")
 
 			exists, err := re.QueryRpms().Where(
 				rpmpackage.And(
-					rpmpackage.NameEQ(nevra.Name),
-					rpmpackage.EpochEQ(epoch),
-					rpmpackage.VersionEQ(nevra.Version),
-					rpmpackage.ReleaseEQ(nevra.Release),
-					rpmpackage.ArchEQ(lo.Ternary(isSource, "src", nevra.Arch)),
+					rpmpackage.NameEQ(info.Name),
+					rpmpackage.EpochEQ(info.Epoch),
+					rpmpackage.VersionEQ(info.Version),
+					rpmpackage.ReleaseEQ(info.Release),
+					rpmpackage.ArchEQ(info.Arch),
 				)).Exist(r.Context())
 			if err != nil {
 				panic(err)
 			}
 
 			if exists {
-				render.Render(w, r, types.ErrAlreadyExists(fmt.Errorf("rpm %s already exists", filePath)))
+				render.Render(w, r, types.ErrAlreadyExists(fmt.Errorf("rpm %s already exists", info.FileName)))
 				return
 			}
 
 			_, err = router.database.RpmPackage.Create().
-				SetName(nevra.Name).
-				SetEpoch(epoch).
-				SetVersion(nevra.Version).
-				SetRelease(nevra.Release).
-				SetArch(nevra.Arch).
+				SetName(info.Name).
+				SetEpoch(info.Epoch).
+				SetVersion(info.Version).
+				SetRelease(info.Release).
+				SetArch(info.Arch).
 				SetRepo(re).
-				SetFilePath(filePath).
+				SetFilePath(info.FileName).
 				Save(r.Context())
 			if err != nil {
 				panic(err)
 			}
 
-			file, err := os.Create(path.Join(targetDirectory, filePath))
-
-			if err != nil {
+			if err := rpm.AddRpmToRepo(targetDirectory, reqFile); err != nil {
 				panic(err)
-			}
-
-			defer file.Close()
-
-			_, err = io.Copy(file, reqFile)
-			if err != nil {
-				render.Render(w, r, types.ErrInvalidRequest(err))
 			}
 		}
 
-		// TODO: Remember to lock this
 		// TODO: Also siging the repodata
-		if _, err := exec.Command("createrepo_c", "--update", "--deltas", "--zck", "--xz", targetDirectory).Output(); err != nil {
+		if err := rpm.UpdateRepo(targetDirectory); err != nil {
 			panic(err)
 		}
 
@@ -438,6 +410,10 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 // @Router      /repos/{id}/rpms/{rpmId} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
 	rpmId, err := strconv.Atoi(chi.URLParam(r, "repoID"))
 	if err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
