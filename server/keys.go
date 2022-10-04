@@ -113,7 +113,9 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.JSON(w, r, &keyResponse{
-		ID: key.ID,
+		ID:    key.ID,
+		Name:  key.Name,
+		Email: key.Email,
 	})
 }
 
