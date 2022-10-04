@@ -31,6 +31,7 @@ func (router *apiRouter) setup() {
 		repos := reposRouter{
 			database:   router.database,
 			enviroment: router.enviroment,
+			repoMutex:  router.repoMutex,
 		}
 		repos.setup()
 		r.Mount("/repos", repos)
