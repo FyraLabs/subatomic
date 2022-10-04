@@ -210,16 +210,16 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 	re, err := router.database.Repo.Get(r.Context(), id)
 
-	key, err := re.QueryKey().Only(r.Context())
-	if err != nil {
-		panic(err)
-	}
-
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
 		return
 	}
 
+	if err != nil {
+		panic(err)
+	}
+
+	key, err := re.QueryKey().Only(r.Context())
 	if err != nil {
 		panic(err)
 	}
@@ -538,7 +538,7 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 	key, err := re.QueryKey().First(r.Context())
 
 	if ent.IsNotFound(err) {
-		render.Render(w, r, types.ErrNotFound(errors.New("key not found")))
+		render.Render(w, r, types.ErrNotFound(errors.New("key not set")))
 		return
 	}
 
