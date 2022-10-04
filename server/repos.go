@@ -20,6 +20,8 @@ import (
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+
+	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 )
 
 type reposRouter struct {
@@ -208,6 +210,11 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 	re, err := router.database.Repo.Get(r.Context(), id)
 
+	key, err := re.QueryKey().Only(r.Context())
+	if err != nil {
+		panic(err)
+	}
+
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
 		return
@@ -288,6 +295,22 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		// TODO: Also siging the repodata
 		if err := rpm.UpdateRepo(targetDirectory); err != nil {
 			panic(err)
+		}
+
+		if key != nil {
+			privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+			if err != nil {
+				panic(err)
+			}
+
+			ring, err := pgp.NewKeyRing(privateKey)
+			if err != nil {
+				panic(err)
+			}
+
+			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+				panic(err)
+			}
 		}
 
 		w.WriteHeader(http.StatusNoContent)
