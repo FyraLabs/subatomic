@@ -444,10 +444,10 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 // @Description delete rpm
 // @Tags        repos
 // @Param       id    path string true "id for the repository"
-// @Param       rpmId path string true "rpm id in the repository"
+// @Param       rpmID path string true "rpm id in the repository"
 // @Success     200
 // @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/rpms/{rpmId} [delete]
+// @Router      /repos/{id}/rpms/{rpmID} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -458,7 +458,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	rpmId, err := strconv.Atoi(chi.URLParam(r, "rpmId"))
+	rpmID, err := strconv.Atoi(chi.URLParam(r, "rpmID"))
 	if err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
@@ -480,7 +480,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmId)).First(r.Context())
+	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(r.Context())
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("rpm not found")))
