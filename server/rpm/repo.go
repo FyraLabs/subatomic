@@ -7,6 +7,7 @@ import (
 	"path"
 
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
+	"github.com/sassoftware/go-rpmutils"
 )
 
 func CreateRepo(repoPath string) error {
@@ -70,6 +71,26 @@ func SignRepo(repoPath string, ring *pgp.KeyRing) error {
 	}
 
 	if err := os.WriteFile(path.Join(repoPath, "repodata/repomd.xml.asc"), []byte(armoredSig), 0666); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SignRpmFile(rpmPath string, ring *pgp.KeyRing) error {
+	key, err := ring.GetKey(0)
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Open(rpmPath)
+	if err != nil {
+		return err
+	}
+
+	defer file.Close()
+
+	if _, err := rpmutils.SignRpmFile(file, rpmPath, key.GetEntity().PrivateKey, nil); err != nil {
 		return err
 	}
 

@@ -224,6 +224,20 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		panic(err)
 	}
 
+	var ring *pgp.KeyRing
+
+	if key != nil {
+		privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		ring, err = pgp.NewKeyRing(privateKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	if r.ParseMultipartForm(32 << 20); err != nil {
 		panic(err)
 	}
@@ -290,6 +304,13 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			if err := rpm.AddRpmToRepo(targetDirectory, reqFile); err != nil {
 				panic(err)
 			}
+
+			if ring != nil {
+				rpmPath := path.Join(targetDirectory, info.FileName)
+				if err := rpm.SignRpmFile(rpmPath, ring); err != nil {
+					panic(err)
+				}
+			}
 		}
 
 		// TODO: Also siging the repodata
@@ -297,17 +318,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			panic(err)
 		}
 
-		if key != nil {
-			privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
-			if err != nil {
-				panic(err)
-			}
-
-			ring, err := pgp.NewKeyRing(privateKey)
-			if err != nil {
-				panic(err)
-			}
-
+		if ring != nil {
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
 			}
