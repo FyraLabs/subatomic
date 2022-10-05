@@ -296,6 +296,27 @@ paths:
       summary: Set key for a repo
       tags:
       - repos
+  /repos/{id}/resign:
+    post:
+      description: resign repo packages
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Resign packages in a repo
+      tags:
+      - repos
   /repos/{id}/rpms:
     get:
       description: rpms in repo
@@ -315,7 +336,7 @@ paths:
       summary: Get list of RPMs in a repo
       tags:
       - repos
-  /repos/{id}/rpms/{rpmId}:
+  /repos/{id}/rpms/{rpmID}:
     delete:
       description: delete rpm
       parameters:
@@ -326,7 +347,7 @@ paths:
         type: string
       - description: rpm id in the repository
         in: path
-        name: rpmId
+        name: rpmID
         required: true
         type: string
       responses:

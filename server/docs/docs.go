@@ -356,6 +356,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/repos/{id}/resign": {
+            "post": {
+                "description": "resign repo packages",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Resign packages in a repo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{id}/rpms": {
             "get": {
                 "description": "rpms in repo",
@@ -385,7 +417,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/repos/{id}/rpms/{rpmId}": {
+        "/repos/{id}/rpms/{rpmID}": {
             "delete": {
                 "description": "delete rpm",
                 "tags": [
@@ -403,7 +435,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "rpm id in the repository",
-                        "name": "rpmId",
+                        "name": "rpmID",
                         "in": "path",
                         "required": true
                     }

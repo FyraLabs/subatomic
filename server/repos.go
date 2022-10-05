@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 
 	"github.com/FyraLabs/subatomic/server/ent"
@@ -43,6 +44,9 @@ func (router *reposRouter) setup() {
 	router.Get("/{repoID}/key", router.getRepoKey)
 	router.Put("/{repoID}/key", router.setRepoKey)
 	router.Delete("/{repoID}/key", router.deleteRepoKey)
+
+	// Signature Management
+	router.Post("/{repoID}/resign", router.resign)
 
 	// RPM Specific Endpoints
 	router.Get("/{repoID}/rpms", router.getRPMs)
@@ -220,7 +224,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 	}
 
 	key, err := re.QueryKey().Only(r.Context())
-	if err != nil {
+	if err != nil && !ent.IsNotFound(err) {
 		panic(err)
 	}
 
@@ -658,6 +662,93 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 
 	if _, err := re.Update().ClearKey().Save(r.Context()); err != nil {
 		panic(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// resign godoc
+// @Summary     Resign packages in a repo
+// @Description resign repo packages
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Produce     json
+// @Success     204
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/resign [post]
+func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	key, err := re.QueryKey().Only(r.Context())
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("key not set")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	ring, err := pgp.NewKeyRing(privateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+
+	switch re.Type {
+	case repo.TypeRpm:
+		{
+			matches, err := filepath.Glob(path.Join(targetDirectory, "*.rpm"))
+			if err != nil {
+				panic(err)
+			}
+
+			for _, match := range matches {
+				if err := rpm.SignRpmFile(match, ring); err != nil {
+					panic(err)
+				}
+			}
+
+			if err := rpm.UpdateRepo(targetDirectory); err != nil {
+				panic(err)
+			}
+
+			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+				panic(err)
+			}
+		}
+	case repo.TypeOstree:
+		{
+			panic("not supported")
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
