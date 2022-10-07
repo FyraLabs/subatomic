@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/samber/lo"
+	"github.com/sassoftware/go-rpmutils"
 
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
@@ -209,6 +210,8 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	prune := r.URL.Query().Get("prune") == "true"
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
@@ -242,7 +245,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		panic(err)
 	}
 
@@ -261,6 +264,8 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 	switch re.Type {
 	case repo.TypeRpm:
+		toPrune := []*ent.RpmPackage{}
+
 		for _, fileHeader := range files {
 			reqFile, err := fileHeader.Open()
 			if err != nil {
@@ -288,6 +293,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			}
 
 			if exists {
+				// TODO thing
 				render.Render(w, r, types.ErrAlreadyExists(fmt.Errorf("rpm %s already exists", info.FileName)))
 				return
 			}
@@ -314,6 +320,36 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				if err := rpm.SignRpmFile(rpmPath, ring); err != nil {
 					panic(err)
 				}
+			}
+
+			if prune {
+				// I could do some sort of join here so I don't have to query the db for each uploaded package, but this is fine for now (the number of uploaded packages at once is probably going to be small)
+				pkgs, err := re.QueryRpms().Where(
+					rpmpackage.NameEQ(info.Name),
+				).All(r.Context())
+				if err != nil {
+					panic(err)
+				}
+
+				toPrune = append(toPrune, lo.Filter(pkgs, func(pkg *ent.RpmPackage, index int) bool {
+					return rpmutils.NEVRAcmp(rpm.DBPackageToNEVRA(*pkg), *info.NEVRA) == -1
+				})...)
+			}
+		}
+
+		if len(toPrune) > 0 {
+			for _, p := range toPrune {
+				if err := os.Remove(path.Join(targetDirectory, p.FilePath)); err != nil {
+					panic(err)
+				}
+			}
+
+			ids := lo.Map(toPrune, func(pkg *ent.RpmPackage, index int) int {
+				return pkg.ID
+			})
+
+			if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(ids...)).Exec(r.Context()); err != nil {
+				panic(err)
 			}
 		}
 

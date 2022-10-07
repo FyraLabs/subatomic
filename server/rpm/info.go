@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/samber/lo"
 	"github.com/sassoftware/go-rpmutils"
 )
@@ -56,5 +57,16 @@ func GetRpmInfo(file io.ReadSeeker) (*RpmInfo, error) {
 		IsSource: isSource,
 		FileName: fileName,
 		Rpm:      rpmPackage,
+		NEVRA:    nevra,
 	}, nil
+}
+
+func DBPackageToNEVRA(pkg ent.RpmPackage) rpmutils.NEVRA {
+	return rpmutils.NEVRA{
+		Name:    pkg.Name,
+		Epoch:   strconv.Itoa(pkg.Epoch),
+		Version: pkg.Version,
+		Release: pkg.Release,
+		Arch:    pkg.Arch,
+	}
 }
