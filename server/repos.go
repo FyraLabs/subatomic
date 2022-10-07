@@ -594,6 +594,9 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
 	re, err := router.database.Repo.Get(r.Context(), id)
 
 	if ent.IsNotFound(err) {
@@ -626,6 +629,10 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
+	if err := os.WriteFile(path.Join(router.enviroment.StorageDirectory, id, "key.asc"), []byte(key.PublicKey), 0644); err != nil {
+		panic(err)
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 
 	if _, err := w.Write(nil); err != nil {
@@ -649,6 +656,9 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
 	re, err := router.database.Repo.Get(r.Context(), id)
 
 	if ent.IsNotFound(err) {
@@ -661,6 +671,10 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 	}
 
 	if _, err := re.Update().ClearKey().Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	if err := os.Remove(path.Join(router.enviroment.StorageDirectory, id, "key.asc")); err != nil {
 		panic(err)
 	}
 
