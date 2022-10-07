@@ -227,6 +227,47 @@ paths:
       summary: Upload files to a repo
       tags:
       - repos
+  /repos/{id}/comps:
+    delete:
+      description: delete4 rpm comps
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Delete the RPM comps file
+      tags:
+      - repos
+    put:
+      description: push rpm comps
+      parameters:
+      - description: id for the repository
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/types.ErrResponse'
+      summary: Push a RPM comps file
+      tags:
+      - repos
   /repos/{id}/key:
     delete:
       description: delete repo key

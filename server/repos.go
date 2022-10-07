@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -48,6 +49,10 @@ func (router *reposRouter) setup() {
 
 	// Signature Management
 	router.Post("/{repoID}/resign", router.resign)
+
+	// Comps Specific Endpoints
+	router.Put("/{repoID}/comps", router.putComps)
+	router.Delete("/{repoID}/comps", router.deleteComps)
 
 	// RPM Specific Endpoints
 	router.Get("/{repoID}/rpms", router.getRPMs)
@@ -798,6 +803,176 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 	case repo.TypeOstree:
 		{
 			panic("not supported")
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// putComps godoc
+// @Summary     Push a RPM comps file
+// @Description push rpm comps
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Produce     json
+// @Success     204
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/comps [put]
+func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Type != repo.TypeRpm {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("repo not of type rpm")))
+		return
+	}
+
+	key, err := re.QueryKey().Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		panic(err)
+	}
+
+	var ring *pgp.KeyRing
+
+	if key != nil {
+		privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		ring, err = pgp.NewKeyRing(privateKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	file, _, err := r.FormFile("file_upload")
+	if err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	defer file.Close()
+
+	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+
+	compsFile, err := os.OpenFile(path.Join(targetDirectory, "comps.xml"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := io.Copy(compsFile, file); err != nil {
+		_ = compsFile.Close()
+		panic(err)
+	}
+
+	_ = compsFile.Close()
+
+	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+		panic(err)
+	}
+
+	if ring != nil {
+		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+			panic(err)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// deleteComps godoc
+// @Summary     Delete the RPM comps file
+// @Description delete4 rpm comps
+// @Tags        repos
+// @Param       id path string true "id for the repository"
+// @Produce     json
+// @Success     204
+// @Failure     404 {object} types.ErrResponse
+// @Router      /repos/{id}/comps [delete]
+func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,alphanum"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Type != repo.TypeRpm {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("repo not of type rpm")))
+		return
+	}
+
+	key, err := re.QueryKey().Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		panic(err)
+	}
+
+	var ring *pgp.KeyRing
+
+	if key != nil {
+		privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		ring, err = pgp.NewKeyRing(privateKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+
+	if err := os.Remove(path.Join(targetDirectory, "comps.xml")); err != nil && !os.IsNotExist(err) {
+		panic(err)
+	}
+
+	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+		panic(err)
+	}
+
+	if ring != nil {
+		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+			panic(err)
 		}
 	}
 

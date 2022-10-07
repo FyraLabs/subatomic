@@ -252,6 +252,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/repos/{id}/comps": {
+            "put": {
+                "description": "push rpm comps",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Push a RPM comps file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete4 rpm comps",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "repos"
+                ],
+                "summary": "Delete the RPM comps file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id for the repository",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/types.ErrResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/repos/{id}/key": {
             "get": {
                 "description": "get repo key",

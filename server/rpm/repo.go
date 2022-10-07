@@ -23,7 +23,20 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
-	if _, err := exec.Command("createrepo_c", "--update", "--deltas", "--zck", "--xz", repoPath).Output(); err != nil {
+	flags := []string{"--update", "--deltas", "--zck", "--xz"}
+
+	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err == nil {
+		flags = append(flags, "--groupfile", "comps.xml")
+	}
+
+	flags = append(flags, repoPath)
+
+	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
 		return err
 	}
 
@@ -70,7 +83,7 @@ func SignRepo(repoPath string, ring *pgp.KeyRing) error {
 		return err
 	}
 
-	if err := os.WriteFile(path.Join(repoPath, "repodata/repomd.xml.asc"), []byte(armoredSig), 0666); err != nil {
+	if err := os.WriteFile(path.Join(repoPath, "repodata/repomd.xml.asc"), []byte(armoredSig), 0744); err != nil {
 		return err
 	}
 
