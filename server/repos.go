@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -297,23 +296,19 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				panic(err)
 			}
 
-			if exists {
-				// TODO thing
-				render.Render(w, r, types.ErrAlreadyExists(fmt.Errorf("rpm %s already exists", info.FileName)))
-				return
-			}
-
-			_, err = router.database.RpmPackage.Create().
-				SetName(info.Name).
-				SetEpoch(info.Epoch).
-				SetVersion(info.Version).
-				SetRelease(info.Release).
-				SetArch(info.Arch).
-				SetRepo(re).
-				SetFilePath(info.FileName).
-				Save(r.Context())
-			if err != nil {
-				panic(err)
+			if !exists {
+				_, err = router.database.RpmPackage.Create().
+					SetName(info.Name).
+					SetEpoch(info.Epoch).
+					SetVersion(info.Version).
+					SetRelease(info.Release).
+					SetArch(info.Arch).
+					SetRepo(re).
+					SetFilePath(info.FileName).
+					Save(r.Context())
+				if err != nil {
+					panic(err)
+				}
 			}
 
 			if err := rpm.AddRpmToRepo(targetDirectory, reqFile); err != nil {
