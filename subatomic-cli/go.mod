@@ -3,6 +3,7 @@ module github.com/FyraLabs/subatomic/subatomic-cli
 go 1.19
 
 require (
+	github.com/samber/lo v1.28.2
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.13.0
 	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0
@@ -12,6 +13,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	golang.org/x/exp v0.0.0-20220916125017-b168a2c6b86b // indirect
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035 // indirect
 )
 

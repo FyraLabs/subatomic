@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/FyraLabs/subatomic/server/types"
+	"github.com/samber/lo"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,6 +26,10 @@ var uploadCmd = &cobra.Command{
 	Short: "Upload artifacts to a repository",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		prune, err := cmd.Flags().GetBool("prune")
+		if err != nil {
+			return err
+		}
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 
@@ -45,6 +50,10 @@ var uploadCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		q := req.URL.Query()
+		q.Add("prune", lo.Ternary(prune, "true", "false"))
+		req.URL.RawQuery = q.Encode()
 
 		req.Header.Add("Content-Type", form.FormDataContentType())
 		req.Header.Add("Accept", "application/json")
@@ -132,4 +141,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// uploadCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	uploadCmd.Flags().Bool("prune", false, "Prune older packages on upload")
 }
