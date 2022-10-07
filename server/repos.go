@@ -326,6 +326,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				// I could do some sort of join here so I don't have to query the db for each uploaded package, but this is fine for now (the number of uploaded packages at once is probably going to be small)
 				pkgs, err := re.QueryRpms().Where(
 					rpmpackage.NameEQ(info.Name),
+					rpmpackage.ArchEQ(info.Arch),
 				).All(r.Context())
 				if err != nil {
 					panic(err)
