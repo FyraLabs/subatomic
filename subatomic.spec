@@ -1,13 +1,13 @@
 %define debug_package %{nil}
 %define _build_id_links none
 Name:           subatomic
-Version:        0.1.0.20221007.e1688892
+Version:        0.1.0.%{autogitversion}
 Release:        1%{?dist}
 Summary:        A compose tool
 
 License:        MIT
 URL:            https://github.com/FyraLabs/subatomic
-Source0:        https://github.com/FyraLabs/subatomic/archive/e1688892b60f24e5c8f4f20bebb5bd71a1cc252d.zip
+Source0:        https://github.com/FyraLabs/subatomic/archive/%{autogitcommit}.zip
 
 BuildRequires:  go-rpm-macros
 BuildRequires:  git-core
