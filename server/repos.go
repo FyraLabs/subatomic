@@ -373,7 +373,35 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			panic(err)
 		}
 	case repo.TypeOstree:
-		panic("not supported")
+		ostreeBranch := r.URL.Query().Get("ostree_branch")
+		if ostreeBranch == "" {
+			render.Render(w, r, types.ErrInvalidRequest(errors.New("ostree branch to push to must be specified under query param ostree_branch")))
+			return
+		}
+
+		for _, fileHeader := range files {
+			reqFile, err := fileHeader.Open()
+			if err != nil {
+				panic(err)
+			}
+
+			defer reqFile.Close()
+
+			if err := ostree.AddTarCommitToRepo(targetDirectory, ostreeBranch, reqFile); err != nil {
+				render.Render(w, r, types.ErrInvalidRequest(err))
+				return
+			}
+		}
+
+		if err := ostree.UpdateSummary(targetDirectory); err != nil {
+			panic(err)
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+
+		if _, err := w.Write(nil); err != nil {
+			panic(err)
+		}
 	}
 }
 
