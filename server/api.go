@@ -46,9 +46,9 @@ func (router *apiRouter) setup() {
 
 	// Public
 	router.Group(func(r chi.Router) {
-		router.Handle("/docs", http.RedirectHandler("/api/docs/index.html", http.StatusFound))
+		router.Handle("/docs", http.RedirectHandler("/docs/index.html", http.StatusFound))
 		router.Get("/docs/*", httpSwagger.Handler(
-			httpSwagger.URL("/api/docs/doc.json"), //The url pointing to API definition
+			httpSwagger.URL("/docs/doc.json"), //The url pointing to API definition
 		))
 	})
 }

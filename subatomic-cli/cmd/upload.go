@@ -51,7 +51,7 @@ var uploadCmd = &cobra.Command{
 		pipeReader, pipeWriter := io.Pipe()
 		form := multipart.NewWriter(pipeWriter)
 
-		req, err := http.NewRequest(http.MethodPut, server+"/api/repos/"+repoID, pipeReader)
+		req, err := http.NewRequest(http.MethodPut, server+"/repos/"+repoID, pipeReader)
 		if err != nil {
 			return err
 		}

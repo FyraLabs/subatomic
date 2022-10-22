@@ -26,7 +26,7 @@ var decoder *form.Decoder
 // @title       Subatomic
 // @version     1.0
 // @description A modern package delivery server.
-// @BasePath    /api
+// @BasePath    /
 
 // @license.name GPL3
 // @license.url  https://choosealicense.com/licenses/gpl-3.0/
@@ -61,7 +61,7 @@ func run() error {
 	}
 
 	// TODO: Auth
-	router := &mainRouter{
+	router := &apiRouter{
 		database:         client,
 		enviroment:       &enviroment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
