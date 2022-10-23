@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/go-chi/jwtauth/v5"
@@ -22,6 +25,21 @@ type apiRouter struct {
 
 func (router *apiRouter) setup() {
 	router.Mux = chi.NewRouter()
+
+	router.Use(middleware.Logger)
+	router.Use(middleware.Heartbeat("/heartbeat"))
+	router.Use(middleware.Recoverer)
+
+	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		if err := render.Render(w, r, types.ErrNotFound(errors.New("route not found"))); err != err {
+			panic(err)
+		}
+	})
+	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		if err := render.Render(w, r, types.MethodNotAllowed(errors.New("method not allowed for route"))); err != err {
+			panic(err)
+		}
+	})
 
 	// Authenticated
 	router.Group(func(r chi.Router) {

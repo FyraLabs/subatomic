@@ -38,6 +38,15 @@ func ErrNotFound(err error) render.Renderer {
 	}
 }
 
+func MethodNotAllowed(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 405,
+		StatusText:     "Method not allowed.",
+		ErrorText:      err.Error(),
+	}
+}
+
 func ErrAlreadyExists(err error) render.Renderer {
 	return &ErrResponse{
 		Err:            err,
