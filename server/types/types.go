@@ -6,6 +6,8 @@ import (
 	"github.com/go-chi/render"
 )
 
+type ValidateContextKey struct{}
+
 type ErrResponse struct {
 	Err            error `json:"-"` // low-level runtime error
 	HTTPStatusCode int   `json:"-"` // http response status code

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -29,6 +30,13 @@ func (router *apiRouter) setup() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Heartbeat("/heartbeat"))
 	router.Use(middleware.Recoverer)
+
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), types.ValidateContextKey{}, validate)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if err := render.Render(w, r, types.ErrNotFound(errors.New("route not found"))); err != err {

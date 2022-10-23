@@ -58,17 +58,12 @@ func (router *reposRouter) setup() {
 	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
 }
 
-type repoResponse struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-}
-
 // getRepos godoc
 // @Summary     Get all repos
 // @Description get repos
 // @Tags        repos
 // @Produce     json
-// @Success     200 {array} repoResponse
+// @Success     200 {array} types.RepoResponse
 // @Router      /repos [get]
 func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 	repos, err := router.database.Repo.Query().All(r.Context())
@@ -77,8 +72,8 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	res := lo.Map(repos, func(repo *ent.Repo, _ int) *repoResponse {
-		return &repoResponse{
+	res := lo.Map(repos, func(repo *ent.Repo, _ int) *types.RepoResponse {
+		return &types.RepoResponse{
 			ID:   repo.ID,
 			Type: string(repo.Type),
 		}
@@ -87,27 +82,18 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, res)
 }
 
-type createRepoPayload struct {
-	ID       string `json:"id" validate:"required,alphanum"`
-	RepoType string `json:"type" validate:"required,oneof='rpm' 'ostree'"`
-}
-
-func (u *createRepoPayload) Bind(r *http.Request) error {
-	return validate.Struct(u)
-}
-
 // createRepo godoc
 // @Summary     Create a new repo
 // @Description create repo
 // @Tags        repos
 // @Accept      json
-// @Param       body body createRepoPayload true "options for the new repository"
+// @Param       body body types.CreateRepoPayload true "options for the new repository"
 // @Success     200
 // @Failure     400 {object} types.ErrResponse
 // @Failure     409 {object} types.ErrResponse
 // @Router      /repos [post]
 func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
-	payload := &createRepoPayload{}
+	payload := &types.CreateRepoPayload{}
 
 	if err := render.Bind(r, payload); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
@@ -405,33 +391,12 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// TODO: maybe we could add support for other package types
-type rpmResponse struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Epoch    int    `json:"epoch"`
-	Version  string `json:"version"`
-	Release  string `json:"release"`
-	Arch     string `json:"arch"`
-	FilePath string `json:"file_path"`
-}
-
-type queryRpmParams struct {
-	Name         *string `form:"name"`
-	NameContains *string `form:"name_contains"`
-	Epoch        *int    `form:"epoch"`
-	Version      *string `form:"version"`
-	Release      *string `form:"release"`
-	Arch         *string `form:"arch"`
-	FilePath     *string `json:"file_path"`
-}
-
 // getRPMs godoc
 // @Summary     Get list of RPMs in a repo
 // @Description rpms in repo
 // @Tags        repos
 // @Param       id path string true "id for the repository"
-// @Success     200
+// @Success     200 {object} []types.RpmResponse
 // @Failure     404 {object} types.ErrResponse
 // @Router      /repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
@@ -441,7 +406,7 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := &queryRpmParams{}
+	query := &types.QueryRpmParams{}
 
 	if err := decoder.Decode(query, r.URL.Query()); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
@@ -506,8 +471,8 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	res := lo.Map(rpms, func(pkg *ent.RpmPackage, _ int) *rpmResponse {
-		return &rpmResponse{
+	res := lo.Map(rpms, func(pkg *ent.RpmPackage, _ int) *types.RpmResponse {
+		return &types.RpmResponse{
 			ID:       pkg.ID,
 			Name:     pkg.Name,
 			Epoch:    pkg.Epoch,
@@ -636,20 +601,12 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type setKeyPayload struct {
-	ID string `json:"id" validate:"required,alphanum"`
-}
-
-func (u *setKeyPayload) Bind(r *http.Request) error {
-	return validate.Struct(u)
-}
-
 // setRepoKey godoc
 // @Summary     Set key for a repo
 // @Description set repo key
 // @Tags        repos
 // @Param       id   path string            true "id for the repository"
-// @Param       body body createRepoPayload true "options for the new repository"
+// @Param       body body types.CreateRepoPayload true "options for the new repository"
 // @Produce     json
 // @Success     204
 // @Failure     404 {object} types.ErrResponse
@@ -675,7 +632,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	payload := &setKeyPayload{}
+	payload := &types.SetKeyPayload{}
 	if err := render.Bind(r, payload); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
