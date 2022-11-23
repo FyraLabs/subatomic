@@ -40,6 +40,7 @@ func (RpmPackage) Indexes() []ent.Index {
 			Edges("repo").
 			Unique(),
 		index.Fields("name", "epoch", "version", "release", "arch").
+			Edges("repo").
 			Unique(),
 	}
 }

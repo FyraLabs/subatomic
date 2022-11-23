@@ -59,9 +59,9 @@ var (
 				Columns: []*schema.Column{RpmPackagesColumns[6], RpmPackagesColumns[7]},
 			},
 			{
-				Name:    "rpmpackage_name_epoch_version_release_arch",
+				Name:    "rpmpackage_name_epoch_version_release_arch_repo_rpms",
 				Unique:  true,
-				Columns: []*schema.Column{RpmPackagesColumns[1], RpmPackagesColumns[2], RpmPackagesColumns[3], RpmPackagesColumns[4], RpmPackagesColumns[5]},
+				Columns: []*schema.Column{RpmPackagesColumns[1], RpmPackagesColumns[2], RpmPackagesColumns[3], RpmPackagesColumns[4], RpmPackagesColumns[5], RpmPackagesColumns[7]},
 			},
 		},
 	}
