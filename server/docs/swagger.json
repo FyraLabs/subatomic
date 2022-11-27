@@ -10,7 +10,7 @@
         },
         "version": "1.0"
     },
-    "basePath": "/api",
+    "basePath": "/",
     "paths": {
         "/keys": {
             "get": {
@@ -127,7 +127,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/main.repoResponse"
+                                "$ref": "#/definitions/types.RepoResponse"
                             }
                         }
                     }
@@ -149,7 +149,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.createRepoPayload"
+                            "$ref": "#/definitions/types.CreateRepoPayload"
                         }
                     }
                 ],
@@ -363,7 +363,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.createRepoPayload"
+                            "$ref": "#/definitions/types.CreateRepoPayload"
                         }
                     }
                 ],
@@ -460,7 +460,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK"
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.RpmResponse"
+                            }
+                        }
                     },
                     "404": {
                         "description": "Not Found",
@@ -528,25 +534,6 @@
                 }
             }
         },
-        "main.createRepoPayload": {
-            "type": "object",
-            "required": [
-                "id",
-                "type"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "rpm",
-                        "ostree"
-                    ]
-                }
-            }
-        },
         "main.fullKeyResponse": {
             "type": "object",
             "properties": {
@@ -578,14 +565,22 @@
                 }
             }
         },
-        "main.repoResponse": {
+        "types.CreateRepoPayload": {
             "type": "object",
+            "required": [
+                "id",
+                "type"
+            ],
             "properties": {
                 "id": {
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "rpm",
+                        "ostree"
+                    ]
                 }
             }
         },
@@ -602,6 +597,43 @@
                 },
                 "status": {
                     "description": "user-level status message",
+                    "type": "string"
+                }
+            }
+        },
+        "types.RepoResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.RpmResponse": {
+            "type": "object",
+            "properties": {
+                "arch": {
+                    "type": "string"
+                },
+                "epoch": {
+                    "type": "integer"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "release": {
+                    "type": "string"
+                },
+                "version": {
                     "type": "string"
                 }
             }

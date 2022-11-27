@@ -1,4 +1,4 @@
-basePath: /api
+basePath: /
 definitions:
   main.createKeyPayload:
     properties:
@@ -12,19 +12,6 @@ definitions:
     - email
     - id
     - name
-    type: object
-  main.createRepoPayload:
-    properties:
-      id:
-        type: string
-      type:
-        enum:
-        - rpm
-        - ostree
-        type: string
-    required:
-    - id
-    - type
     type: object
   main.fullKeyResponse:
     properties:
@@ -46,12 +33,18 @@ definitions:
       name:
         type: string
     type: object
-  main.repoResponse:
+  types.CreateRepoPayload:
     properties:
       id:
         type: string
       type:
+        enum:
+        - rpm
+        - ostree
         type: string
+    required:
+    - id
+    - type
     type: object
   types.ErrResponse:
     properties:
@@ -63,6 +56,30 @@ definitions:
         type: string
       status:
         description: user-level status message
+        type: string
+    type: object
+  types.RepoResponse:
+    properties:
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  types.RpmResponse:
+    properties:
+      arch:
+        type: string
+      epoch:
+        type: integer
+      file_path:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      release:
+        type: string
+      version:
         type: string
     type: object
 info:
@@ -149,7 +166,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/main.repoResponse'
+              $ref: '#/definitions/types.RepoResponse'
             type: array
       summary: Get all repos
       tags:
@@ -164,7 +181,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.createRepoPayload'
+          $ref: '#/definitions/types.CreateRepoPayload'
       responses:
         "200":
           description: OK
@@ -324,7 +341,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.createRepoPayload'
+          $ref: '#/definitions/types.CreateRepoPayload'
       produces:
       - application/json
       responses:
@@ -370,6 +387,10 @@ paths:
       responses:
         "200":
           description: OK
+          schema:
+            items:
+              $ref: '#/definitions/types.RpmResponse'
+            type: array
         "404":
           description: Not Found
           schema:

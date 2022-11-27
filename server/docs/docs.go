@@ -135,7 +135,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/main.repoResponse"
+                                "$ref": "#/definitions/types.RepoResponse"
                             }
                         }
                     }
@@ -157,7 +157,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.createRepoPayload"
+                            "$ref": "#/definitions/types.CreateRepoPayload"
                         }
                     }
                 ],
@@ -371,7 +371,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.createRepoPayload"
+                            "$ref": "#/definitions/types.CreateRepoPayload"
                         }
                     }
                 ],
@@ -468,7 +468,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK"
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/types.RpmResponse"
+                            }
+                        }
                     },
                     "404": {
                         "description": "Not Found",
@@ -536,25 +542,6 @@ const docTemplate = `{
                 }
             }
         },
-        "main.createRepoPayload": {
-            "type": "object",
-            "required": [
-                "id",
-                "type"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "rpm",
-                        "ostree"
-                    ]
-                }
-            }
-        },
         "main.fullKeyResponse": {
             "type": "object",
             "properties": {
@@ -586,14 +573,22 @@ const docTemplate = `{
                 }
             }
         },
-        "main.repoResponse": {
+        "types.CreateRepoPayload": {
             "type": "object",
+            "required": [
+                "id",
+                "type"
+            ],
             "properties": {
                 "id": {
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "rpm",
+                        "ostree"
+                    ]
                 }
             }
         },
@@ -613,6 +608,43 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "types.RepoResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.RpmResponse": {
+            "type": "object",
+            "properties": {
+                "arch": {
+                    "type": "string"
+                },
+                "epoch": {
+                    "type": "integer"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "release": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
         }
     },
     "securityDefinitions": {
@@ -628,7 +660,7 @@ const docTemplate = `{
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
 	Host:             "",
-	BasePath:         "/api",
+	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Subatomic",
 	Description:      "A modern package delivery server.",
