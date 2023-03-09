@@ -59,12 +59,12 @@ func (router *reposRouter) setup() {
 }
 
 // getRepos godoc
-// @Summary     Get all repos
-// @Description get repos
-// @Tags        repos
-// @Produce     json
-// @Success     200 {array} types.RepoResponse
-// @Router      /repos [get]
+//	@Summary		Get all repos
+//	@Description	get repos
+//	@Tags			repos
+//	@Produce		json
+//	@Success		200	{array}	types.RepoResponse
+//	@Router			/repos [get]
 func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 	repos, err := router.database.Repo.Query().All(r.Context())
 
@@ -83,15 +83,15 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 // createRepo godoc
-// @Summary     Create a new repo
-// @Description create repo
-// @Tags        repos
-// @Accept      json
-// @Param       body body types.CreateRepoPayload true "options for the new repository"
-// @Success     200
-// @Failure     400 {object} types.ErrResponse
-// @Failure     409 {object} types.ErrResponse
-// @Router      /repos [post]
+//	@Summary		Create a new repo
+//	@Description	create repo
+//	@Tags			repos
+//	@Accept			json
+//	@Param			body	body	types.CreateRepoPayload	true	"options for the new repository"
+//	@Success		200
+//	@Failure		400	{object}	types.ErrResponse
+//	@Failure		409	{object}	types.ErrResponse
+//	@Router			/repos [post]
 func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 	payload := &types.CreateRepoPayload{}
 
@@ -140,13 +140,13 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRepo godoc
-// @Summary     Delete a repo
-// @Description delete repo
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Success     200
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id} [delete]
+//	@Summary		Delete a repo
+//	@Description	delete repo
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Success		200
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id} [delete]
 func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -183,16 +183,16 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // uploadToRepo godoc
-// @Summary     Upload files to a repo
-// @Description upload to repo
-// @Tags        repos
-// @Param       id          path     string true "id for the repository"
-// @Param       file_upload formData string true "files to upload to this reposiutory"
-// @Accept      mpfd
-// @Success     200
-// @Failure     400 {object} types.ErrResponse
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id} [put]
+//	@Summary		Upload files to a repo
+//	@Description	upload to repo
+//	@Tags			repos
+//	@Param			id			path		string	true	"id for the repository"
+//	@Param			file_upload	formData	string	true	"files to upload to this reposiutory"
+//	@Accept			mpfd
+//	@Success		200
+//	@Failure		400	{object}	types.ErrResponse
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id} [put]
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -392,13 +392,13 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 }
 
 // getRPMs godoc
-// @Summary     Get list of RPMs in a repo
-// @Description rpms in repo
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Success     200 {object} []types.RpmResponse
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/rpms [get]
+//	@Summary		Get list of RPMs in a repo
+//	@Description	rpms in repo
+//	@Tags			repos
+//	@Param			id	path		string	true	"id for the repository"
+//	@Success		200	{object}	[]types.RpmResponse
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -487,14 +487,14 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRPM godoc
-// @Summary     Delete RPM in a repo
-// @Description delete rpm
-// @Tags        repos
-// @Param       id    path string true "id for the repository"
-// @Param       rpmID path string true "rpm id in the repository"
-// @Success     200
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/rpms/{rpmID} [delete]
+//	@Summary		Delete RPM in a repo
+//	@Description	delete rpm
+//	@Tags			repos
+//	@Param			id		path	string	true	"id for the repository"
+//	@Param			rpmID	path	string	true	"rpm id in the repository"
+//	@Success		200
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/rpms/{rpmID} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -556,14 +556,14 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 }
 
 // getRepoKey godoc
-// @Summary     Get key for a repo
-// @Description get repo key
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Produce     json
-// @Success     200 {object} fullKeyResponse
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/key [get]
+//	@Summary		Get key for a repo
+//	@Description	get repo key
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		200	{object}	fullKeyResponse
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/key [get]
 func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -602,15 +602,15 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // setRepoKey godoc
-// @Summary     Set key for a repo
-// @Description set repo key
-// @Tags        repos
-// @Param       id   path string            true "id for the repository"
-// @Param       body body types.CreateRepoPayload true "options for the new repository"
-// @Produce     json
-// @Success     204
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/key [put]
+//	@Summary		Set key for a repo
+//	@Description	set repo key
+//	@Tags			repos
+//	@Param			id		path	string					true	"id for the repository"
+//	@Param			body	body	types.CreateRepoPayload	true	"options for the new repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/key [put]
 func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -665,14 +665,14 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRepoKey godoc
-// @Summary     Delete key for a repo
-// @Description delete repo key
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Produce     json
-// @Success     204
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/key [delete]
+//	@Summary		Delete key for a repo
+//	@Description	delete repo key
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/key [delete]
 func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -710,14 +710,14 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 }
 
 // resign godoc
-// @Summary     Resign packages in a repo
-// @Description resign repo packages
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Produce     json
-// @Success     204
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/resign [post]
+//	@Summary		Resign packages in a repo
+//	@Description	resign repo packages
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/resign [post]
 func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -797,14 +797,14 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 }
 
 // putComps godoc
-// @Summary     Push a RPM comps file
-// @Description push rpm comps
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Produce     json
-// @Success     204
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/comps [put]
+//	@Summary		Push a RPM comps file
+//	@Description	push rpm comps
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/comps [put]
 func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {
@@ -890,14 +890,14 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteComps godoc
-// @Summary     Delete the RPM comps file
-// @Description delete4 rpm comps
-// @Tags        repos
-// @Param       id path string true "id for the repository"
-// @Produce     json
-// @Success     204
-// @Failure     404 {object} types.ErrResponse
-// @Router      /repos/{id}/comps [delete]
+//	@Summary		Delete the RPM comps file
+//	@Description	delete4 rpm comps
+//	@Tags			repos
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/comps [delete]
 func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
 	if err := validate.Var(id, "required,alphanum"); err != nil {

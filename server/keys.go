@@ -34,12 +34,12 @@ type keyResponse struct {
 }
 
 // getKeys godoc
-// @Summary     Get all keys
-// @Description get keys
-// @Tags        keys
-// @Produce     json
-// @Success     200 {array} keyResponse
-// @Router      /keys [get]
+//	@Summary		Get all keys
+//	@Description	get keys
+//	@Tags			keys
+//	@Produce		json
+//	@Success		200	{array}	keyResponse
+//	@Router			/keys [get]
 func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
 	keys, err := router.database.SigningKey.Query().All(r.Context())
 
@@ -69,15 +69,15 @@ func (u *createKeyPayload) Bind(r *http.Request) error {
 }
 
 // createKey godoc
-// @Summary     Create a new key
-// @Description create key
-// @Tags        keys
-// @Accept      json
-// @Param       body body createKeyPayload true "options for the new key"
-// @Success     200
-// @Failure     400 {object} types.ErrResponse
-// @Failure     409 {object} types.ErrResponse
-// @Router      /keys [post]
+//	@Summary		Create a new key
+//	@Description	create key
+//	@Tags			keys
+//	@Accept			json
+//	@Param			body	body	createKeyPayload	true	"options for the new key"
+//	@Success		200
+//	@Failure		400	{object}	types.ErrResponse
+//	@Failure		409	{object}	types.ErrResponse
+//	@Router			/keys [post]
 func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 	payload := &createKeyPayload{}
 
@@ -127,15 +127,15 @@ type fullKeyResponse struct {
 }
 
 // getKey godoc
-// @Summary     Get a key
-// @Description get key
-// @Tags        keys
-// @Param       id path string true "id for the key"
-// @Accept      json
-// @Success     200
-// @Failure     400 {object} types.ErrResponse
-// @Failure     409 {object} types.ErrResponse
-// @Router      /keys/{id} [get]
+//	@Summary		Get a key
+//	@Description	get key
+//	@Tags			keys
+//	@Param			id	path	string	true	"id for the key"
+//	@Accept			json
+//	@Success		200
+//	@Failure		400	{object}	types.ErrResponse
+//	@Failure		409	{object}	types.ErrResponse
+//	@Router			/keys/{id} [get]
 func (router *keysRouter) getKey(w http.ResponseWriter, r *http.Request) {
 	keyID := chi.URLParam(r, "keyID")
 	if err := validate.Var(keyID, "required,alphanum"); err != nil {

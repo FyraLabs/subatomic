@@ -23,17 +23,17 @@ import (
 var validate *validator.Validate
 var decoder *form.Decoder
 
-// @title       Subatomic
-// @version     1.0
-// @description A modern package delivery server.
-// @BasePath    /
+//	@title			Subatomic
+//	@version		1.0
+//	@description	A modern package delivery server.
+//	@BasePath		/
 
-// @license.name GPL3
-// @license.url  https://choosealicense.com/licenses/gpl-3.0/
+//	@license.name	GPL3
+//	@license.url	https://choosealicense.com/licenses/gpl-3.0/
 
-// @securityDefinitions.apikey
-// @in   header
-// @name Authorization
+//	@securityDefinitions.apikey
+//	@in		header
+//	@name	Authorization
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
