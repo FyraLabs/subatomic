@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"fmt"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -28,34 +27,7 @@ func (skd *SigningKeyDelete) Where(ps ...predicate.SigningKey) *SigningKeyDelete
 
 // Exec executes the deletion query and returns how many vertices were deleted.
 func (skd *SigningKeyDelete) Exec(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(skd.hooks) == 0 {
-		affected, err = skd.sqlExec(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*SigningKeyMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			skd.mutation = mutation
-			affected, err = skd.sqlExec(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(skd.hooks) - 1; i >= 0; i-- {
-			if skd.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = skd.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, skd.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, SigningKeyMutation](ctx, skd.sqlExec, skd.mutation, skd.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
@@ -68,15 +40,7 @@ func (skd *SigningKeyDelete) ExecX(ctx context.Context) int {
 }
 
 func (skd *SigningKeyDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := &sqlgraph.DeleteSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table: signingkey.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: signingkey.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewDeleteSpec(signingkey.Table, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
 	if ps := skd.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -88,12 +52,19 @@ func (skd *SigningKeyDelete) sqlExec(ctx context.Context) (int, error) {
 	if err != nil && sqlgraph.IsConstraintError(err) {
 		err = &ConstraintError{msg: err.Error(), wrap: err}
 	}
+	skd.mutation.done = true
 	return affected, err
 }
 
 // SigningKeyDeleteOne is the builder for deleting a single SigningKey entity.
 type SigningKeyDeleteOne struct {
 	skd *SigningKeyDelete
+}
+
+// Where appends a list predicates to the SigningKeyDelete builder.
+func (skdo *SigningKeyDeleteOne) Where(ps ...predicate.SigningKey) *SigningKeyDeleteOne {
+	skdo.skd.mutation.Where(ps...)
+	return skdo
 }
 
 // Exec executes the deletion query.
@@ -111,5 +82,7 @@ func (skdo *SigningKeyDeleteOne) Exec(ctx context.Context) error {
 
 // ExecX is like Exec, but panics if an error occurs.
 func (skdo *SigningKeyDeleteOne) ExecX(ctx context.Context) {
-	skdo.skd.ExecX(ctx)
+	if err := skdo.Exec(ctx); err != nil {
+		panic(err)
+	}
 }

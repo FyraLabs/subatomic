@@ -95,34 +95,7 @@ func (sku *SigningKeyUpdate) RemoveRepo(r ...*Repo) *SigningKeyUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (sku *SigningKeyUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(sku.hooks) == 0 {
-		affected, err = sku.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*SigningKeyMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			sku.mutation = mutation
-			affected, err = sku.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(sku.hooks) - 1; i >= 0; i-- {
-			if sku.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = sku.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, sku.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, SigningKeyMutation](ctx, sku.sqlSave, sku.mutation, sku.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -148,16 +121,7 @@ func (sku *SigningKeyUpdate) ExecX(ctx context.Context) {
 }
 
 func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   signingkey.Table,
-			Columns: signingkey.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: signingkey.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(signingkey.Table, signingkey.Columns, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
 	if ps := sku.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -166,32 +130,16 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := sku.mutation.PrivateKey(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPrivateKey,
-		})
+		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 	}
 	if value, ok := sku.mutation.PublicKey(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPublicKey,
-		})
+		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 	}
 	if value, ok := sku.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldName,
-		})
+		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 	}
 	if value, ok := sku.mutation.Email(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldEmail,
-		})
+		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 	}
 	if sku.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -255,6 +203,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	sku.mutation.done = true
 	return n, nil
 }
 
@@ -331,6 +280,12 @@ func (skuo *SigningKeyUpdateOne) RemoveRepo(r ...*Repo) *SigningKeyUpdateOne {
 	return skuo.RemoveRepoIDs(ids...)
 }
 
+// Where appends a list predicates to the SigningKeyUpdate builder.
+func (skuo *SigningKeyUpdateOne) Where(ps ...predicate.SigningKey) *SigningKeyUpdateOne {
+	skuo.mutation.Where(ps...)
+	return skuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (skuo *SigningKeyUpdateOne) Select(field string, fields ...string) *SigningKeyUpdateOne {
@@ -340,40 +295,7 @@ func (skuo *SigningKeyUpdateOne) Select(field string, fields ...string) *Signing
 
 // Save executes the query and returns the updated SigningKey entity.
 func (skuo *SigningKeyUpdateOne) Save(ctx context.Context) (*SigningKey, error) {
-	var (
-		err  error
-		node *SigningKey
-	)
-	if len(skuo.hooks) == 0 {
-		node, err = skuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*SigningKeyMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			skuo.mutation = mutation
-			node, err = skuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(skuo.hooks) - 1; i >= 0; i-- {
-			if skuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = skuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, skuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*SigningKey)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from SigningKeyMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*SigningKey, SigningKeyMutation](ctx, skuo.sqlSave, skuo.mutation, skuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -399,16 +321,7 @@ func (skuo *SigningKeyUpdateOne) ExecX(ctx context.Context) {
 }
 
 func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   signingkey.Table,
-			Columns: signingkey.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: signingkey.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(signingkey.Table, signingkey.Columns, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
 	id, ok := skuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "SigningKey.id" for update`)}
@@ -434,32 +347,16 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 	}
 	if value, ok := skuo.mutation.PrivateKey(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPrivateKey,
-		})
+		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 	}
 	if value, ok := skuo.mutation.PublicKey(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPublicKey,
-		})
+		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 	}
 	if value, ok := skuo.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldName,
-		})
+		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 	}
 	if value, ok := skuo.mutation.Email(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldEmail,
-		})
+		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 	}
 	if skuo.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -526,5 +423,6 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 		return nil, err
 	}
+	skuo.mutation.done = true
 	return _node, nil
 }

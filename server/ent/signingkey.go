@@ -47,8 +47,8 @@ func (e SigningKeyEdges) RepoOrErr() ([]*Repo, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*SigningKey) scanValues(columns []string) ([]interface{}, error) {
-	values := make([]interface{}, len(columns))
+func (*SigningKey) scanValues(columns []string) ([]any, error) {
+	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
 		case signingkey.FieldID, signingkey.FieldPrivateKey, signingkey.FieldPublicKey, signingkey.FieldName, signingkey.FieldEmail:
@@ -62,7 +62,7 @@ func (*SigningKey) scanValues(columns []string) ([]interface{}, error) {
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
 // to the SigningKey fields.
-func (sk *SigningKey) assignValues(columns []string, values []interface{}) error {
+func (sk *SigningKey) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
@@ -105,14 +105,14 @@ func (sk *SigningKey) assignValues(columns []string, values []interface{}) error
 
 // QueryRepo queries the "repo" edge of the SigningKey entity.
 func (sk *SigningKey) QueryRepo() *RepoQuery {
-	return (&SigningKeyClient{config: sk.config}).QueryRepo(sk)
+	return NewSigningKeyClient(sk.config).QueryRepo(sk)
 }
 
 // Update returns a builder for updating this SigningKey.
 // Note that you need to call SigningKey.Unwrap() before calling this method if this SigningKey
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (sk *SigningKey) Update() *SigningKeyUpdateOne {
-	return (&SigningKeyClient{config: sk.config}).UpdateOne(sk)
+	return NewSigningKeyClient(sk.config).UpdateOne(sk)
 }
 
 // Unwrap unwraps the SigningKey entity that was returned from a transaction after it was closed,
@@ -148,9 +148,3 @@ func (sk *SigningKey) String() string {
 
 // SigningKeys is a parsable slice of SigningKey.
 type SigningKeys []*SigningKey
-
-func (sk SigningKeys) config(cfg config) {
-	for _i := range sk {
-		sk[_i].config = cfg
-	}
-}

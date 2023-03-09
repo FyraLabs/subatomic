@@ -15,11 +15,10 @@ type RepoFunc func(context.Context, *ent.RepoMutation) (ent.Value, error)
 
 // Mutate calls f(ctx, m).
 func (f RepoFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	mv, ok := m.(*ent.RepoMutation)
-	if !ok {
-		return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RepoMutation", m)
+	if mv, ok := m.(*ent.RepoMutation); ok {
+		return f(ctx, mv)
 	}
-	return f(ctx, mv)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RepoMutation", m)
 }
 
 // The RpmPackageFunc type is an adapter to allow the use of ordinary
@@ -28,11 +27,10 @@ type RpmPackageFunc func(context.Context, *ent.RpmPackageMutation) (ent.Value, e
 
 // Mutate calls f(ctx, m).
 func (f RpmPackageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	mv, ok := m.(*ent.RpmPackageMutation)
-	if !ok {
-		return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RpmPackageMutation", m)
+	if mv, ok := m.(*ent.RpmPackageMutation); ok {
+		return f(ctx, mv)
 	}
-	return f(ctx, mv)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RpmPackageMutation", m)
 }
 
 // The SigningKeyFunc type is an adapter to allow the use of ordinary
@@ -41,11 +39,10 @@ type SigningKeyFunc func(context.Context, *ent.SigningKeyMutation) (ent.Value, e
 
 // Mutate calls f(ctx, m).
 func (f SigningKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	mv, ok := m.(*ent.SigningKeyMutation)
-	if !ok {
-		return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SigningKeyMutation", m)
+	if mv, ok := m.(*ent.SigningKeyMutation); ok {
+		return f(ctx, mv)
 	}
-	return f(ctx, mv)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SigningKeyMutation", m)
 }
 
 // Condition is a hook condition function.

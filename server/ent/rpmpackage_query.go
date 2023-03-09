@@ -18,11 +18,9 @@ import (
 // RpmPackageQuery is the builder for querying RpmPackage entities.
 type RpmPackageQuery struct {
 	config
-	limit      *int
-	offset     *int
-	unique     *bool
+	ctx        *QueryContext
 	order      []OrderFunc
-	fields     []string
+	inters     []Interceptor
 	predicates []predicate.RpmPackage
 	withRepo   *RepoQuery
 	withFKs    bool
@@ -37,26 +35,26 @@ func (rpq *RpmPackageQuery) Where(ps ...predicate.RpmPackage) *RpmPackageQuery {
 	return rpq
 }
 
-// Limit adds a limit step to the query.
+// Limit the number of records to be returned by this query.
 func (rpq *RpmPackageQuery) Limit(limit int) *RpmPackageQuery {
-	rpq.limit = &limit
+	rpq.ctx.Limit = &limit
 	return rpq
 }
 
-// Offset adds an offset step to the query.
+// Offset to start from.
 func (rpq *RpmPackageQuery) Offset(offset int) *RpmPackageQuery {
-	rpq.offset = &offset
+	rpq.ctx.Offset = &offset
 	return rpq
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
 func (rpq *RpmPackageQuery) Unique(unique bool) *RpmPackageQuery {
-	rpq.unique = &unique
+	rpq.ctx.Unique = &unique
 	return rpq
 }
 
-// Order adds an order step to the query.
+// Order specifies how the records should be ordered.
 func (rpq *RpmPackageQuery) Order(o ...OrderFunc) *RpmPackageQuery {
 	rpq.order = append(rpq.order, o...)
 	return rpq
@@ -64,7 +62,7 @@ func (rpq *RpmPackageQuery) Order(o ...OrderFunc) *RpmPackageQuery {
 
 // QueryRepo chains the current query on the "repo" edge.
 func (rpq *RpmPackageQuery) QueryRepo() *RepoQuery {
-	query := &RepoQuery{config: rpq.config}
+	query := (&RepoClient{config: rpq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := rpq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -87,7 +85,7 @@ func (rpq *RpmPackageQuery) QueryRepo() *RepoQuery {
 // First returns the first RpmPackage entity from the query.
 // Returns a *NotFoundError when no RpmPackage was found.
 func (rpq *RpmPackageQuery) First(ctx context.Context) (*RpmPackage, error) {
-	nodes, err := rpq.Limit(1).All(ctx)
+	nodes, err := rpq.Limit(1).All(setContextOp(ctx, rpq.ctx, "First"))
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +108,7 @@ func (rpq *RpmPackageQuery) FirstX(ctx context.Context) *RpmPackage {
 // Returns a *NotFoundError when no RpmPackage ID was found.
 func (rpq *RpmPackageQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = rpq.Limit(1).IDs(ctx); err != nil {
+	if ids, err = rpq.Limit(1).IDs(setContextOp(ctx, rpq.ctx, "FirstID")); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -133,7 +131,7 @@ func (rpq *RpmPackageQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one RpmPackage entity is found.
 // Returns a *NotFoundError when no RpmPackage entities are found.
 func (rpq *RpmPackageQuery) Only(ctx context.Context) (*RpmPackage, error) {
-	nodes, err := rpq.Limit(2).All(ctx)
+	nodes, err := rpq.Limit(2).All(setContextOp(ctx, rpq.ctx, "Only"))
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +159,7 @@ func (rpq *RpmPackageQuery) OnlyX(ctx context.Context) *RpmPackage {
 // Returns a *NotFoundError when no entities are found.
 func (rpq *RpmPackageQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = rpq.Limit(2).IDs(ctx); err != nil {
+	if ids, err = rpq.Limit(2).IDs(setContextOp(ctx, rpq.ctx, "OnlyID")); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -186,10 +184,12 @@ func (rpq *RpmPackageQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of RpmPackages.
 func (rpq *RpmPackageQuery) All(ctx context.Context) ([]*RpmPackage, error) {
+	ctx = setContextOp(ctx, rpq.ctx, "All")
 	if err := rpq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	return rpq.sqlAll(ctx)
+	qr := querierAll[[]*RpmPackage, *RpmPackageQuery]()
+	return withInterceptors[[]*RpmPackage](ctx, rpq, qr, rpq.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
@@ -202,9 +202,12 @@ func (rpq *RpmPackageQuery) AllX(ctx context.Context) []*RpmPackage {
 }
 
 // IDs executes the query and returns a list of RpmPackage IDs.
-func (rpq *RpmPackageQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
-	if err := rpq.Select(rpmpackage.FieldID).Scan(ctx, &ids); err != nil {
+func (rpq *RpmPackageQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if rpq.ctx.Unique == nil && rpq.path != nil {
+		rpq.Unique(true)
+	}
+	ctx = setContextOp(ctx, rpq.ctx, "IDs")
+	if err = rpq.Select(rpmpackage.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -221,10 +224,11 @@ func (rpq *RpmPackageQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (rpq *RpmPackageQuery) Count(ctx context.Context) (int, error) {
+	ctx = setContextOp(ctx, rpq.ctx, "Count")
 	if err := rpq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return rpq.sqlCount(ctx)
+	return withInterceptors[int](ctx, rpq, querierCount[*RpmPackageQuery](), rpq.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
@@ -238,10 +242,15 @@ func (rpq *RpmPackageQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (rpq *RpmPackageQuery) Exist(ctx context.Context) (bool, error) {
-	if err := rpq.prepareQuery(ctx); err != nil {
-		return false, err
+	ctx = setContextOp(ctx, rpq.ctx, "Exist")
+	switch _, err := rpq.FirstID(ctx); {
+	case IsNotFound(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("ent: check existence: %w", err)
+	default:
+		return true, nil
 	}
-	return rpq.sqlExist(ctx)
 }
 
 // ExistX is like Exist, but panics if an error occurs.
@@ -261,22 +270,21 @@ func (rpq *RpmPackageQuery) Clone() *RpmPackageQuery {
 	}
 	return &RpmPackageQuery{
 		config:     rpq.config,
-		limit:      rpq.limit,
-		offset:     rpq.offset,
+		ctx:        rpq.ctx.Clone(),
 		order:      append([]OrderFunc{}, rpq.order...),
+		inters:     append([]Interceptor{}, rpq.inters...),
 		predicates: append([]predicate.RpmPackage{}, rpq.predicates...),
 		withRepo:   rpq.withRepo.Clone(),
 		// clone intermediate query.
-		sql:    rpq.sql.Clone(),
-		path:   rpq.path,
-		unique: rpq.unique,
+		sql:  rpq.sql.Clone(),
+		path: rpq.path,
 	}
 }
 
 // WithRepo tells the query-builder to eager-load the nodes that are connected to
 // the "repo" edge. The optional arguments are used to configure the query builder of the edge.
 func (rpq *RpmPackageQuery) WithRepo(opts ...func(*RepoQuery)) *RpmPackageQuery {
-	query := &RepoQuery{config: rpq.config}
+	query := (&RepoClient{config: rpq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -299,16 +307,11 @@ func (rpq *RpmPackageQuery) WithRepo(opts ...func(*RepoQuery)) *RpmPackageQuery 
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (rpq *RpmPackageQuery) GroupBy(field string, fields ...string) *RpmPackageGroupBy {
-	grbuild := &RpmPackageGroupBy{config: rpq.config}
-	grbuild.fields = append([]string{field}, fields...)
-	grbuild.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := rpq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return rpq.sqlQuery(ctx), nil
-	}
+	rpq.ctx.Fields = append([]string{field}, fields...)
+	grbuild := &RpmPackageGroupBy{build: rpq}
+	grbuild.flds = &rpq.ctx.Fields
 	grbuild.label = rpmpackage.Label
-	grbuild.flds, grbuild.scan = &grbuild.fields, grbuild.Scan
+	grbuild.scan = grbuild.Scan
 	return grbuild
 }
 
@@ -325,15 +328,30 @@ func (rpq *RpmPackageQuery) GroupBy(field string, fields ...string) *RpmPackageG
 //		Select(rpmpackage.FieldName).
 //		Scan(ctx, &v)
 func (rpq *RpmPackageQuery) Select(fields ...string) *RpmPackageSelect {
-	rpq.fields = append(rpq.fields, fields...)
-	selbuild := &RpmPackageSelect{RpmPackageQuery: rpq}
-	selbuild.label = rpmpackage.Label
-	selbuild.flds, selbuild.scan = &rpq.fields, selbuild.Scan
-	return selbuild
+	rpq.ctx.Fields = append(rpq.ctx.Fields, fields...)
+	sbuild := &RpmPackageSelect{RpmPackageQuery: rpq}
+	sbuild.label = rpmpackage.Label
+	sbuild.flds, sbuild.scan = &rpq.ctx.Fields, sbuild.Scan
+	return sbuild
+}
+
+// Aggregate returns a RpmPackageSelect configured with the given aggregations.
+func (rpq *RpmPackageQuery) Aggregate(fns ...AggregateFunc) *RpmPackageSelect {
+	return rpq.Select().Aggregate(fns...)
 }
 
 func (rpq *RpmPackageQuery) prepareQuery(ctx context.Context) error {
-	for _, f := range rpq.fields {
+	for _, inter := range rpq.inters {
+		if inter == nil {
+			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
+		}
+		if trv, ok := inter.(Traverser); ok {
+			if err := trv.Traverse(ctx, rpq); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range rpq.ctx.Fields {
 		if !rpmpackage.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
@@ -363,10 +381,10 @@ func (rpq *RpmPackageQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	if withFKs {
 		_spec.Node.Columns = append(_spec.Node.Columns, rpmpackage.ForeignKeys...)
 	}
-	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
+	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*RpmPackage).scanValues(nil, columns)
 	}
-	_spec.Assign = func(columns []string, values []interface{}) error {
+	_spec.Assign = func(columns []string, values []any) error {
 		node := &RpmPackage{config: rpq.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
@@ -403,6 +421,9 @@ func (rpq *RpmPackageQuery) loadRepo(ctx context.Context, query *RepoQuery, node
 		}
 		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
+	if len(ids) == 0 {
+		return nil
+	}
 	query.Where(repo.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -422,38 +443,22 @@ func (rpq *RpmPackageQuery) loadRepo(ctx context.Context, query *RepoQuery, node
 
 func (rpq *RpmPackageQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := rpq.querySpec()
-	_spec.Node.Columns = rpq.fields
-	if len(rpq.fields) > 0 {
-		_spec.Unique = rpq.unique != nil && *rpq.unique
+	_spec.Node.Columns = rpq.ctx.Fields
+	if len(rpq.ctx.Fields) > 0 {
+		_spec.Unique = rpq.ctx.Unique != nil && *rpq.ctx.Unique
 	}
 	return sqlgraph.CountNodes(ctx, rpq.driver, _spec)
 }
 
-func (rpq *RpmPackageQuery) sqlExist(ctx context.Context) (bool, error) {
-	n, err := rpq.sqlCount(ctx)
-	if err != nil {
-		return false, fmt.Errorf("ent: check existence: %w", err)
-	}
-	return n > 0, nil
-}
-
 func (rpq *RpmPackageQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   rpmpackage.Table,
-			Columns: rpmpackage.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: rpmpackage.FieldID,
-			},
-		},
-		From:   rpq.sql,
-		Unique: true,
-	}
-	if unique := rpq.unique; unique != nil {
+	_spec := sqlgraph.NewQuerySpec(rpmpackage.Table, rpmpackage.Columns, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
+	_spec.From = rpq.sql
+	if unique := rpq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if rpq.path != nil {
+		_spec.Unique = true
 	}
-	if fields := rpq.fields; len(fields) > 0 {
+	if fields := rpq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, rpmpackage.FieldID)
 		for i := range fields {
@@ -469,10 +474,10 @@ func (rpq *RpmPackageQuery) querySpec() *sqlgraph.QuerySpec {
 			}
 		}
 	}
-	if limit := rpq.limit; limit != nil {
+	if limit := rpq.ctx.Limit; limit != nil {
 		_spec.Limit = *limit
 	}
-	if offset := rpq.offset; offset != nil {
+	if offset := rpq.ctx.Offset; offset != nil {
 		_spec.Offset = *offset
 	}
 	if ps := rpq.order; len(ps) > 0 {
@@ -488,7 +493,7 @@ func (rpq *RpmPackageQuery) querySpec() *sqlgraph.QuerySpec {
 func (rpq *RpmPackageQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(rpq.driver.Dialect())
 	t1 := builder.Table(rpmpackage.Table)
-	columns := rpq.fields
+	columns := rpq.ctx.Fields
 	if len(columns) == 0 {
 		columns = rpmpackage.Columns
 	}
@@ -497,7 +502,7 @@ func (rpq *RpmPackageQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector = rpq.sql
 		selector.Select(selector.Columns(columns...)...)
 	}
-	if rpq.unique != nil && *rpq.unique {
+	if rpq.ctx.Unique != nil && *rpq.ctx.Unique {
 		selector.Distinct()
 	}
 	for _, p := range rpq.predicates {
@@ -506,12 +511,12 @@ func (rpq *RpmPackageQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	for _, p := range rpq.order {
 		p(selector)
 	}
-	if offset := rpq.offset; offset != nil {
+	if offset := rpq.ctx.Offset; offset != nil {
 		// limit is mandatory for offset clause. We start
 		// with default value, and override it below if needed.
 		selector.Offset(*offset).Limit(math.MaxInt32)
 	}
-	if limit := rpq.limit; limit != nil {
+	if limit := rpq.ctx.Limit; limit != nil {
 		selector.Limit(*limit)
 	}
 	return selector
@@ -519,13 +524,8 @@ func (rpq *RpmPackageQuery) sqlQuery(ctx context.Context) *sql.Selector {
 
 // RpmPackageGroupBy is the group-by builder for RpmPackage entities.
 type RpmPackageGroupBy struct {
-	config
 	selector
-	fields []string
-	fns    []AggregateFunc
-	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	build *RpmPackageQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
@@ -534,74 +534,77 @@ func (rpgb *RpmPackageGroupBy) Aggregate(fns ...AggregateFunc) *RpmPackageGroupB
 	return rpgb
 }
 
-// Scan applies the group-by query and scans the result into the given value.
-func (rpgb *RpmPackageGroupBy) Scan(ctx context.Context, v interface{}) error {
-	query, err := rpgb.path(ctx)
-	if err != nil {
+// Scan applies the selector query and scans the result into the given value.
+func (rpgb *RpmPackageGroupBy) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, rpgb.build.ctx, "GroupBy")
+	if err := rpgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	rpgb.sql = query
-	return rpgb.sqlScan(ctx, v)
+	return scanWithInterceptors[*RpmPackageQuery, *RpmPackageGroupBy](ctx, rpgb.build, rpgb, rpgb.build.inters, v)
 }
 
-func (rpgb *RpmPackageGroupBy) sqlScan(ctx context.Context, v interface{}) error {
-	for _, f := range rpgb.fields {
-		if !rpmpackage.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for group-by", f)}
-		}
+func (rpgb *RpmPackageGroupBy) sqlScan(ctx context.Context, root *RpmPackageQuery, v any) error {
+	selector := root.sqlQuery(ctx).Select()
+	aggregation := make([]string, 0, len(rpgb.fns))
+	for _, fn := range rpgb.fns {
+		aggregation = append(aggregation, fn(selector))
 	}
-	selector := rpgb.sqlQuery()
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(*rpgb.flds)+len(rpgb.fns))
+		for _, f := range *rpgb.flds {
+			columns = append(columns, selector.C(f))
+		}
+		columns = append(columns, aggregation...)
+		selector.Select(columns...)
+	}
+	selector.GroupBy(selector.Columns(*rpgb.flds...)...)
 	if err := selector.Err(); err != nil {
 		return err
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := rpgb.driver.Query(ctx, query, args, rows); err != nil {
+	if err := rpgb.build.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
 }
 
-func (rpgb *RpmPackageGroupBy) sqlQuery() *sql.Selector {
-	selector := rpgb.sql.Select()
-	aggregation := make([]string, 0, len(rpgb.fns))
-	for _, fn := range rpgb.fns {
-		aggregation = append(aggregation, fn(selector))
-	}
-	// If no columns were selected in a custom aggregation function, the default
-	// selection is the fields used for "group-by", and the aggregation functions.
-	if len(selector.SelectedColumns()) == 0 {
-		columns := make([]string, 0, len(rpgb.fields)+len(rpgb.fns))
-		for _, f := range rpgb.fields {
-			columns = append(columns, selector.C(f))
-		}
-		columns = append(columns, aggregation...)
-		selector.Select(columns...)
-	}
-	return selector.GroupBy(selector.Columns(rpgb.fields...)...)
-}
-
 // RpmPackageSelect is the builder for selecting fields of RpmPackage entities.
 type RpmPackageSelect struct {
 	*RpmPackageQuery
 	selector
-	// intermediate query (i.e. traversal path).
-	sql *sql.Selector
+}
+
+// Aggregate adds the given aggregation functions to the selector query.
+func (rps *RpmPackageSelect) Aggregate(fns ...AggregateFunc) *RpmPackageSelect {
+	rps.fns = append(rps.fns, fns...)
+	return rps
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (rps *RpmPackageSelect) Scan(ctx context.Context, v interface{}) error {
+func (rps *RpmPackageSelect) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, rps.ctx, "Select")
 	if err := rps.prepareQuery(ctx); err != nil {
 		return err
 	}
-	rps.sql = rps.RpmPackageQuery.sqlQuery(ctx)
-	return rps.sqlScan(ctx, v)
+	return scanWithInterceptors[*RpmPackageQuery, *RpmPackageSelect](ctx, rps.RpmPackageQuery, rps, rps.inters, v)
 }
 
-func (rps *RpmPackageSelect) sqlScan(ctx context.Context, v interface{}) error {
+func (rps *RpmPackageSelect) sqlScan(ctx context.Context, root *RpmPackageQuery, v any) error {
+	selector := root.sqlQuery(ctx)
+	aggregation := make([]string, 0, len(rps.fns))
+	for _, fn := range rps.fns {
+		aggregation = append(aggregation, fn(selector))
+	}
+	switch n := len(*rps.selector.flds); {
+	case n == 0 && len(aggregation) > 0:
+		selector.Select(aggregation...)
+	case n != 0 && len(aggregation) > 0:
+		selector.AppendSelect(aggregation...)
+	}
 	rows := &sql.Rows{}
-	query, args := rps.sql.Query()
+	query, args := selector.Query()
 	if err := rps.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}

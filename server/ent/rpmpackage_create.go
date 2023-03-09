@@ -82,49 +82,7 @@ func (rpc *RpmPackageCreate) Mutation() *RpmPackageMutation {
 
 // Save creates the RpmPackage in the database.
 func (rpc *RpmPackageCreate) Save(ctx context.Context) (*RpmPackage, error) {
-	var (
-		err  error
-		node *RpmPackage
-	)
-	if len(rpc.hooks) == 0 {
-		if err = rpc.check(); err != nil {
-			return nil, err
-		}
-		node, err = rpc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RpmPackageMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = rpc.check(); err != nil {
-				return nil, err
-			}
-			rpc.mutation = mutation
-			if node, err = rpc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(rpc.hooks) - 1; i >= 0; i-- {
-			if rpc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rpc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, rpc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*RpmPackage)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RpmPackageMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*RpmPackage, RpmPackageMutation](ctx, rpc.sqlSave, rpc.mutation, rpc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -178,6 +136,9 @@ func (rpc *RpmPackageCreate) check() error {
 }
 
 func (rpc *RpmPackageCreate) sqlSave(ctx context.Context) (*RpmPackage, error) {
+	if err := rpc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := rpc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, rpc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -187,66 +148,38 @@ func (rpc *RpmPackageCreate) sqlSave(ctx context.Context) (*RpmPackage, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	rpc.mutation.id = &_node.ID
+	rpc.mutation.done = true
 	return _node, nil
 }
 
 func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 	var (
 		_node = &RpmPackage{config: rpc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: rpmpackage.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: rpmpackage.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(rpmpackage.Table, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
 	)
 	if value, ok := rpc.mutation.Name(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldName,
-		})
+		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
 	if value, ok := rpc.mutation.Epoch(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: rpmpackage.FieldEpoch,
-		})
+		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 		_node.Epoch = value
 	}
 	if value, ok := rpc.mutation.Version(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldVersion,
-		})
+		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 		_node.Version = value
 	}
 	if value, ok := rpc.mutation.Release(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldRelease,
-		})
+		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 		_node.Release = value
 	}
 	if value, ok := rpc.mutation.Arch(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldArch,
-		})
+		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 		_node.Arch = value
 	}
 	if value, ok := rpc.mutation.FilePath(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldFilePath,
-		})
+		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 		_node.FilePath = value
 	}
 	if nodes := rpc.mutation.RepoIDs(); len(nodes) > 0 {

@@ -10,497 +10,327 @@ import (
 
 // ID filters vertices based on their ID field.
 func ID(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldID, id))
 }
 
 // IDEQ applies the EQ predicate on the ID field.
 func IDEQ(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldID, id))
 }
 
 // IDNEQ applies the NEQ predicate on the ID field.
 func IDNEQ(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldNEQ(FieldID, id))
 }
 
 // IDIn applies the In predicate on the ID field.
 func IDIn(ids ...string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		v := make([]interface{}, len(ids))
-		for i := range v {
-			v[i] = ids[i]
-		}
-		s.Where(sql.In(s.C(FieldID), v...))
-	})
+	return predicate.SigningKey(sql.FieldIn(FieldID, ids...))
 }
 
 // IDNotIn applies the NotIn predicate on the ID field.
 func IDNotIn(ids ...string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		v := make([]interface{}, len(ids))
-		for i := range v {
-			v[i] = ids[i]
-		}
-		s.Where(sql.NotIn(s.C(FieldID), v...))
-	})
+	return predicate.SigningKey(sql.FieldNotIn(FieldID, ids...))
 }
 
 // IDGT applies the GT predicate on the ID field.
 func IDGT(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldGT(FieldID, id))
 }
 
 // IDGTE applies the GTE predicate on the ID field.
 func IDGTE(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldGTE(FieldID, id))
 }
 
 // IDLT applies the LT predicate on the ID field.
 func IDLT(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldLT(FieldID, id))
 }
 
 // IDLTE applies the LTE predicate on the ID field.
 func IDLTE(id string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldID), id))
-	})
+	return predicate.SigningKey(sql.FieldLTE(FieldID, id))
 }
 
 // PrivateKey applies equality check predicate on the "private_key" field. It's identical to PrivateKeyEQ.
 func PrivateKey(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldPrivateKey, v))
 }
 
 // PublicKey applies equality check predicate on the "public_key" field. It's identical to PublicKeyEQ.
 func PublicKey(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldPublicKey, v))
 }
 
 // Name applies equality check predicate on the "name" field. It's identical to NameEQ.
 func Name(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldName, v))
 }
 
 // Email applies equality check predicate on the "email" field. It's identical to EmailEQ.
 func Email(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldEmail, v))
 }
 
 // PrivateKeyEQ applies the EQ predicate on the "private_key" field.
 func PrivateKeyEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldPrivateKey, v))
 }
 
 // PrivateKeyNEQ applies the NEQ predicate on the "private_key" field.
 func PrivateKeyNEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldNEQ(FieldPrivateKey, v))
 }
 
 // PrivateKeyIn applies the In predicate on the "private_key" field.
 func PrivateKeyIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.In(s.C(FieldPrivateKey), v...))
-	})
+	return predicate.SigningKey(sql.FieldIn(FieldPrivateKey, vs...))
 }
 
 // PrivateKeyNotIn applies the NotIn predicate on the "private_key" field.
 func PrivateKeyNotIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NotIn(s.C(FieldPrivateKey), v...))
-	})
+	return predicate.SigningKey(sql.FieldNotIn(FieldPrivateKey, vs...))
 }
 
 // PrivateKeyGT applies the GT predicate on the "private_key" field.
 func PrivateKeyGT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldGT(FieldPrivateKey, v))
 }
 
 // PrivateKeyGTE applies the GTE predicate on the "private_key" field.
 func PrivateKeyGTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldGTE(FieldPrivateKey, v))
 }
 
 // PrivateKeyLT applies the LT predicate on the "private_key" field.
 func PrivateKeyLT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldLT(FieldPrivateKey, v))
 }
 
 // PrivateKeyLTE applies the LTE predicate on the "private_key" field.
 func PrivateKeyLTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldLTE(FieldPrivateKey, v))
 }
 
 // PrivateKeyContains applies the Contains predicate on the "private_key" field.
 func PrivateKeyContains(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.Contains(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldContains(FieldPrivateKey, v))
 }
 
 // PrivateKeyHasPrefix applies the HasPrefix predicate on the "private_key" field.
 func PrivateKeyHasPrefix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasPrefix(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldHasPrefix(FieldPrivateKey, v))
 }
 
 // PrivateKeyHasSuffix applies the HasSuffix predicate on the "private_key" field.
 func PrivateKeyHasSuffix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasSuffix(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldHasSuffix(FieldPrivateKey, v))
 }
 
 // PrivateKeyEqualFold applies the EqualFold predicate on the "private_key" field.
 func PrivateKeyEqualFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EqualFold(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEqualFold(FieldPrivateKey, v))
 }
 
 // PrivateKeyContainsFold applies the ContainsFold predicate on the "private_key" field.
 func PrivateKeyContainsFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.ContainsFold(s.C(FieldPrivateKey), v))
-	})
+	return predicate.SigningKey(sql.FieldContainsFold(FieldPrivateKey, v))
 }
 
 // PublicKeyEQ applies the EQ predicate on the "public_key" field.
 func PublicKeyEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldPublicKey, v))
 }
 
 // PublicKeyNEQ applies the NEQ predicate on the "public_key" field.
 func PublicKeyNEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldNEQ(FieldPublicKey, v))
 }
 
 // PublicKeyIn applies the In predicate on the "public_key" field.
 func PublicKeyIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.In(s.C(FieldPublicKey), v...))
-	})
+	return predicate.SigningKey(sql.FieldIn(FieldPublicKey, vs...))
 }
 
 // PublicKeyNotIn applies the NotIn predicate on the "public_key" field.
 func PublicKeyNotIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NotIn(s.C(FieldPublicKey), v...))
-	})
+	return predicate.SigningKey(sql.FieldNotIn(FieldPublicKey, vs...))
 }
 
 // PublicKeyGT applies the GT predicate on the "public_key" field.
 func PublicKeyGT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldGT(FieldPublicKey, v))
 }
 
 // PublicKeyGTE applies the GTE predicate on the "public_key" field.
 func PublicKeyGTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldGTE(FieldPublicKey, v))
 }
 
 // PublicKeyLT applies the LT predicate on the "public_key" field.
 func PublicKeyLT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldLT(FieldPublicKey, v))
 }
 
 // PublicKeyLTE applies the LTE predicate on the "public_key" field.
 func PublicKeyLTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldLTE(FieldPublicKey, v))
 }
 
 // PublicKeyContains applies the Contains predicate on the "public_key" field.
 func PublicKeyContains(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.Contains(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldContains(FieldPublicKey, v))
 }
 
 // PublicKeyHasPrefix applies the HasPrefix predicate on the "public_key" field.
 func PublicKeyHasPrefix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasPrefix(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldHasPrefix(FieldPublicKey, v))
 }
 
 // PublicKeyHasSuffix applies the HasSuffix predicate on the "public_key" field.
 func PublicKeyHasSuffix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasSuffix(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldHasSuffix(FieldPublicKey, v))
 }
 
 // PublicKeyEqualFold applies the EqualFold predicate on the "public_key" field.
 func PublicKeyEqualFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EqualFold(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldEqualFold(FieldPublicKey, v))
 }
 
 // PublicKeyContainsFold applies the ContainsFold predicate on the "public_key" field.
 func PublicKeyContainsFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.ContainsFold(s.C(FieldPublicKey), v))
-	})
+	return predicate.SigningKey(sql.FieldContainsFold(FieldPublicKey, v))
 }
 
 // NameEQ applies the EQ predicate on the "name" field.
 func NameEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldName, v))
 }
 
 // NameNEQ applies the NEQ predicate on the "name" field.
 func NameNEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldNEQ(FieldName, v))
 }
 
 // NameIn applies the In predicate on the "name" field.
 func NameIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.In(s.C(FieldName), v...))
-	})
+	return predicate.SigningKey(sql.FieldIn(FieldName, vs...))
 }
 
 // NameNotIn applies the NotIn predicate on the "name" field.
 func NameNotIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NotIn(s.C(FieldName), v...))
-	})
+	return predicate.SigningKey(sql.FieldNotIn(FieldName, vs...))
 }
 
 // NameGT applies the GT predicate on the "name" field.
 func NameGT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldGT(FieldName, v))
 }
 
 // NameGTE applies the GTE predicate on the "name" field.
 func NameGTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldGTE(FieldName, v))
 }
 
 // NameLT applies the LT predicate on the "name" field.
 func NameLT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldLT(FieldName, v))
 }
 
 // NameLTE applies the LTE predicate on the "name" field.
 func NameLTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldLTE(FieldName, v))
 }
 
 // NameContains applies the Contains predicate on the "name" field.
 func NameContains(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.Contains(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldContains(FieldName, v))
 }
 
 // NameHasPrefix applies the HasPrefix predicate on the "name" field.
 func NameHasPrefix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasPrefix(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldHasPrefix(FieldName, v))
 }
 
 // NameHasSuffix applies the HasSuffix predicate on the "name" field.
 func NameHasSuffix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasSuffix(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldHasSuffix(FieldName, v))
 }
 
 // NameEqualFold applies the EqualFold predicate on the "name" field.
 func NameEqualFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EqualFold(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldEqualFold(FieldName, v))
 }
 
 // NameContainsFold applies the ContainsFold predicate on the "name" field.
 func NameContainsFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.ContainsFold(s.C(FieldName), v))
-	})
+	return predicate.SigningKey(sql.FieldContainsFold(FieldName, v))
 }
 
 // EmailEQ applies the EQ predicate on the "email" field.
 func EmailEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldEQ(FieldEmail, v))
 }
 
 // EmailNEQ applies the NEQ predicate on the "email" field.
 func EmailNEQ(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldNEQ(FieldEmail, v))
 }
 
 // EmailIn applies the In predicate on the "email" field.
 func EmailIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.In(s.C(FieldEmail), v...))
-	})
+	return predicate.SigningKey(sql.FieldIn(FieldEmail, vs...))
 }
 
 // EmailNotIn applies the NotIn predicate on the "email" field.
 func EmailNotIn(vs ...string) predicate.SigningKey {
-	v := make([]interface{}, len(vs))
-	for i := range v {
-		v[i] = vs[i]
-	}
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.NotIn(s.C(FieldEmail), v...))
-	})
+	return predicate.SigningKey(sql.FieldNotIn(FieldEmail, vs...))
 }
 
 // EmailGT applies the GT predicate on the "email" field.
 func EmailGT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldGT(FieldEmail, v))
 }
 
 // EmailGTE applies the GTE predicate on the "email" field.
 func EmailGTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldGTE(FieldEmail, v))
 }
 
 // EmailLT applies the LT predicate on the "email" field.
 func EmailLT(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldLT(FieldEmail, v))
 }
 
 // EmailLTE applies the LTE predicate on the "email" field.
 func EmailLTE(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldLTE(FieldEmail, v))
 }
 
 // EmailContains applies the Contains predicate on the "email" field.
 func EmailContains(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.Contains(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldContains(FieldEmail, v))
 }
 
 // EmailHasPrefix applies the HasPrefix predicate on the "email" field.
 func EmailHasPrefix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasPrefix(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldHasPrefix(FieldEmail, v))
 }
 
 // EmailHasSuffix applies the HasSuffix predicate on the "email" field.
 func EmailHasSuffix(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.HasSuffix(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldHasSuffix(FieldEmail, v))
 }
 
 // EmailEqualFold applies the EqualFold predicate on the "email" field.
 func EmailEqualFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.EqualFold(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldEqualFold(FieldEmail, v))
 }
 
 // EmailContainsFold applies the ContainsFold predicate on the "email" field.
 func EmailContainsFold(v string) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s.Where(sql.ContainsFold(s.C(FieldEmail), v))
-	})
+	return predicate.SigningKey(sql.FieldContainsFold(FieldEmail, v))
 }
 
 // HasRepo applies the HasEdge predicate on the "repo" edge.
@@ -508,7 +338,6 @@ func HasRepo() predicate.SigningKey {
 	return predicate.SigningKey(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(RepoTable, FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, true, RepoTable, RepoColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)

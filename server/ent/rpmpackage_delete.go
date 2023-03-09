@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"fmt"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -28,34 +27,7 @@ func (rpd *RpmPackageDelete) Where(ps ...predicate.RpmPackage) *RpmPackageDelete
 
 // Exec executes the deletion query and returns how many vertices were deleted.
 func (rpd *RpmPackageDelete) Exec(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(rpd.hooks) == 0 {
-		affected, err = rpd.sqlExec(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RpmPackageMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			rpd.mutation = mutation
-			affected, err = rpd.sqlExec(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(rpd.hooks) - 1; i >= 0; i-- {
-			if rpd.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rpd.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, rpd.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, RpmPackageMutation](ctx, rpd.sqlExec, rpd.mutation, rpd.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
@@ -68,15 +40,7 @@ func (rpd *RpmPackageDelete) ExecX(ctx context.Context) int {
 }
 
 func (rpd *RpmPackageDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := &sqlgraph.DeleteSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table: rpmpackage.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: rpmpackage.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewDeleteSpec(rpmpackage.Table, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
 	if ps := rpd.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -88,12 +52,19 @@ func (rpd *RpmPackageDelete) sqlExec(ctx context.Context) (int, error) {
 	if err != nil && sqlgraph.IsConstraintError(err) {
 		err = &ConstraintError{msg: err.Error(), wrap: err}
 	}
+	rpd.mutation.done = true
 	return affected, err
 }
 
 // RpmPackageDeleteOne is the builder for deleting a single RpmPackage entity.
 type RpmPackageDeleteOne struct {
 	rpd *RpmPackageDelete
+}
+
+// Where appends a list predicates to the RpmPackageDelete builder.
+func (rpdo *RpmPackageDeleteOne) Where(ps ...predicate.RpmPackage) *RpmPackageDeleteOne {
+	rpdo.rpd.mutation.Where(ps...)
+	return rpdo
 }
 
 // Exec executes the deletion query.
@@ -111,5 +82,7 @@ func (rpdo *RpmPackageDeleteOne) Exec(ctx context.Context) error {
 
 // ExecX is like Exec, but panics if an error occurs.
 func (rpdo *RpmPackageDeleteOne) ExecX(ctx context.Context) {
-	rpdo.rpd.ExecX(ctx)
+	if err := rpdo.Exec(ctx); err != nil {
+		panic(err)
+	}
 }

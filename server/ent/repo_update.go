@@ -103,40 +103,7 @@ func (ru *RepoUpdate) ClearKey() *RepoUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ru *RepoUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(ru.hooks) == 0 {
-		if err = ru.check(); err != nil {
-			return 0, err
-		}
-		affected, err = ru.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RepoMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ru.check(); err != nil {
-				return 0, err
-			}
-			ru.mutation = mutation
-			affected, err = ru.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(ru.hooks) - 1; i >= 0; i-- {
-			if ru.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ru.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, ru.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, RepoMutation](ctx, ru.sqlSave, ru.mutation, ru.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -172,16 +139,10 @@ func (ru *RepoUpdate) check() error {
 }
 
 func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   repo.Table,
-			Columns: repo.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: repo.FieldID,
-			},
-		},
+	if err := ru.check(); err != nil {
+		return n, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(repo.Table, repo.Columns, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
 	if ps := ru.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -190,11 +151,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := ru.mutation.GetType(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: repo.FieldType,
-		})
+		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 	}
 	if ru.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -293,6 +250,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	ru.mutation.done = true
 	return n, nil
 }
 
@@ -376,6 +334,12 @@ func (ruo *RepoUpdateOne) ClearKey() *RepoUpdateOne {
 	return ruo
 }
 
+// Where appends a list predicates to the RepoUpdate builder.
+func (ruo *RepoUpdateOne) Where(ps ...predicate.Repo) *RepoUpdateOne {
+	ruo.mutation.Where(ps...)
+	return ruo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (ruo *RepoUpdateOne) Select(field string, fields ...string) *RepoUpdateOne {
@@ -385,46 +349,7 @@ func (ruo *RepoUpdateOne) Select(field string, fields ...string) *RepoUpdateOne 
 
 // Save executes the query and returns the updated Repo entity.
 func (ruo *RepoUpdateOne) Save(ctx context.Context) (*Repo, error) {
-	var (
-		err  error
-		node *Repo
-	)
-	if len(ruo.hooks) == 0 {
-		if err = ruo.check(); err != nil {
-			return nil, err
-		}
-		node, err = ruo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RepoMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ruo.check(); err != nil {
-				return nil, err
-			}
-			ruo.mutation = mutation
-			node, err = ruo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(ruo.hooks) - 1; i >= 0; i-- {
-			if ruo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ruo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, ruo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Repo)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RepoMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Repo, RepoMutation](ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -460,16 +385,10 @@ func (ruo *RepoUpdateOne) check() error {
 }
 
 func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   repo.Table,
-			Columns: repo.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: repo.FieldID,
-			},
-		},
+	if err := ruo.check(); err != nil {
+		return _node, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(repo.Table, repo.Columns, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
 	id, ok := ruo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Repo.id" for update`)}
@@ -495,11 +414,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 	}
 	if value, ok := ruo.mutation.GetType(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: repo.FieldType,
-		})
+		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 	}
 	if ruo.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -601,5 +516,6 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		return nil, err
 	}
+	ruo.mutation.done = true
 	return _node, nil
 }

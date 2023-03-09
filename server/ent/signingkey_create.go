@@ -72,49 +72,7 @@ func (skc *SigningKeyCreate) Mutation() *SigningKeyMutation {
 
 // Save creates the SigningKey in the database.
 func (skc *SigningKeyCreate) Save(ctx context.Context) (*SigningKey, error) {
-	var (
-		err  error
-		node *SigningKey
-	)
-	if len(skc.hooks) == 0 {
-		if err = skc.check(); err != nil {
-			return nil, err
-		}
-		node, err = skc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*SigningKeyMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = skc.check(); err != nil {
-				return nil, err
-			}
-			skc.mutation = mutation
-			if node, err = skc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(skc.hooks) - 1; i >= 0; i-- {
-			if skc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = skc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, skc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*SigningKey)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from SigningKeyMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*SigningKey, SigningKeyMutation](ctx, skc.sqlSave, skc.mutation, skc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -157,6 +115,9 @@ func (skc *SigningKeyCreate) check() error {
 }
 
 func (skc *SigningKeyCreate) sqlSave(ctx context.Context) (*SigningKey, error) {
+	if err := skc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := skc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, skc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -171,54 +132,34 @@ func (skc *SigningKeyCreate) sqlSave(ctx context.Context) (*SigningKey, error) {
 			return nil, fmt.Errorf("unexpected SigningKey.ID type: %T", _spec.ID.Value)
 		}
 	}
+	skc.mutation.id = &_node.ID
+	skc.mutation.done = true
 	return _node, nil
 }
 
 func (skc *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
 	var (
 		_node = &SigningKey{config: skc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: signingkey.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: signingkey.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(signingkey.Table, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
 	)
 	if id, ok := skc.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
 	if value, ok := skc.mutation.PrivateKey(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPrivateKey,
-		})
+		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 		_node.PrivateKey = value
 	}
 	if value, ok := skc.mutation.PublicKey(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldPublicKey,
-		})
+		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 		_node.PublicKey = value
 	}
 	if value, ok := skc.mutation.Name(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldName,
-		})
+		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
 	if value, ok := skc.mutation.Email(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: signingkey.FieldEmail,
-		})
+		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 		_node.Email = value
 	}
 	if nodes := skc.mutation.RepoIDs(); len(nodes) > 0 {

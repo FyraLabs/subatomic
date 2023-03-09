@@ -57,8 +57,8 @@ func (e RpmPackageEdges) RepoOrErr() (*Repo, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*RpmPackage) scanValues(columns []string) ([]interface{}, error) {
-	values := make([]interface{}, len(columns))
+func (*RpmPackage) scanValues(columns []string) ([]any, error) {
+	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
 		case rpmpackage.FieldID, rpmpackage.FieldEpoch:
@@ -76,7 +76,7 @@ func (*RpmPackage) scanValues(columns []string) ([]interface{}, error) {
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
 // to the RpmPackage fields.
-func (rp *RpmPackage) assignValues(columns []string, values []interface{}) error {
+func (rp *RpmPackage) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
@@ -138,14 +138,14 @@ func (rp *RpmPackage) assignValues(columns []string, values []interface{}) error
 
 // QueryRepo queries the "repo" edge of the RpmPackage entity.
 func (rp *RpmPackage) QueryRepo() *RepoQuery {
-	return (&RpmPackageClient{config: rp.config}).QueryRepo(rp)
+	return NewRpmPackageClient(rp.config).QueryRepo(rp)
 }
 
 // Update returns a builder for updating this RpmPackage.
 // Note that you need to call RpmPackage.Unwrap() before calling this method if this RpmPackage
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (rp *RpmPackage) Update() *RpmPackageUpdateOne {
-	return (&RpmPackageClient{config: rp.config}).UpdateOne(rp)
+	return NewRpmPackageClient(rp.config).UpdateOne(rp)
 }
 
 // Unwrap unwraps the RpmPackage entity that was returned from a transaction after it was closed,
@@ -187,9 +187,3 @@ func (rp *RpmPackage) String() string {
 
 // RpmPackages is a parsable slice of RpmPackage.
 type RpmPackages []*RpmPackage
-
-func (rp RpmPackages) config(cfg config) {
-	for _i := range rp {
-		rp[_i].config = cfg
-	}
-}

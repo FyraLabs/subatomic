@@ -58,8 +58,8 @@ func (e RepoEdges) KeyOrErr() (*SigningKey, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*Repo) scanValues(columns []string) ([]interface{}, error) {
-	values := make([]interface{}, len(columns))
+func (*Repo) scanValues(columns []string) ([]any, error) {
+	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
 		case repo.FieldID, repo.FieldType:
@@ -75,7 +75,7 @@ func (*Repo) scanValues(columns []string) ([]interface{}, error) {
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
 // to the Repo fields.
-func (r *Repo) assignValues(columns []string, values []interface{}) error {
+func (r *Repo) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
@@ -107,19 +107,19 @@ func (r *Repo) assignValues(columns []string, values []interface{}) error {
 
 // QueryRpms queries the "rpms" edge of the Repo entity.
 func (r *Repo) QueryRpms() *RpmPackageQuery {
-	return (&RepoClient{config: r.config}).QueryRpms(r)
+	return NewRepoClient(r.config).QueryRpms(r)
 }
 
 // QueryKey queries the "key" edge of the Repo entity.
 func (r *Repo) QueryKey() *SigningKeyQuery {
-	return (&RepoClient{config: r.config}).QueryKey(r)
+	return NewRepoClient(r.config).QueryKey(r)
 }
 
 // Update returns a builder for updating this Repo.
 // Note that you need to call Repo.Unwrap() before calling this method if this Repo
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (r *Repo) Update() *RepoUpdateOne {
-	return (&RepoClient{config: r.config}).UpdateOne(r)
+	return NewRepoClient(r.config).UpdateOne(r)
 }
 
 // Unwrap unwraps the Repo entity that was returned from a transaction after it was closed,
@@ -146,9 +146,3 @@ func (r *Repo) String() string {
 
 // Repos is a parsable slice of Repo.
 type Repos []*Repo
-
-func (r Repos) config(cfg config) {
-	for _i := range r {
-		r[_i].config = cfg
-	}
-}

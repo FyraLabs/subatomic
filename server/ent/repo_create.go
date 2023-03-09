@@ -74,49 +74,7 @@ func (rc *RepoCreate) Mutation() *RepoMutation {
 
 // Save creates the Repo in the database.
 func (rc *RepoCreate) Save(ctx context.Context) (*Repo, error) {
-	var (
-		err  error
-		node *Repo
-	)
-	if len(rc.hooks) == 0 {
-		if err = rc.check(); err != nil {
-			return nil, err
-		}
-		node, err = rc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RepoMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = rc.check(); err != nil {
-				return nil, err
-			}
-			rc.mutation = mutation
-			if node, err = rc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(rc.hooks) - 1; i >= 0; i-- {
-			if rc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, rc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Repo)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RepoMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Repo, RepoMutation](ctx, rc.sqlSave, rc.mutation, rc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -155,6 +113,9 @@ func (rc *RepoCreate) check() error {
 }
 
 func (rc *RepoCreate) sqlSave(ctx context.Context) (*Repo, error) {
+	if err := rc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := rc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, rc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -169,30 +130,22 @@ func (rc *RepoCreate) sqlSave(ctx context.Context) (*Repo, error) {
 			return nil, fmt.Errorf("unexpected Repo.ID type: %T", _spec.ID.Value)
 		}
 	}
+	rc.mutation.id = &_node.ID
+	rc.mutation.done = true
 	return _node, nil
 }
 
 func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Repo{config: rc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: repo.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: repo.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(repo.Table, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
 	)
 	if id, ok := rc.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
 	if value, ok := rc.mutation.GetType(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: repo.FieldType,
-		})
+		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 		_node.Type = value
 	}
 	if nodes := rc.mutation.RpmsIDs(); len(nodes) > 0 {

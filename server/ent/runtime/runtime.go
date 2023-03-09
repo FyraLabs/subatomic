@@ -5,6 +5,6 @@ package runtime
 // The schema-stitching logic is generated in github.com/FyraLabs/subatomic/server/ent/runtime.go
 
 const (
-	Version = "v0.11.2"                                         // Version of ent codegen.
-	Sum     = "h1:UM2/BUhF2FfsxPHRxLjQbhqJNaDdVlOwNIAMLs2jyto=" // Sum of ent codegen.
+	Version = "v0.11.9"                                         // Version of ent codegen.
+	Sum     = "h1:dbbCkAiPVTRBIJwoZctiSYjB7zxQIBOzVSU5H9VYIQI=" // Sum of ent codegen.
 )

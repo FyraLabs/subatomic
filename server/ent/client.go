@@ -10,13 +10,13 @@ import (
 
 	"github.com/FyraLabs/subatomic/server/ent/migrate"
 
-	"github.com/FyraLabs/subatomic/server/ent/repo"
-	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
-	"github.com/FyraLabs/subatomic/server/ent/signingkey"
-
+	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/FyraLabs/subatomic/server/ent/repo"
+	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
 
 // Client is the client that holds all ent builders.
@@ -34,7 +34,7 @@ type Client struct {
 
 // NewClient creates a new client configured with the given options.
 func NewClient(opts ...Option) *Client {
-	cfg := config{log: log.Println, hooks: &hooks{}}
+	cfg := config{log: log.Println, hooks: &hooks{}, inters: &inters{}}
 	cfg.options(opts...)
 	client := &Client{config: cfg}
 	client.init()
@@ -46,6 +46,55 @@ func (c *Client) init() {
 	c.Repo = NewRepoClient(c.config)
 	c.RpmPackage = NewRpmPackageClient(c.config)
 	c.SigningKey = NewSigningKeyClient(c.config)
+}
+
+type (
+	// config is the configuration for the client and its builder.
+	config struct {
+		// driver used for executing database requests.
+		driver dialect.Driver
+		// debug enable a debug logging.
+		debug bool
+		// log used for logging on debug mode.
+		log func(...any)
+		// hooks to execute on mutations.
+		hooks *hooks
+		// interceptors to execute on queries.
+		inters *inters
+	}
+	// Option function to configure the client.
+	Option func(*config)
+)
+
+// options applies the options on the config object.
+func (c *config) options(opts ...Option) {
+	for _, opt := range opts {
+		opt(c)
+	}
+	if c.debug {
+		c.driver = dialect.Debug(c.driver, c.log)
+	}
+}
+
+// Debug enables debug logging on the ent.Driver.
+func Debug() Option {
+	return func(c *config) {
+		c.debug = true
+	}
+}
+
+// Log sets the logging function for debug mode.
+func Log(fn func(...any)) Option {
+	return func(c *config) {
+		c.log = fn
+	}
+}
+
+// Driver configures the client driver.
+func Driver(driver dialect.Driver) Option {
+	return func(c *config) {
+		c.driver = driver
+	}
 }
 
 // Open opens a database/sql.DB specified by the driver name and
@@ -137,6 +186,28 @@ func (c *Client) Use(hooks ...Hook) {
 	c.SigningKey.Use(hooks...)
 }
 
+// Intercept adds the query interceptors to all the entity clients.
+// In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
+func (c *Client) Intercept(interceptors ...Interceptor) {
+	c.Repo.Intercept(interceptors...)
+	c.RpmPackage.Intercept(interceptors...)
+	c.SigningKey.Intercept(interceptors...)
+}
+
+// Mutate implements the ent.Mutator interface.
+func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
+	switch m := m.(type) {
+	case *RepoMutation:
+		return c.Repo.mutate(ctx, m)
+	case *RpmPackageMutation:
+		return c.RpmPackage.mutate(ctx, m)
+	case *SigningKeyMutation:
+		return c.SigningKey.mutate(ctx, m)
+	default:
+		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
 // RepoClient is a client for the Repo schema.
 type RepoClient struct {
 	config
@@ -151,6 +222,12 @@ func NewRepoClient(c config) *RepoClient {
 // A call to `Use(f, g, h)` equals to `repo.Hooks(f(g(h())))`.
 func (c *RepoClient) Use(hooks ...Hook) {
 	c.hooks.Repo = append(c.hooks.Repo, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `repo.Intercept(f(g(h())))`.
+func (c *RepoClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Repo = append(c.inters.Repo, interceptors...)
 }
 
 // Create returns a builder for creating a Repo entity.
@@ -193,7 +270,7 @@ func (c *RepoClient) DeleteOne(r *Repo) *RepoDeleteOne {
 	return c.DeleteOneID(r.ID)
 }
 
-// DeleteOne returns a builder for deleting the given entity by its id.
+// DeleteOneID returns a builder for deleting the given entity by its id.
 func (c *RepoClient) DeleteOneID(id string) *RepoDeleteOne {
 	builder := c.Delete().Where(repo.ID(id))
 	builder.mutation.id = &id
@@ -205,6 +282,8 @@ func (c *RepoClient) DeleteOneID(id string) *RepoDeleteOne {
 func (c *RepoClient) Query() *RepoQuery {
 	return &RepoQuery{
 		config: c.config,
+		ctx:    &QueryContext{Type: TypeRepo},
+		inters: c.Interceptors(),
 	}
 }
 
@@ -224,8 +303,8 @@ func (c *RepoClient) GetX(ctx context.Context, id string) *Repo {
 
 // QueryRpms queries the rpms edge of a Repo.
 func (c *RepoClient) QueryRpms(r *Repo) *RpmPackageQuery {
-	query := &RpmPackageQuery{config: c.config}
-	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+	query := (&RpmPackageClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := r.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(repo.Table, repo.FieldID, id),
@@ -240,8 +319,8 @@ func (c *RepoClient) QueryRpms(r *Repo) *RpmPackageQuery {
 
 // QueryKey queries the key edge of a Repo.
 func (c *RepoClient) QueryKey(r *Repo) *SigningKeyQuery {
-	query := &SigningKeyQuery{config: c.config}
-	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+	query := (&SigningKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := r.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(repo.Table, repo.FieldID, id),
@@ -259,6 +338,26 @@ func (c *RepoClient) Hooks() []Hook {
 	return c.hooks.Repo
 }
 
+// Interceptors returns the client interceptors.
+func (c *RepoClient) Interceptors() []Interceptor {
+	return c.inters.Repo
+}
+
+func (c *RepoClient) mutate(ctx context.Context, m *RepoMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RepoCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RepoUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RepoUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RepoDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Repo mutation op: %q", m.Op())
+	}
+}
+
 // RpmPackageClient is a client for the RpmPackage schema.
 type RpmPackageClient struct {
 	config
@@ -273,6 +372,12 @@ func NewRpmPackageClient(c config) *RpmPackageClient {
 // A call to `Use(f, g, h)` equals to `rpmpackage.Hooks(f(g(h())))`.
 func (c *RpmPackageClient) Use(hooks ...Hook) {
 	c.hooks.RpmPackage = append(c.hooks.RpmPackage, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `rpmpackage.Intercept(f(g(h())))`.
+func (c *RpmPackageClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RpmPackage = append(c.inters.RpmPackage, interceptors...)
 }
 
 // Create returns a builder for creating a RpmPackage entity.
@@ -315,7 +420,7 @@ func (c *RpmPackageClient) DeleteOne(rp *RpmPackage) *RpmPackageDeleteOne {
 	return c.DeleteOneID(rp.ID)
 }
 
-// DeleteOne returns a builder for deleting the given entity by its id.
+// DeleteOneID returns a builder for deleting the given entity by its id.
 func (c *RpmPackageClient) DeleteOneID(id int) *RpmPackageDeleteOne {
 	builder := c.Delete().Where(rpmpackage.ID(id))
 	builder.mutation.id = &id
@@ -327,6 +432,8 @@ func (c *RpmPackageClient) DeleteOneID(id int) *RpmPackageDeleteOne {
 func (c *RpmPackageClient) Query() *RpmPackageQuery {
 	return &RpmPackageQuery{
 		config: c.config,
+		ctx:    &QueryContext{Type: TypeRpmPackage},
+		inters: c.Interceptors(),
 	}
 }
 
@@ -346,8 +453,8 @@ func (c *RpmPackageClient) GetX(ctx context.Context, id int) *RpmPackage {
 
 // QueryRepo queries the repo edge of a RpmPackage.
 func (c *RpmPackageClient) QueryRepo(rp *RpmPackage) *RepoQuery {
-	query := &RepoQuery{config: c.config}
-	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+	query := (&RepoClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := rp.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(rpmpackage.Table, rpmpackage.FieldID, id),
@@ -365,6 +472,26 @@ func (c *RpmPackageClient) Hooks() []Hook {
 	return c.hooks.RpmPackage
 }
 
+// Interceptors returns the client interceptors.
+func (c *RpmPackageClient) Interceptors() []Interceptor {
+	return c.inters.RpmPackage
+}
+
+func (c *RpmPackageClient) mutate(ctx context.Context, m *RpmPackageMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RpmPackageCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RpmPackageUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RpmPackageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RpmPackageDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RpmPackage mutation op: %q", m.Op())
+	}
+}
+
 // SigningKeyClient is a client for the SigningKey schema.
 type SigningKeyClient struct {
 	config
@@ -379,6 +506,12 @@ func NewSigningKeyClient(c config) *SigningKeyClient {
 // A call to `Use(f, g, h)` equals to `signingkey.Hooks(f(g(h())))`.
 func (c *SigningKeyClient) Use(hooks ...Hook) {
 	c.hooks.SigningKey = append(c.hooks.SigningKey, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `signingkey.Intercept(f(g(h())))`.
+func (c *SigningKeyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SigningKey = append(c.inters.SigningKey, interceptors...)
 }
 
 // Create returns a builder for creating a SigningKey entity.
@@ -421,7 +554,7 @@ func (c *SigningKeyClient) DeleteOne(sk *SigningKey) *SigningKeyDeleteOne {
 	return c.DeleteOneID(sk.ID)
 }
 
-// DeleteOne returns a builder for deleting the given entity by its id.
+// DeleteOneID returns a builder for deleting the given entity by its id.
 func (c *SigningKeyClient) DeleteOneID(id string) *SigningKeyDeleteOne {
 	builder := c.Delete().Where(signingkey.ID(id))
 	builder.mutation.id = &id
@@ -433,6 +566,8 @@ func (c *SigningKeyClient) DeleteOneID(id string) *SigningKeyDeleteOne {
 func (c *SigningKeyClient) Query() *SigningKeyQuery {
 	return &SigningKeyQuery{
 		config: c.config,
+		ctx:    &QueryContext{Type: TypeSigningKey},
+		inters: c.Interceptors(),
 	}
 }
 
@@ -452,8 +587,8 @@ func (c *SigningKeyClient) GetX(ctx context.Context, id string) *SigningKey {
 
 // QueryRepo queries the repo edge of a SigningKey.
 func (c *SigningKeyClient) QueryRepo(sk *SigningKey) *RepoQuery {
-	query := &RepoQuery{config: c.config}
-	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+	query := (&RepoClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := sk.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(signingkey.Table, signingkey.FieldID, id),
@@ -470,3 +605,33 @@ func (c *SigningKeyClient) QueryRepo(sk *SigningKey) *RepoQuery {
 func (c *SigningKeyClient) Hooks() []Hook {
 	return c.hooks.SigningKey
 }
+
+// Interceptors returns the client interceptors.
+func (c *SigningKeyClient) Interceptors() []Interceptor {
+	return c.inters.SigningKey
+}
+
+func (c *SigningKeyClient) mutate(ctx context.Context, m *SigningKeyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SigningKeyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SigningKeyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SigningKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SigningKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SigningKey mutation op: %q", m.Op())
+	}
+}
+
+// hooks and interceptors per client, for fast access.
+type (
+	hooks struct {
+		Repo, RpmPackage, SigningKey []ent.Hook
+	}
+	inters struct {
+		Repo, RpmPackage, SigningKey []ent.Interceptor
+	}
+)

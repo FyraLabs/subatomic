@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"sync"
 
+	"entgo.io/ent"
+	"entgo.io/ent/dialect/sql"
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
-
-	"entgo.io/ent"
 )
 
 const (
@@ -286,9 +286,24 @@ func (m *RepoMutation) Where(ps ...predicate.Repo) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RepoMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RepoMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Repo, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RepoMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RepoMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Repo).
@@ -898,9 +913,24 @@ func (m *RpmPackageMutation) Where(ps ...predicate.RpmPackage) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RpmPackageMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RpmPackageMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RpmPackage, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RpmPackageMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RpmPackageMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (RpmPackage).
@@ -1139,8 +1169,6 @@ func (m *RpmPackageMutation) RemovedEdges() []string {
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *RpmPackageMutation) RemovedIDs(name string) []ent.Value {
-	switch name {
-	}
 	return nil
 }
 
@@ -1511,9 +1539,24 @@ func (m *SigningKeyMutation) Where(ps ...predicate.SigningKey) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the SigningKeyMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SigningKeyMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SigningKey, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *SigningKeyMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SigningKeyMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (SigningKey).

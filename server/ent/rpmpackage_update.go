@@ -103,40 +103,7 @@ func (rpu *RpmPackageUpdate) ClearRepo() *RpmPackageUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (rpu *RpmPackageUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(rpu.hooks) == 0 {
-		if err = rpu.check(); err != nil {
-			return 0, err
-		}
-		affected, err = rpu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RpmPackageMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = rpu.check(); err != nil {
-				return 0, err
-			}
-			rpu.mutation = mutation
-			affected, err = rpu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(rpu.hooks) - 1; i >= 0; i-- {
-			if rpu.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rpu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, rpu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, RpmPackageMutation](ctx, rpu.sqlSave, rpu.mutation, rpu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -172,16 +139,10 @@ func (rpu *RpmPackageUpdate) check() error {
 }
 
 func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   rpmpackage.Table,
-			Columns: rpmpackage.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: rpmpackage.FieldID,
-			},
-		},
+	if err := rpu.check(); err != nil {
+		return n, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(rpmpackage.Table, rpmpackage.Columns, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
 	if ps := rpu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -190,53 +151,25 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := rpu.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldName,
-		})
+		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 	}
 	if value, ok := rpu.mutation.Epoch(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: rpmpackage.FieldEpoch,
-		})
+		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
 	if value, ok := rpu.mutation.AddedEpoch(); ok {
-		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: rpmpackage.FieldEpoch,
-		})
+		_spec.AddField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
 	if value, ok := rpu.mutation.Version(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldVersion,
-		})
+		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 	}
 	if value, ok := rpu.mutation.Release(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldRelease,
-		})
+		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 	}
 	if value, ok := rpu.mutation.Arch(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldArch,
-		})
+		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 	}
 	if value, ok := rpu.mutation.FilePath(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldFilePath,
-		})
+		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 	}
 	if rpu.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -281,6 +214,7 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	rpu.mutation.done = true
 	return n, nil
 }
 
@@ -365,6 +299,12 @@ func (rpuo *RpmPackageUpdateOne) ClearRepo() *RpmPackageUpdateOne {
 	return rpuo
 }
 
+// Where appends a list predicates to the RpmPackageUpdate builder.
+func (rpuo *RpmPackageUpdateOne) Where(ps ...predicate.RpmPackage) *RpmPackageUpdateOne {
+	rpuo.mutation.Where(ps...)
+	return rpuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (rpuo *RpmPackageUpdateOne) Select(field string, fields ...string) *RpmPackageUpdateOne {
@@ -374,46 +314,7 @@ func (rpuo *RpmPackageUpdateOne) Select(field string, fields ...string) *RpmPack
 
 // Save executes the query and returns the updated RpmPackage entity.
 func (rpuo *RpmPackageUpdateOne) Save(ctx context.Context) (*RpmPackage, error) {
-	var (
-		err  error
-		node *RpmPackage
-	)
-	if len(rpuo.hooks) == 0 {
-		if err = rpuo.check(); err != nil {
-			return nil, err
-		}
-		node, err = rpuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RpmPackageMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = rpuo.check(); err != nil {
-				return nil, err
-			}
-			rpuo.mutation = mutation
-			node, err = rpuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(rpuo.hooks) - 1; i >= 0; i-- {
-			if rpuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rpuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, rpuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*RpmPackage)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RpmPackageMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*RpmPackage, RpmPackageMutation](ctx, rpuo.sqlSave, rpuo.mutation, rpuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -449,16 +350,10 @@ func (rpuo *RpmPackageUpdateOne) check() error {
 }
 
 func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   rpmpackage.Table,
-			Columns: rpmpackage.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: rpmpackage.FieldID,
-			},
-		},
+	if err := rpuo.check(); err != nil {
+		return _node, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(rpmpackage.Table, rpmpackage.Columns, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
 	id, ok := rpuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "RpmPackage.id" for update`)}
@@ -484,53 +379,25 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 		}
 	}
 	if value, ok := rpuo.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldName,
-		})
+		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 	}
 	if value, ok := rpuo.mutation.Epoch(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: rpmpackage.FieldEpoch,
-		})
+		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
 	if value, ok := rpuo.mutation.AddedEpoch(); ok {
-		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: rpmpackage.FieldEpoch,
-		})
+		_spec.AddField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
 	if value, ok := rpuo.mutation.Version(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldVersion,
-		})
+		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 	}
 	if value, ok := rpuo.mutation.Release(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldRelease,
-		})
+		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 	}
 	if value, ok := rpuo.mutation.Arch(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldArch,
-		})
+		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 	}
 	if value, ok := rpuo.mutation.FilePath(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: rpmpackage.FieldFilePath,
-		})
+		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 	}
 	if rpuo.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -578,5 +445,6 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 		}
 		return nil, err
 	}
+	rpuo.mutation.done = true
 	return _node, nil
 }
