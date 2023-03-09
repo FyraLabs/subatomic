@@ -23,7 +23,7 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
-	flags := []string{"--update", "--deltas", "--zck", "--xz"}
+	flags := []string{"--update", "--zck", "--xz"}
 
 	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
 	if err != nil && !os.IsNotExist(err) {
