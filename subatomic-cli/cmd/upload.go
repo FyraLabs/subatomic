@@ -4,10 +4,13 @@ Copyright © 2022 Fyra Labs
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -123,9 +126,17 @@ var uploadCmd = &cobra.Command{
 		}
 
 		if res.StatusCode != http.StatusNoContent {
+			body, err := ioutil.ReadAll(res.Body)
+			if err != nil {
+				return fmt.Errorf("error reading server response: %s", err.Error())
+			}
+
+			bodyReader := bytes.NewReader(body)
+
 			var serverError types.ErrResponse
-			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
-				return err
+			if err := json.NewDecoder(bodyReader).Decode(&serverError); err != nil {
+				log.Printf("body: %s", string(body))
+				return fmt.Errorf("error decoding server response: %s", err.Error())
 			}
 
 			return fmt.Errorf("API returned error: %s", serverError.ErrorText)
