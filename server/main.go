@@ -62,15 +62,17 @@ func run() error {
 		return fmt.Errorf("failed creating schema resources: %w", err)
 	}
 
-	tp := initTracerProvider()
-	defer func() {
-		if err := tp.Shutdown(context.Background()); err != nil {
-			log.Printf("Error shutting down tracer provider: %v", err)
-		}
-	}()
+	if enviroment.EnableTracing {
+		tp := initTracerProvider()
+		defer func() {
+			if err := tp.Shutdown(context.Background()); err != nil {
+				log.Printf("Error shutting down tracer provider: %v", err)
+			}
+		}()
 
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+		otel.SetTracerProvider(tp)
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	}
 
 	// TODO: Auth
 	router := &apiRouter{
@@ -78,7 +80,6 @@ func run() error {
 		enviroment:       &enviroment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
 		repoMutex:        &keyedmutex.KeyedMutex{},
-		tracer:           otel.Tracer("subatomic"),
 	}
 	router.setup()
 

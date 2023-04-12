@@ -10,15 +10,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/samber/lo"
-	"go.opentelemetry.io/otel/attribute"
-	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type keysRouter struct {
 	*chi.Mux
 	database   *ent.Client
 	enviroment *types.Enviroment
-	tracer     oteltrace.Tracer
 }
 
 func (router *keysRouter) setup() {
@@ -45,10 +42,7 @@ type keyResponse struct {
 //	@Success		200	{array}	keyResponse
 //	@Router			/keys [get]
 func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
-	ctx, span := router.tracer.Start(r.Context(), "createKey")
-	defer span.End()
-
-	keys, err := router.database.SigningKey.Query().All(ctx)
+	keys, err := router.database.SigningKey.Query().All(r.Context())
 
 	if err != nil {
 		panic(err)
@@ -87,9 +81,6 @@ func (u *createKeyPayload) Bind(r *http.Request) error {
 //	@Failure		409	{object}	types.ErrResponse
 //	@Router			/keys [post]
 func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
-	ctx, span := router.tracer.Start(r.Context(), "createKey")
-	defer span.End()
-
 	payload := &createKeyPayload{}
 
 	if err := render.Bind(r, payload); err != nil {
@@ -117,7 +108,7 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 		SetPrivateKey(armoredPrivateKey).
 		SetEmail(payload.Email).
 		SetName(payload.Name).
-		Save(ctx)
+		Save(r.Context())
 
 	if err != nil {
 		panic(err)
@@ -155,10 +146,7 @@ func (router *keysRouter) getKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, span := router.tracer.Start(r.Context(), "getKey", oteltrace.WithAttributes(attribute.String("keyID", keyID)))
-	defer span.End()
-
-	key, err := router.database.SigningKey.Get(ctx, keyID)
+	key, err := router.database.SigningKey.Get(r.Context(), keyID)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("key not found")))

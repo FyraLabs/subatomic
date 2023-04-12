@@ -71,4 +71,5 @@ type Enviroment struct {
 	StorageDirectory string `env:"STORAGE_DIRECTORY,required=true"`
 	DatabaseOptions  string `env:"DATABASE_OPTIONS,required=true"`
 	JWTSecret        string `env:"JWT_SECRET,required=true"`
+	EnableTracing    bool   `env:"ENABLE_TRACING,default=false"`
 }
