@@ -14,6 +14,8 @@ import (
 	"github.com/go-playground/form/v4"
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	_ "github.com/FyraLabs/subatomic/server/docs"
 	_ "github.com/lib/pq"
@@ -31,9 +33,9 @@ var decoder *form.Decoder
 //	@license.name	GPL3
 //	@license.url	https://choosealicense.com/licenses/gpl-3.0/
 
-//	@securityDefinitions.apikey
-//	@in		header
-//	@name	Authorization
+// @securityDefinitions.apikey
+// @in		header
+// @name	Authorization
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -60,12 +62,23 @@ func run() error {
 		return fmt.Errorf("failed creating schema resources: %w", err)
 	}
 
+	tp := initTracerProvider()
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+
 	// TODO: Auth
 	router := &apiRouter{
 		database:         client,
 		enviroment:       &enviroment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
 		repoMutex:        &keyedmutex.KeyedMutex{},
+		tracer:           otel.Tracer("subatomic"),
 	}
 	router.setup()
 

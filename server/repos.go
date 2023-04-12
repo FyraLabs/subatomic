@@ -18,6 +18,8 @@ import (
 	"github.com/go-chi/render"
 	"github.com/samber/lo"
 	"github.com/sassoftware/go-rpmutils"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/FyraLabs/subatomic/server/ent/predicate"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
@@ -31,6 +33,7 @@ type reposRouter struct {
 	database   *ent.Client
 	enviroment *types.Enviroment
 	repoMutex  *keyedmutex.KeyedMutex
+	tracer     oteltrace.Tracer
 }
 
 func (router *reposRouter) setup() {
@@ -59,6 +62,7 @@ func (router *reposRouter) setup() {
 }
 
 // getRepos godoc
+//
 //	@Summary		Get all repos
 //	@Description	get repos
 //	@Tags			repos
@@ -66,7 +70,10 @@ func (router *reposRouter) setup() {
 //	@Success		200	{array}	types.RepoResponse
 //	@Router			/repos [get]
 func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
-	repos, err := router.database.Repo.Query().All(r.Context())
+	ctx, span := router.tracer.Start(r.Context(), "getRepos")
+	defer span.End()
+
+	repos, err := router.database.Repo.Query().All(ctx)
 
 	if err != nil {
 		panic(err)
@@ -83,6 +90,7 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 }
 
 // createRepo godoc
+//
 //	@Summary		Create a new repo
 //	@Description	create repo
 //	@Tags			repos
@@ -93,6 +101,9 @@ func (router *reposRouter) getRepos(w http.ResponseWriter, r *http.Request) {
 //	@Failure		409	{object}	types.ErrResponse
 //	@Router			/repos [post]
 func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
+	ctx, span := router.tracer.Start(r.Context(), "createRepo")
+	defer span.End()
+
 	payload := &types.CreateRepoPayload{}
 
 	if err := render.Bind(r, payload); err != nil {
@@ -103,7 +114,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 	router.repoMutex.Lock(payload.ID)
 	defer router.repoMutex.Unlock(payload.ID)
 
-	exists, err := router.database.Repo.Query().Where(repo.IDEQ(payload.ID)).Exist(r.Context())
+	exists, err := router.database.Repo.Query().Where(repo.IDEQ(payload.ID)).Exist(ctx)
 
 	if err != nil {
 		panic(err)
@@ -127,7 +138,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err = router.database.Repo.Create().SetID(payload.ID).SetType(repo.Type(payload.RepoType)).Save(r.Context())
+	_, err = router.database.Repo.Create().SetID(payload.ID).SetType(repo.Type(payload.RepoType)).Save(ctx)
 
 	if err != nil {
 		panic(err)
@@ -140,6 +151,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRepo godoc
+//
 //	@Summary		Delete a repo
 //	@Description	delete repo
 //	@Tags			repos
@@ -154,10 +166,13 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "deleteRepo", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	repo, err := router.database.Repo.Get(r.Context(), id)
+	repo, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -172,7 +187,7 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := router.database.Repo.DeleteOne(repo).Exec(r.Context()); err != nil {
+	if err := router.database.Repo.DeleteOne(repo).Exec(ctx); err != nil {
 		panic(err)
 	}
 
@@ -183,6 +198,7 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 }
 
 // uploadToRepo godoc
+//
 //	@Summary		Upload files to a repo
 //	@Description	upload to repo
 //	@Tags			repos
@@ -200,12 +216,15 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "uploadToRepo", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	prune := r.URL.Query().Get("prune") == "true"
 
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -216,7 +235,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		panic(err)
 	}
 
-	key, err := re.QueryKey().Only(r.Context())
+	key, err := re.QueryKey().Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		panic(err)
 	}
@@ -277,7 +296,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 					rpmpackage.VersionEQ(info.Version),
 					rpmpackage.ReleaseEQ(info.Release),
 					rpmpackage.ArchEQ(info.Arch),
-				)).Exist(r.Context())
+				)).Exist(ctx)
 			if err != nil {
 				panic(err)
 			}
@@ -291,7 +310,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 					SetArch(info.Arch).
 					SetRepo(re).
 					SetFilePath(info.FileName).
-					Save(r.Context())
+					Save(ctx)
 				if err != nil {
 					panic(err)
 				}
@@ -315,7 +334,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 						rpmpackage.NameEQ(info.Name),
 						rpmpackage.ArchEQ(info.Arch),
 					),
-				).All(r.Context())
+				).All(ctx)
 				if err != nil {
 					panic(err)
 				}
@@ -337,7 +356,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				return pkg.ID
 			})
 
-			if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(ids...)).Exec(r.Context()); err != nil {
+			if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(ids...)).Exec(ctx); err != nil {
 				panic(err)
 			}
 		}
@@ -392,6 +411,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 }
 
 // getRPMs godoc
+//
 //	@Summary		Get list of RPMs in a repo
 //	@Description	rpms in repo
 //	@Tags			repos
@@ -406,6 +426,9 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "getRPMs", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	query := &types.QueryRpmParams{}
 
 	if err := decoder.Decode(query, r.URL.Query()); err != nil {
@@ -413,7 +436,7 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -462,9 +485,9 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	var rpms []*ent.RpmPackage
 
 	if len(predicates) == 0 {
-		rpms, err = re.QueryRpms().All(r.Context())
+		rpms, err = re.QueryRpms().All(ctx)
 	} else {
-		rpms, err = re.QueryRpms().Where(rpmpackage.And(predicates...)).All(r.Context())
+		rpms, err = re.QueryRpms().Where(rpmpackage.And(predicates...)).All(ctx)
 	}
 
 	if err != nil {
@@ -487,6 +510,7 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRPM godoc
+//
 //	@Summary		Delete RPM in a repo
 //	@Description	delete rpm
 //	@Tags			repos
@@ -502,6 +526,9 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "deleteRPM", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
@@ -511,7 +538,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -527,7 +554,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(r.Context())
+	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(ctx)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("rpm not found")))
@@ -538,7 +565,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := router.database.RpmPackage.DeleteOne(rpm).Exec(r.Context()); err != nil {
+	if err := router.database.RpmPackage.DeleteOne(rpm).Exec(ctx); err != nil {
 		panic(err)
 	}
 
@@ -556,6 +583,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 }
 
 // getRepoKey godoc
+//
 //	@Summary		Get key for a repo
 //	@Description	get repo key
 //	@Tags			repos
@@ -571,7 +599,10 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	ctx, span := router.tracer.Start(r.Context(), "getRepoKey", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -582,7 +613,7 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	key, err := re.QueryKey().First(r.Context())
+	key, err := re.QueryKey().First(ctx)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("key not set")))
@@ -602,6 +633,7 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // setRepoKey godoc
+//
 //	@Summary		Set key for a repo
 //	@Description	set repo key
 //	@Tags			repos
@@ -618,10 +650,13 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "setRepoKey", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -638,7 +673,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := router.database.SigningKey.Get(r.Context(), payload.ID)
+	key, err := router.database.SigningKey.Get(ctx, payload.ID)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("key not found")))
@@ -649,7 +684,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if _, err := re.Update().SetKey(key).Save(r.Context()); err != nil {
+	if _, err := re.Update().SetKey(key).Save(ctx); err != nil {
 		panic(err)
 	}
 
@@ -665,6 +700,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteRepoKey godoc
+//
 //	@Summary		Delete key for a repo
 //	@Description	delete repo key
 //	@Tags			repos
@@ -680,10 +716,13 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "deleteRepoKey", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -694,7 +733,7 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 		panic(err)
 	}
 
-	if _, err := re.Update().ClearKey().Save(r.Context()); err != nil {
+	if _, err := re.Update().ClearKey().Save(ctx); err != nil {
 		panic(err)
 	}
 
@@ -710,6 +749,7 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 }
 
 // resign godoc
+//
 //	@Summary		Resign packages in a repo
 //	@Description	resign repo packages
 //	@Tags			repos
@@ -725,10 +765,13 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "resign", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -739,7 +782,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	key, err := re.QueryKey().Only(r.Context())
+	key, err := re.QueryKey().Only(ctx)
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("key not set")))
 		return
@@ -797,6 +840,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 }
 
 // putComps godoc
+//
 //	@Summary		Push a RPM comps file
 //	@Description	push rpm comps
 //	@Tags			repos
@@ -812,10 +856,13 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "putComps", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -831,7 +878,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := re.QueryKey().Only(r.Context())
+	key, err := re.QueryKey().Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		panic(err)
 	}
@@ -890,6 +937,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteComps godoc
+//
 //	@Summary		Delete the RPM comps file
 //	@Description	delete4 rpm comps
 //	@Tags			repos
@@ -905,10 +953,13 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, span := router.tracer.Start(r.Context(), "deleteComps", oteltrace.WithAttributes(attribute.String("repoID", id)))
+	defer span.End()
+
 	router.repoMutex.Lock(id)
 	defer router.repoMutex.Unlock(id)
 
-	re, err := router.database.Repo.Get(r.Context(), id)
+	re, err := router.database.Repo.Get(ctx, id)
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
@@ -924,7 +975,7 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key, err := re.QueryKey().Only(r.Context())
+	key, err := re.QueryKey().Only(ctx)
 	if err != nil && !ent.IsNotFound(err) {
 		panic(err)
 	}

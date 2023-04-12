@@ -11,7 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	"github.com/riandyrn/otelchi"
 	httpSwagger "github.com/swaggo/http-swagger"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/go-chi/jwtauth/v5"
 )
@@ -22,6 +24,7 @@ type apiRouter struct {
 	enviroment       *types.Enviroment
 	jwtAuthenticator *jwtauth.JWTAuth
 	repoMutex        *keyedmutex.KeyedMutex
+	tracer           oteltrace.Tracer
 }
 
 func (router *apiRouter) setup() {
@@ -30,6 +33,7 @@ func (router *apiRouter) setup() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Heartbeat("/heartbeat"))
 	router.Use(middleware.Recoverer)
+	router.Use(otelchi.Middleware("api", router.tracer))
 
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
