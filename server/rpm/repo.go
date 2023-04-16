@@ -1,6 +1,7 @@
 package rpm
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -36,7 +37,16 @@ func UpdateRepo(repoPath string) error {
 
 	flags = append(flags, repoPath)
 
+	// This will only remove something if the directory was in a broken state before
+	// Callers of UpdateRepo are expected to lock calls, so we make the assumption this is safe
+	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
+
 	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
+		if err, ok := err.(*exec.ExitError); ok {
+			_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
+			return fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
+		}
+
 		return err
 	}
 
