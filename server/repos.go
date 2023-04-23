@@ -332,7 +332,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 		if len(toPrune) > 0 {
 			for _, p := range toPrune {
-				if err := os.Remove(path.Join(targetDirectory, p.FilePath)); err != nil {
+				if err := os.Remove(path.Join(targetDirectory, p.FilePath)); err != nil && !os.IsNotExist(err) {
 					panic(err)
 				}
 			}
@@ -550,7 +550,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 
 	targetDirectory := path.Join(router.enviroment.StorageDirectory, id, rpm.FilePath)
 
-	if err := os.Remove(targetDirectory); err != nil {
+	if err := os.Remove(targetDirectory); err != nil && !os.IsNotExist(err) {
 		panic(err)
 	}
 
