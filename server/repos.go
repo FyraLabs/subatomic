@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -781,7 +782,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 
 			for _, match := range matches {
 				if err := rpm.SignRpmFile(match, ring); err != nil {
-					panic(err)
+					panic(fmt.Errorf("error signing %s: %w", match, err))
 				}
 			}
 
