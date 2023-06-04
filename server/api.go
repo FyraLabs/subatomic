@@ -30,7 +30,7 @@ func (router *apiRouter) setup() {
 
 	router.Use(middleware.Logger)
 	router.Use(middleware.Heartbeat("/heartbeat"))
-	router.Use(middleware.Recoverer)
+	router.Use(recovererMiddleware)
 	router.Use(otelchi.Middleware("api", otelchi.WithChiRoutes(router)))
 
 	router.Use(func(next http.Handler) http.Handler {

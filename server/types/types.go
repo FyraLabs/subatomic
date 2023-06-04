@@ -67,6 +67,15 @@ func ErrUnauthorized(err error) render.Renderer {
 	}
 }
 
+func ErrInternalServerError(err error) render.Renderer {
+	return &ErrResponse{
+		Err:            err,
+		HTTPStatusCode: 500,
+		StatusText:     "Internal Server Error.",
+		ErrorText:      err.Error(),
+	}
+}
+
 type Enviroment struct {
 	StorageDirectory string `env:"STORAGE_DIRECTORY,required=true"`
 	DatabaseOptions  string `env:"DATABASE_OPTIONS,required=true"`
