@@ -1,4 +1,4 @@
-FROM golang:1.21-bookworn as builder
+FROM golang:1.21-bookworm as builder
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ COPY . .
 
 RUN go build -o /subatomic ./server
 
-FROM golang:1.21-bookworn
+FROM golang:1.21-bookworm
 
 COPY --from=builder /subatomic /subatomic
 
