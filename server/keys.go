@@ -60,7 +60,7 @@ func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 type createKeyPayload struct {
-	ID    string `json:"id" validate:"required,alphanum"`
+	ID    string `json:"id" validate:"required,hostname"`
 	Name  string `json:"name" validate:"required"`
 	Email string `json:"email" validate:"required,email"`
 }
@@ -141,7 +141,7 @@ type fullKeyResponse struct {
 //	@Router			/keys/{id} [get]
 func (router *keysRouter) getKey(w http.ResponseWriter, r *http.Request) {
 	keyID := chi.URLParam(r, "keyID")
-	if err := validate.Var(keyID, "required,alphanum"); err != nil {
+	if err := validate.Var(keyID, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}

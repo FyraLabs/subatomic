@@ -7,7 +7,7 @@ import (
 )
 
 type CreateRepoPayload struct {
-	ID       string `json:"id" validate:"required,alphanum"`
+	ID       string `json:"id" validate:"required,hostname"`
 	RepoType string `json:"type" validate:"required,oneof='rpm' 'ostree'"`
 }
 
@@ -17,7 +17,7 @@ func (u *CreateRepoPayload) Bind(r *http.Request) error {
 }
 
 type SetKeyPayload struct {
-	ID string `json:"id" validate:"required,alphanum"`
+	ID string `json:"id" validate:"required,hostname"`
 }
 
 func (u *SetKeyPayload) Bind(r *http.Request) error {

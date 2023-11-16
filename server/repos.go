@@ -153,7 +153,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id} [delete]
 func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -200,7 +200,7 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id} [put]
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -407,7 +407,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 //	@Router			/repos/{id}/rpms [get]
 func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -504,7 +504,7 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/rpms/{rpmID} [delete]
 func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -574,7 +574,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/key [get]
 func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -622,7 +622,7 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/key [put]
 func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -685,7 +685,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/key [delete]
 func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -731,7 +731,7 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 //	@Router			/repos/{id}/resign [post]
 func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -819,7 +819,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/comps [put]
 func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
@@ -913,7 +913,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id}/comps [delete]
 func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
-	if err := validate.Var(id, "required,alphanum"); err != nil {
+	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
 	}
