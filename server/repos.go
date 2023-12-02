@@ -249,6 +249,8 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	defer r.MultipartForm.RemoveAll()
+
 	files, ok := r.MultipartForm.File["file_upload"]
 	if !ok {
 		render.Render(w, r, types.ErrInvalidRequest(errors.New("no files passed under key file_upload")))
