@@ -31,8 +31,6 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 		return nil, err
 	}
 
-	print(res.StatusCode)
-
 	if res.StatusCode != http.StatusOK {
 		var serverError types.ErrResponse
 		if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
@@ -55,6 +53,8 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 var pkgDeleteCmd = &cobra.Command{
 	Use:   "delete [repo] [id or spec]",
 	Short: "Delete a package",
+	Args:  cobra.ExactArgs(2),
+	Aliases: []string{"rm"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
@@ -130,5 +130,5 @@ var pkgDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(pkgDeleteCmd)
+	pkgCmd.AddCommand(pkgDeleteCmd)
 }
