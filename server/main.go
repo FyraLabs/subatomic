@@ -45,15 +45,15 @@ func main() {
 func run() error {
 	validate = validator.New()
 	decoder = form.NewDecoder()
-	var enviroment types.Enviroment
+	var environment types.Environment
 
 	_ = godotenv.Load()
-	_, err := env.UnmarshalFromEnviron(&enviroment)
+	_, err := env.UnmarshalFromEnviron(&environment)
 	if err != nil {
 		return err
 	}
 
-	client, err := ent.Open("postgres", enviroment.DatabaseOptions)
+	client, err := ent.Open("postgres", environment.DatabaseOptions)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func run() error {
 		return fmt.Errorf("failed creating schema resources: %w", err)
 	}
 
-	if enviroment.EnableTracing {
+	if environment.EnableTracing {
 		tp := initTracerProvider()
 		defer func() {
 			if err := tp.Shutdown(context.Background()); err != nil {
@@ -77,8 +77,8 @@ func run() error {
 	// TODO: Auth
 	router := &apiRouter{
 		database:         client,
-		enviroment:       &enviroment,
-		jwtAuthenticator: jwtauth.New("HS256", []byte(enviroment.JWTSecret), nil),
+		environment:      &environment,
+		jwtAuthenticator: jwtauth.New("HS256", []byte(environment.JWTSecret), nil),
 		repoMutex:        &keyedmutex.KeyedMutex{},
 	}
 	router.setup()

@@ -20,7 +20,7 @@ import (
 type apiRouter struct {
 	*chi.Mux
 	database         *ent.Client
-	enviroment       *types.Enviroment
+	environment      *types.Environment
 	jwtAuthenticator *jwtauth.JWTAuth
 	repoMutex        *keyedmutex.KeyedMutex
 }
@@ -57,16 +57,16 @@ func (router *apiRouter) setup() {
 		r.Use(Authenticator)
 
 		repos := reposRouter{
-			database:   router.database,
-			enviroment: router.enviroment,
-			repoMutex:  router.repoMutex,
+			database:    router.database,
+			environment: router.environment,
+			repoMutex:   router.repoMutex,
 		}
 		repos.setup()
 		r.Mount("/repos", repos)
 
 		keys := keysRouter{
-			database:   router.database,
-			enviroment: router.enviroment,
+			database:    router.database,
+			environment: router.environment,
 		}
 		keys.setup()
 		r.Mount("/keys", keys)

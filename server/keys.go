@@ -14,8 +14,8 @@ import (
 
 type keysRouter struct {
 	*chi.Mux
-	database   *ent.Client
-	enviroment *types.Enviroment
+	database    *ent.Client
+	environment *types.Environment
 }
 
 func (router *keysRouter) setup() {

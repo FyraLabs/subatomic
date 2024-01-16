@@ -29,9 +29,9 @@ import (
 
 type reposRouter struct {
 	*chi.Mux
-	database   *ent.Client
-	enviroment *types.Enviroment
-	repoMutex  *keyedmutex.KeyedMutex
+	database    *ent.Client
+	environment *types.Environment
+	repoMutex   *keyedmutex.KeyedMutex
 }
 
 func (router *reposRouter) setup() {
@@ -117,7 +117,7 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repositoryDir := path.Join(router.enviroment.StorageDirectory, payload.ID)
+	repositoryDir := path.Join(router.environment.StorageDirectory, payload.ID)
 
 	switch payload.RepoType {
 	case "rpm":
@@ -172,7 +172,7 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := os.RemoveAll(path.Join(router.enviroment.StorageDirectory, id)); err != nil {
+	if err := os.RemoveAll(path.Join(router.environment.StorageDirectory, id)); err != nil {
 		panic(err)
 	}
 
@@ -257,7 +257,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
 
 	switch re.Type {
 	case repo.TypeRpm:
@@ -551,7 +551,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	targetDirectory := path.Join(router.enviroment.StorageDirectory, id, rpm.FilePath)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id, rpm.FilePath)
 
 	if err := os.Remove(targetDirectory); err != nil && !os.IsNotExist(err) {
 		panic(err)
@@ -664,7 +664,7 @@ func (router *reposRouter) setRepoKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := os.WriteFile(path.Join(router.enviroment.StorageDirectory, id, "key.asc"), []byte(key.PublicKey), 0644); err != nil {
+	if err := os.WriteFile(path.Join(router.environment.StorageDirectory, id, "key.asc"), []byte(key.PublicKey), 0644); err != nil {
 		panic(err)
 	}
 
@@ -710,7 +710,7 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 		panic(err)
 	}
 
-	if err := os.Remove(path.Join(router.enviroment.StorageDirectory, id, "key.asc")); err != nil {
+	if err := os.Remove(path.Join(router.environment.StorageDirectory, id, "key.asc")); err != nil {
 		panic(err)
 	}
 
@@ -772,7 +772,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
 
 	switch re.Type {
 	case repo.TypeRpm:
@@ -872,7 +872,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 
 	defer file.Close()
 
-	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
 
 	compsFile, err := os.OpenFile(path.Join(targetDirectory, "comps.xml"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0744)
 	if err != nil {
@@ -958,7 +958,7 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	targetDirectory := path.Join(router.enviroment.StorageDirectory, id)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
 
 	if err := os.Remove(path.Join(targetDirectory, "comps.xml")); err != nil && !os.IsNotExist(err) {
 		panic(err)
