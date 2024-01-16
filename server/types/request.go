@@ -32,5 +32,5 @@ type QueryRpmParams struct {
 	Version      *string `form:"version"`
 	Release      *string `form:"release"`
 	Arch         *string `form:"arch"`
-	FilePath     *string `json:"file_path"`
+	FilePath     *string `form:"file_path"`
 }
