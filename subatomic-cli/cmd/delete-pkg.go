@@ -53,12 +53,15 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 var pkgDeleteCmd = &cobra.Command{
 	Use:   "delete [repo] [id or spec]",
 	Short: "Delete a package",
+	// todo: maybe allow multiple packages to be deleted at once
 	Args:  cobra.ExactArgs(2),
-	Aliases: []string{"rm"},
+	// Args:  cobra.MinimumNArgs(2),
+	Aliases: []string{"rm", "d", "remove", "del"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 
+		// todo: maybe 
 		if server == "" {
 			return errors.New("server must be defined")
 		}
