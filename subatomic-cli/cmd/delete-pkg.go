@@ -42,8 +42,6 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 		return nil, fmt.Errorf("API returned error: %s", serverError.ErrorText)
 	}
 
-	print(res.Body)
-
 	var result []types.RpmResponse
 
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
@@ -120,15 +118,13 @@ var pkgDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		if res.StatusCode != http.StatusOK {
+		// if status code is not 204, return error
+		if res.StatusCode != http.StatusNoContent {
 			var serverError types.ErrResponse
 			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
 				return err
 			}
-
-			return fmt.Errorf("API returned error: %s", serverError.ErrorText)
 		}
-
 		return nil
 	},
 }
