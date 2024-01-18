@@ -27,6 +27,17 @@ Simply clone this repo then:
 go build (server|subatomic-cli)
 ```
 
+## Client Configuration
+
+`subatomic-cli` can be configured using a config file in `~/.config/subatomic.json`, or by using CLI flags.
+
+```json
+{
+  "server": "https://subatomic.example.com",
+  "token": "super-secret-jwt-token"
+}
+```
+
 ## 🗒️ Todos
 
 - Improve the README
