@@ -27,11 +27,6 @@ func (router *keysRouter) setup() {
 	router.Get("/{keyID}", router.getKey)
 }
 
-type keyResponse struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
 
 // getKeys godoc
 //
@@ -48,8 +43,8 @@ func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	res := lo.Map(keys, func(key *ent.SigningKey, _ int) *keyResponse {
-		return &keyResponse{
+	res := lo.Map(keys, func(key *ent.SigningKey, _ int) *types.KeyResponse {
+		return &types.KeyResponse{
 			ID:    key.ID,
 			Name:  key.Name,
 			Email: key.Email,
@@ -114,7 +109,7 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	render.JSON(w, r, &keyResponse{
+	render.JSON(w, r, &types.KeyResponse{
 		ID:    key.ID,
 		Name:  key.Name,
 		Email: key.Email,

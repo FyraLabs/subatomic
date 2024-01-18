@@ -31,8 +31,6 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 		return nil, err
 	}
 
-	print(res.StatusCode)
-
 	if res.StatusCode != http.StatusOK {
 		var serverError types.ErrResponse
 		if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
@@ -55,10 +53,15 @@ func resolvePackageNevra(server string, token string, repo string, input string)
 var pkgDeleteCmd = &cobra.Command{
 	Use:   "delete [repo] [id or spec]",
 	Short: "Delete a package",
+	// todo: maybe allow multiple packages to be deleted at once
+	Args:  cobra.MinimumNArgs(2),
+	// Args:  cobra.MinimumNArgs(2),
+	Aliases: []string{"rm", "d", "remove", "del"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 
+		// todo: maybe 
 		if server == "" {
 			return errors.New("server must be defined")
 		}
@@ -73,56 +76,57 @@ var pkgDeleteCmd = &cobra.Command{
 			return errors.New("repo must be defined")
 		}
 
-		input := args[1]
-
-		if input == "" {
-			return errors.New("input must be defined")
-		}
+		// Allow multiple packages to be deleted at once
+		input := args[1:]
 
 		// check if input is an integer or string
 
-		var pkgId int
+		var pkgId []int
 
 		// check if can be converted into int
 
-		if out, err := strconv.Atoi(input); err == nil {
-			// is int
-			pkgId = out
-		} else {
-			// query for package with filename
+		for _, i := range input {
+			if out, err := strconv.Atoi(i); err == nil {
+				// is int
+				pkgId = append(pkgId, out)
+			} else {
+				// query for package with filename
 
-			query, err := resolvePackageNevra(server, token, repo, input)
+				query, err := resolvePackageNevra(server, token, repo, i)
+				if err != nil {
+					return err
+				}
+
+				if len(query) == 0 {
+					return errors.New("no packages found: " + i)
+				}
+
+				pkgId = append(pkgId, query[0].ID)
+			}
+		}
+
+		for _, i := range pkgId {
+			req, err := http.NewRequest(http.MethodDelete, server+"/repos/"+repo+"/rpms/"+strconv.Itoa(i), nil)
+			
 			if err != nil {
 				return err
 			}
 
-			if len(query) == 0 {
-				return errors.New("no packages found")
+			req.Header.Add("Accept", "application/json")
+			req.Header.Add("Authorization", "Bearer "+token)
+
+			client := &http.Client{}
+			res, err := client.Do(req)
+
+			if err != nil {
+				return err
 			}
 
-			pkgId = query[0].ID
-		}
-
-		req, err := http.NewRequest(http.MethodDelete, server+"/repos/"+repo+"/rpms/"+strconv.Itoa(pkgId), nil)
-		if err != nil {
-			return err
-		}
-
-		req.Header.Add("Accept", "application/json")
-		req.Header.Add("Authorization", "Bearer "+token)
-
-		client := &http.Client{}
-		res, err := client.Do(req)
-
-		if err != nil {
-			return err
-		}
-
-		// if status code is not 204, return error
-		if res.StatusCode != http.StatusNoContent {
-			var serverError types.ErrResponse
-			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
-				return err
+			if res.StatusCode != http.StatusNoContent {
+				var serverError types.ErrResponse
+				if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -130,5 +134,5 @@ var pkgDeleteCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(pkgDeleteCmd)
+	pkgCmd.AddCommand(pkgDeleteCmd)
 }

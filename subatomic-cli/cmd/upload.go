@@ -148,6 +148,9 @@ var uploadCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(uploadCmd)
+	// Add to pkg subcommand as well, but we will still keep it in rootCmd
+	// for backwards compatibility
+	pkgCmd.AddCommand(uploadCmd)
 
 	// Here you will define your flags and configuration settings.
 
