@@ -14,12 +14,19 @@ var pkgSearchCmd = &cobra.Command{
 	Use:     "search [repo] [query]",
 	Short:   "Search for packages in a repository",
 	Aliases: []string{"s"},
-	Args:    cobra.ExactArgs(2),
+	Args:    cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 		repo := args[0]
-		query := args[1]
+		// query = join the rest of the args :1
+		query_array := args[:1]
+
+		query := ""
+
+		for _, q := range query_array {
+			query = query + q + " "
+		}
 		// todo: Maybe add a flag to make them a table?
 
 		req, err := http.NewRequest(http.MethodGet, server+"/repos/"+repo+"/rpms", nil)
