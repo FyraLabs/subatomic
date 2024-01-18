@@ -15,3 +15,9 @@ type RpmResponse struct {
 	Arch     string `json:"arch"`
 	FilePath string `json:"file_path"`
 }
+
+type KeyResponse struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
