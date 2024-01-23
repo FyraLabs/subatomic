@@ -6,7 +6,7 @@ require (
 	entgo.io/ent v0.12.5
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-playground/validator/v10 v10.16.0
-	github.com/lestrrat-go/jwx/v2 v2.0.16
+	github.com/lestrrat-go/jwx/v2 v2.0.18
 	github.com/sassoftware/go-rpmutils v0.2.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/http-swagger v1.3.4
