@@ -1,7 +1,7 @@
 %define debug_package %{nil}
 %define _build_id_links none
 Name:           subatomic
-Version:        0.3.1.%{autogitversion}
+Version:        0.4.0.%{autogitversion}
 Release:        1%{?dist}
 Summary:        A modern package delivery system
 
