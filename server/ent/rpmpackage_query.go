@@ -19,7 +19,7 @@ import (
 type RpmPackageQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []rpmpackage.OrderOption
 	inters     []Interceptor
 	predicates []predicate.RpmPackage
 	withRepo   *RepoQuery
@@ -55,7 +55,7 @@ func (rpq *RpmPackageQuery) Unique(unique bool) *RpmPackageQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (rpq *RpmPackageQuery) Order(o ...OrderFunc) *RpmPackageQuery {
+func (rpq *RpmPackageQuery) Order(o ...rpmpackage.OrderOption) *RpmPackageQuery {
 	rpq.order = append(rpq.order, o...)
 	return rpq
 }
@@ -271,7 +271,7 @@ func (rpq *RpmPackageQuery) Clone() *RpmPackageQuery {
 	return &RpmPackageQuery{
 		config:     rpq.config,
 		ctx:        rpq.ctx.Clone(),
-		order:      append([]OrderFunc{}, rpq.order...),
+		order:      append([]rpmpackage.OrderOption{}, rpq.order...),
 		inters:     append([]Interceptor{}, rpq.inters...),
 		predicates: append([]predicate.RpmPackage{}, rpq.predicates...),
 		withRepo:   rpq.withRepo.Clone(),

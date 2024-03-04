@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
@@ -20,8 +21,9 @@ type Repo struct {
 	Type repo.Type `json:"type,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RepoQuery when eager-loading is set.
-	Edges    RepoEdges `json:"edges"`
-	repo_key *string
+	Edges        RepoEdges `json:"edges"`
+	repo_key     *string
+	selectValues sql.SelectValues
 }
 
 // RepoEdges holds the relations/edges for other nodes in the graph.
@@ -67,7 +69,7 @@ func (*Repo) scanValues(columns []string) ([]any, error) {
 		case repo.ForeignKeys[0]: // repo_key
 			values[i] = new(sql.NullString)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Repo", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -100,9 +102,17 @@ func (r *Repo) assignValues(columns []string, values []any) error {
 				r.repo_key = new(string)
 				*r.repo_key = value.String
 			}
+		default:
+			r.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Repo.
+// This includes values selected through modifiers, order, etc.
+func (r *Repo) Value(name string) (ent.Value, error) {
+	return r.selectValues.Get(name)
 }
 
 // QueryRpms queries the "rpms" edge of the Repo entity.

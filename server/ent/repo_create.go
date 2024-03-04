@@ -74,7 +74,7 @@ func (rc *RepoCreate) Mutation() *RepoMutation {
 
 // Save creates the Repo in the database.
 func (rc *RepoCreate) Save(ctx context.Context) (*Repo, error) {
-	return withHooks[*Repo, RepoMutation](ctx, rc.sqlSave, rc.mutation, rc.hooks)
+	return withHooks(ctx, rc.sqlSave, rc.mutation, rc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -156,10 +156,7 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -175,10 +172,7 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 			Columns: []string{repo.KeyColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: signingkey.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -193,11 +187,15 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 // RepoCreateBulk is the builder for creating many Repo entities in bulk.
 type RepoCreateBulk struct {
 	config
+	err      error
 	builders []*RepoCreate
 }
 
 // Save creates the Repo entities in the database.
 func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
+	if rcb.err != nil {
+		return nil, rcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(rcb.builders))
 	nodes := make([]*Repo, len(rcb.builders))
 	mutators := make([]Mutator, len(rcb.builders))
@@ -213,8 +211,8 @@ func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, rcb.builders[i+1].mutation)
 				} else {

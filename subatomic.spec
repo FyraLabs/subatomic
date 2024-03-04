@@ -11,8 +11,6 @@ Source0:        https://github.com/FyraLabs/subatomic/archive/%{autogitcommit}.z
 
 BuildRequires:  go-rpm-macros
 BuildRequires:  git-core
-BuildRequires:  ostree-devel
-Requires:       ostree
 Requires:       createrepo_c
 
 %description

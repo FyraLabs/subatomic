@@ -27,7 +27,7 @@ func (skd *SigningKeyDelete) Where(ps ...predicate.SigningKey) *SigningKeyDelete
 
 // Exec executes the deletion query and returns how many vertices were deleted.
 func (skd *SigningKeyDelete) Exec(ctx context.Context) (int, error) {
-	return withHooks[int, SigningKeyMutation](ctx, skd.sqlExec, skd.mutation, skd.hooks)
+	return withHooks(ctx, skd.sqlExec, skd.mutation, skd.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.

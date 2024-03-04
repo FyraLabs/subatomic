@@ -72,7 +72,7 @@ func (skc *SigningKeyCreate) Mutation() *SigningKeyMutation {
 
 // Save creates the SigningKey in the database.
 func (skc *SigningKeyCreate) Save(ctx context.Context) (*SigningKey, error) {
-	return withHooks[*SigningKey, SigningKeyMutation](ctx, skc.sqlSave, skc.mutation, skc.hooks)
+	return withHooks(ctx, skc.sqlSave, skc.mutation, skc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -170,10 +170,7 @@ func (skc *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -187,11 +184,15 @@ func (skc *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
 // SigningKeyCreateBulk is the builder for creating many SigningKey entities in bulk.
 type SigningKeyCreateBulk struct {
 	config
+	err      error
 	builders []*SigningKeyCreate
 }
 
 // Save creates the SigningKey entities in the database.
 func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, error) {
+	if skcb.err != nil {
+		return nil, skcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(skcb.builders))
 	nodes := make([]*SigningKey, len(skcb.builders))
 	mutators := make([]Mutator, len(skcb.builders))
@@ -207,8 +208,8 @@ func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, erro
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, skcb.builders[i+1].mutation)
 				} else {

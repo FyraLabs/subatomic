@@ -82,7 +82,7 @@ func (rpc *RpmPackageCreate) Mutation() *RpmPackageMutation {
 
 // Save creates the RpmPackage in the database.
 func (rpc *RpmPackageCreate) Save(ctx context.Context) (*RpmPackage, error) {
-	return withHooks[*RpmPackage, RpmPackageMutation](ctx, rpc.sqlSave, rpc.mutation, rpc.hooks)
+	return withHooks(ctx, rpc.sqlSave, rpc.mutation, rpc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -190,10 +190,7 @@ func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 			Columns: []string{rpmpackage.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -208,11 +205,15 @@ func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 // RpmPackageCreateBulk is the builder for creating many RpmPackage entities in bulk.
 type RpmPackageCreateBulk struct {
 	config
+	err      error
 	builders []*RpmPackageCreate
 }
 
 // Save creates the RpmPackage entities in the database.
 func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, error) {
+	if rpcb.err != nil {
+		return nil, rpcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(rpcb.builders))
 	nodes := make([]*RpmPackage, len(rpcb.builders))
 	mutators := make([]Mutator, len(rpcb.builders))
@@ -228,8 +229,8 @@ func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, erro
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, rpcb.builders[i+1].mutation)
 				} else {

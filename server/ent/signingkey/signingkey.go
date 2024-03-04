@@ -2,6 +2,11 @@
 
 package signingkey
 
+import (
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
+)
+
 const (
 	// Label holds the string label denoting the signingkey type in the database.
 	Label = "signing_key"
@@ -45,4 +50,53 @@ func ValidColumn(column string) bool {
 		}
 	}
 	return false
+}
+
+// OrderOption defines the ordering options for the SigningKey queries.
+type OrderOption func(*sql.Selector)
+
+// ByID orders the results by the id field.
+func ByID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByPrivateKey orders the results by the private_key field.
+func ByPrivateKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPrivateKey, opts...).ToFunc()
+}
+
+// ByPublicKey orders the results by the public_key field.
+func ByPublicKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPublicKey, opts...).ToFunc()
+}
+
+// ByName orders the results by the name field.
+func ByName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldName, opts...).ToFunc()
+}
+
+// ByEmail orders the results by the email field.
+func ByEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmail, opts...).ToFunc()
+}
+
+// ByRepoCount orders the results by repo count.
+func ByRepoCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newRepoStep(), opts...)
+	}
+}
+
+// ByRepo orders the results by repo terms.
+func ByRepo(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRepoStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newRepoStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RepoInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, true, RepoTable, RepoColumn),
+	)
 }

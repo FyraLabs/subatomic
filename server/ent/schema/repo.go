@@ -15,7 +15,7 @@ type Repo struct {
 func (Repo) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Unique().StorageKey("oid"),
-		field.Enum("type").Values("rpm", "ostree"),
+		field.Enum("type").Values("rpm"),
 	}
 }
 

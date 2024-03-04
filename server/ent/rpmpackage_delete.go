@@ -27,7 +27,7 @@ func (rpd *RpmPackageDelete) Where(ps ...predicate.RpmPackage) *RpmPackageDelete
 
 // Exec executes the deletion query and returns how many vertices were deleted.
 func (rpd *RpmPackageDelete) Exec(ctx context.Context) (int, error) {
-	return withHooks[int, RpmPackageMutation](ctx, rpd.sqlExec, rpd.mutation, rpd.hooks)
+	return withHooks(ctx, rpd.sqlExec, rpd.mutation, rpd.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.

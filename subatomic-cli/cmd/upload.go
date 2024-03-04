@@ -34,10 +34,6 @@ var uploadCmd = &cobra.Command{
 			return err
 		}
 
-		ostreeBranch, err := cmd.Flags().GetString("branch")
-		if err != nil {
-			return err
-		}
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 
@@ -61,7 +57,6 @@ var uploadCmd = &cobra.Command{
 
 		q := req.URL.Query()
 		q.Add("prune", lo.Ternary(prune, "true", "false"))
-		q.Add("ostree_branch", ostreeBranch)
 		req.URL.RawQuery = q.Encode()
 
 		req.Header.Add("Content-Type", form.FormDataContentType())
@@ -162,5 +157,4 @@ func init() {
 	// is called directly, e.g.:
 	// uploadCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	uploadCmd.Flags().Bool("prune", false, "Prune older packages on upload")
-	uploadCmd.Flags().String("branch", "", "An ostree branch to push to, if the repo is an ostree repo")
 }

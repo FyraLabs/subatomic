@@ -11,7 +11,7 @@ var (
 	// ReposColumns holds the columns for the "repos" table.
 	ReposColumns = []*schema.Column{
 		{Name: "oid", Type: field.TypeString, Unique: true},
-		{Name: "type", Type: field.TypeEnum, Enums: []string{"rpm", "ostree"}},
+		{Name: "type", Type: field.TypeEnum, Enums: []string{"rpm"}},
 		{Name: "repo_key", Type: field.TypeString, Nullable: true},
 	}
 	// ReposTable holds the schema information for the "repos" table.

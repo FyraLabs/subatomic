@@ -35,6 +35,14 @@ func (ru *RepoUpdate) SetType(r repo.Type) *RepoUpdate {
 	return ru
 }
 
+// SetNillableType sets the "type" field if the given value is not nil.
+func (ru *RepoUpdate) SetNillableType(r *repo.Type) *RepoUpdate {
+	if r != nil {
+		ru.SetType(*r)
+	}
+	return ru
+}
+
 // AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
 func (ru *RepoUpdate) AddRpmIDs(ids ...int) *RepoUpdate {
 	ru.mutation.AddRpmIDs(ids...)
@@ -103,7 +111,7 @@ func (ru *RepoUpdate) ClearKey() *RepoUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ru *RepoUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RepoMutation](ctx, ru.sqlSave, ru.mutation, ru.hooks)
+	return withHooks(ctx, ru.sqlSave, ru.mutation, ru.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -161,10 +169,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -177,10 +182,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -196,10 +198,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -215,10 +214,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{repo.KeyColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: signingkey.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -231,10 +227,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{repo.KeyColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: signingkey.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -265,6 +258,14 @@ type RepoUpdateOne struct {
 // SetType sets the "type" field.
 func (ruo *RepoUpdateOne) SetType(r repo.Type) *RepoUpdateOne {
 	ruo.mutation.SetType(r)
+	return ruo
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (ruo *RepoUpdateOne) SetNillableType(r *repo.Type) *RepoUpdateOne {
+	if r != nil {
+		ruo.SetType(*r)
+	}
 	return ruo
 }
 
@@ -349,7 +350,7 @@ func (ruo *RepoUpdateOne) Select(field string, fields ...string) *RepoUpdateOne 
 
 // Save executes the query and returns the updated Repo entity.
 func (ruo *RepoUpdateOne) Save(ctx context.Context) (*Repo, error) {
-	return withHooks[*Repo, RepoMutation](ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
+	return withHooks(ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -424,10 +425,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -440,10 +438,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -459,10 +454,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Columns: []string{repo.RpmsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: rpmpackage.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -478,10 +470,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Columns: []string{repo.KeyColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: signingkey.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -494,10 +483,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			Columns: []string{repo.KeyColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: signingkey.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

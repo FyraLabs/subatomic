@@ -34,9 +34,25 @@ func (sku *SigningKeyUpdate) SetPrivateKey(s string) *SigningKeyUpdate {
 	return sku
 }
 
+// SetNillablePrivateKey sets the "private_key" field if the given value is not nil.
+func (sku *SigningKeyUpdate) SetNillablePrivateKey(s *string) *SigningKeyUpdate {
+	if s != nil {
+		sku.SetPrivateKey(*s)
+	}
+	return sku
+}
+
 // SetPublicKey sets the "public_key" field.
 func (sku *SigningKeyUpdate) SetPublicKey(s string) *SigningKeyUpdate {
 	sku.mutation.SetPublicKey(s)
+	return sku
+}
+
+// SetNillablePublicKey sets the "public_key" field if the given value is not nil.
+func (sku *SigningKeyUpdate) SetNillablePublicKey(s *string) *SigningKeyUpdate {
+	if s != nil {
+		sku.SetPublicKey(*s)
+	}
 	return sku
 }
 
@@ -46,9 +62,25 @@ func (sku *SigningKeyUpdate) SetName(s string) *SigningKeyUpdate {
 	return sku
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (sku *SigningKeyUpdate) SetNillableName(s *string) *SigningKeyUpdate {
+	if s != nil {
+		sku.SetName(*s)
+	}
+	return sku
+}
+
 // SetEmail sets the "email" field.
 func (sku *SigningKeyUpdate) SetEmail(s string) *SigningKeyUpdate {
 	sku.mutation.SetEmail(s)
+	return sku
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (sku *SigningKeyUpdate) SetNillableEmail(s *string) *SigningKeyUpdate {
+	if s != nil {
+		sku.SetEmail(*s)
+	}
 	return sku
 }
 
@@ -95,7 +127,7 @@ func (sku *SigningKeyUpdate) RemoveRepo(r ...*Repo) *SigningKeyUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (sku *SigningKeyUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, SigningKeyMutation](ctx, sku.sqlSave, sku.mutation, sku.hooks)
+	return withHooks(ctx, sku.sqlSave, sku.mutation, sku.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -149,10 +181,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -165,10 +194,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -184,10 +210,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -221,9 +244,25 @@ func (skuo *SigningKeyUpdateOne) SetPrivateKey(s string) *SigningKeyUpdateOne {
 	return skuo
 }
 
+// SetNillablePrivateKey sets the "private_key" field if the given value is not nil.
+func (skuo *SigningKeyUpdateOne) SetNillablePrivateKey(s *string) *SigningKeyUpdateOne {
+	if s != nil {
+		skuo.SetPrivateKey(*s)
+	}
+	return skuo
+}
+
 // SetPublicKey sets the "public_key" field.
 func (skuo *SigningKeyUpdateOne) SetPublicKey(s string) *SigningKeyUpdateOne {
 	skuo.mutation.SetPublicKey(s)
+	return skuo
+}
+
+// SetNillablePublicKey sets the "public_key" field if the given value is not nil.
+func (skuo *SigningKeyUpdateOne) SetNillablePublicKey(s *string) *SigningKeyUpdateOne {
+	if s != nil {
+		skuo.SetPublicKey(*s)
+	}
 	return skuo
 }
 
@@ -233,9 +272,25 @@ func (skuo *SigningKeyUpdateOne) SetName(s string) *SigningKeyUpdateOne {
 	return skuo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (skuo *SigningKeyUpdateOne) SetNillableName(s *string) *SigningKeyUpdateOne {
+	if s != nil {
+		skuo.SetName(*s)
+	}
+	return skuo
+}
+
 // SetEmail sets the "email" field.
 func (skuo *SigningKeyUpdateOne) SetEmail(s string) *SigningKeyUpdateOne {
 	skuo.mutation.SetEmail(s)
+	return skuo
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (skuo *SigningKeyUpdateOne) SetNillableEmail(s *string) *SigningKeyUpdateOne {
+	if s != nil {
+		skuo.SetEmail(*s)
+	}
 	return skuo
 }
 
@@ -295,7 +350,7 @@ func (skuo *SigningKeyUpdateOne) Select(field string, fields ...string) *Signing
 
 // Save executes the query and returns the updated SigningKey entity.
 func (skuo *SigningKeyUpdateOne) Save(ctx context.Context) (*SigningKey, error) {
-	return withHooks[*SigningKey, SigningKeyMutation](ctx, skuo.sqlSave, skuo.mutation, skuo.hooks)
+	return withHooks(ctx, skuo.sqlSave, skuo.mutation, skuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -366,10 +421,7 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -382,10 +434,7 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -401,10 +450,7 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 			Columns: []string{signingkey.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

@@ -462,11 +462,7 @@ func HasRepo() predicate.RpmPackage {
 // HasRepoWith applies the HasEdge predicate on the "repo" edge with a given conditions (other predicates).
 func HasRepoWith(preds ...predicate.Repo) predicate.RpmPackage {
 	return predicate.RpmPackage(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(RepoInverseTable, RepoFieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, RepoTable, RepoColumn),
-		)
+		step := newRepoStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -477,32 +473,15 @@ func HasRepoWith(preds ...predicate.Repo) predicate.RpmPackage {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.RpmPackage) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.RpmPackage(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.RpmPackage) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.RpmPackage(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.RpmPackage) predicate.RpmPackage {
-	return predicate.RpmPackage(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.RpmPackage(sql.NotPredicates(p))
 }

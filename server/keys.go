@@ -27,14 +27,13 @@ func (router *keysRouter) setup() {
 	router.Get("/{keyID}", router.getKey)
 }
 
-
 // getKeys godoc
 //
 //	@Summary		Get all keys
 //	@Description	get keys
 //	@Tags			keys
 //	@Produce		json
-//	@Success		200	{array}	keyResponse
+//	@Success		200	{array}	types.KeyResponse
 //	@Router			/keys [get]
 func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
 	keys, err := router.database.SigningKey.Query().All(r.Context())

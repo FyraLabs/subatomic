@@ -24,15 +24,6 @@ definitions:
       public_key:
         type: string
     type: object
-  main.keyResponse:
-    properties:
-      email:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-    type: object
   types.CreateRepoPayload:
     properties:
       id:
@@ -40,7 +31,6 @@ definitions:
       type:
         enum:
         - rpm
-        - ostree
         type: string
     required:
     - id
@@ -56,6 +46,15 @@ definitions:
         type: string
       status:
         description: user-level status message
+        type: string
+    type: object
+  types.KeyResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
         type: string
     type: object
   types.RepoResponse:
@@ -101,7 +100,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/main.keyResponse'
+              $ref: '#/definitions/types.KeyResponse'
             type: array
       summary: Get all keys
       tags:

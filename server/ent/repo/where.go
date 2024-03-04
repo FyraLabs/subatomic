@@ -53,6 +53,16 @@ func IDLTE(id string) predicate.Repo {
 	return predicate.Repo(sql.FieldLTE(FieldID, id))
 }
 
+// IDEqualFold applies the EqualFold predicate on the ID field.
+func IDEqualFold(id string) predicate.Repo {
+	return predicate.Repo(sql.FieldEqualFold(FieldID, id))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the ID field.
+func IDContainsFold(id string) predicate.Repo {
+	return predicate.Repo(sql.FieldContainsFold(FieldID, id))
+}
+
 // TypeEQ applies the EQ predicate on the "type" field.
 func TypeEQ(v Type) predicate.Repo {
 	return predicate.Repo(sql.FieldEQ(FieldType, v))
@@ -87,11 +97,7 @@ func HasRpms() predicate.Repo {
 // HasRpmsWith applies the HasEdge predicate on the "rpms" edge with a given conditions (other predicates).
 func HasRpmsWith(preds ...predicate.RpmPackage) predicate.Repo {
 	return predicate.Repo(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(RpmsInverseTable, RpmPackageFieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, RpmsTable, RpmsColumn),
-		)
+		step := newRpmsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -114,11 +120,7 @@ func HasKey() predicate.Repo {
 // HasKeyWith applies the HasEdge predicate on the "key" edge with a given conditions (other predicates).
 func HasKeyWith(preds ...predicate.SigningKey) predicate.Repo {
 	return predicate.Repo(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(KeyInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, false, KeyTable, KeyColumn),
-		)
+		step := newKeyStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -129,32 +131,15 @@ func HasKeyWith(preds ...predicate.SigningKey) predicate.Repo {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Repo) predicate.Repo {
-	return predicate.Repo(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Repo(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.Repo) predicate.Repo {
-	return predicate.Repo(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Repo(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.Repo) predicate.Repo {
-	return predicate.Repo(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.Repo(sql.NotPredicates(p))
 }
