@@ -2,7 +2,7 @@
 
 A modern package delivery system for RPMs.
 
-> [!WARNING]  
+> [!WARNING]
 > This README and docs are under progress.
 
 ## 🛠️ Dependencies
@@ -42,5 +42,4 @@ go build (server|subatomic-cli)
 
 - Improve the README
 - Refactor some bad (written while out of it) code
-- Move away from go work
 - Deprecate OSTree and go RPM only
