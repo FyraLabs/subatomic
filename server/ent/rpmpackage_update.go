@@ -34,10 +34,26 @@ func (rpu *RpmPackageUpdate) SetName(s string) *RpmPackageUpdate {
 	return rpu
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableName(s *string) *RpmPackageUpdate {
+	if s != nil {
+		rpu.SetName(*s)
+	}
+	return rpu
+}
+
 // SetEpoch sets the "epoch" field.
 func (rpu *RpmPackageUpdate) SetEpoch(i int) *RpmPackageUpdate {
 	rpu.mutation.ResetEpoch()
 	rpu.mutation.SetEpoch(i)
+	return rpu
+}
+
+// SetNillableEpoch sets the "epoch" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableEpoch(i *int) *RpmPackageUpdate {
+	if i != nil {
+		rpu.SetEpoch(*i)
+	}
 	return rpu
 }
 
@@ -53,9 +69,25 @@ func (rpu *RpmPackageUpdate) SetVersion(s string) *RpmPackageUpdate {
 	return rpu
 }
 
+// SetNillableVersion sets the "version" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableVersion(s *string) *RpmPackageUpdate {
+	if s != nil {
+		rpu.SetVersion(*s)
+	}
+	return rpu
+}
+
 // SetRelease sets the "release" field.
 func (rpu *RpmPackageUpdate) SetRelease(s string) *RpmPackageUpdate {
 	rpu.mutation.SetRelease(s)
+	return rpu
+}
+
+// SetNillableRelease sets the "release" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableRelease(s *string) *RpmPackageUpdate {
+	if s != nil {
+		rpu.SetRelease(*s)
+	}
 	return rpu
 }
 
@@ -65,9 +97,25 @@ func (rpu *RpmPackageUpdate) SetArch(s string) *RpmPackageUpdate {
 	return rpu
 }
 
+// SetNillableArch sets the "arch" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableArch(s *string) *RpmPackageUpdate {
+	if s != nil {
+		rpu.SetArch(*s)
+	}
+	return rpu
+}
+
 // SetFilePath sets the "file_path" field.
 func (rpu *RpmPackageUpdate) SetFilePath(s string) *RpmPackageUpdate {
 	rpu.mutation.SetFilePath(s)
+	return rpu
+}
+
+// SetNillableFilePath sets the "file_path" field if the given value is not nil.
+func (rpu *RpmPackageUpdate) SetNillableFilePath(s *string) *RpmPackageUpdate {
+	if s != nil {
+		rpu.SetFilePath(*s)
+	}
 	return rpu
 }
 
@@ -103,7 +151,7 @@ func (rpu *RpmPackageUpdate) ClearRepo() *RpmPackageUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (rpu *RpmPackageUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RpmPackageMutation](ctx, rpu.sqlSave, rpu.mutation, rpu.hooks)
+	return withHooks(ctx, rpu.sqlSave, rpu.mutation, rpu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -179,10 +227,7 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{rpmpackage.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -195,10 +240,7 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{rpmpackage.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {
@@ -232,10 +274,26 @@ func (rpuo *RpmPackageUpdateOne) SetName(s string) *RpmPackageUpdateOne {
 	return rpuo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableName(s *string) *RpmPackageUpdateOne {
+	if s != nil {
+		rpuo.SetName(*s)
+	}
+	return rpuo
+}
+
 // SetEpoch sets the "epoch" field.
 func (rpuo *RpmPackageUpdateOne) SetEpoch(i int) *RpmPackageUpdateOne {
 	rpuo.mutation.ResetEpoch()
 	rpuo.mutation.SetEpoch(i)
+	return rpuo
+}
+
+// SetNillableEpoch sets the "epoch" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableEpoch(i *int) *RpmPackageUpdateOne {
+	if i != nil {
+		rpuo.SetEpoch(*i)
+	}
 	return rpuo
 }
 
@@ -251,9 +309,25 @@ func (rpuo *RpmPackageUpdateOne) SetVersion(s string) *RpmPackageUpdateOne {
 	return rpuo
 }
 
+// SetNillableVersion sets the "version" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableVersion(s *string) *RpmPackageUpdateOne {
+	if s != nil {
+		rpuo.SetVersion(*s)
+	}
+	return rpuo
+}
+
 // SetRelease sets the "release" field.
 func (rpuo *RpmPackageUpdateOne) SetRelease(s string) *RpmPackageUpdateOne {
 	rpuo.mutation.SetRelease(s)
+	return rpuo
+}
+
+// SetNillableRelease sets the "release" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableRelease(s *string) *RpmPackageUpdateOne {
+	if s != nil {
+		rpuo.SetRelease(*s)
+	}
 	return rpuo
 }
 
@@ -263,9 +337,25 @@ func (rpuo *RpmPackageUpdateOne) SetArch(s string) *RpmPackageUpdateOne {
 	return rpuo
 }
 
+// SetNillableArch sets the "arch" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableArch(s *string) *RpmPackageUpdateOne {
+	if s != nil {
+		rpuo.SetArch(*s)
+	}
+	return rpuo
+}
+
 // SetFilePath sets the "file_path" field.
 func (rpuo *RpmPackageUpdateOne) SetFilePath(s string) *RpmPackageUpdateOne {
 	rpuo.mutation.SetFilePath(s)
+	return rpuo
+}
+
+// SetNillableFilePath sets the "file_path" field if the given value is not nil.
+func (rpuo *RpmPackageUpdateOne) SetNillableFilePath(s *string) *RpmPackageUpdateOne {
+	if s != nil {
+		rpuo.SetFilePath(*s)
+	}
 	return rpuo
 }
 
@@ -314,7 +404,7 @@ func (rpuo *RpmPackageUpdateOne) Select(field string, fields ...string) *RpmPack
 
 // Save executes the query and returns the updated RpmPackage entity.
 func (rpuo *RpmPackageUpdateOne) Save(ctx context.Context) (*RpmPackage, error) {
-	return withHooks[*RpmPackage, RpmPackageMutation](ctx, rpuo.sqlSave, rpuo.mutation, rpuo.hooks)
+	return withHooks(ctx, rpuo.sqlSave, rpuo.mutation, rpuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -407,10 +497,7 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 			Columns: []string{rpmpackage.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -423,10 +510,7 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 			Columns: []string{rpmpackage.RepoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeString,
-					Column: repo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString),
 			},
 		}
 		for _, k := range nodes {

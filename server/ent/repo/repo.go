@@ -4,6 +4,9 @@ package repo
 
 import (
 	"fmt"
+
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -69,8 +72,7 @@ type Type string
 
 // Type values.
 const (
-	TypeRpm    Type = "rpm"
-	TypeOstree Type = "ostree"
+	TypeRpm Type = "rpm"
 )
 
 func (_type Type) String() string {
@@ -80,9 +82,57 @@ func (_type Type) String() string {
 // TypeValidator is a validator for the "type" field enum values. It is called by the builders before save.
 func TypeValidator(_type Type) error {
 	switch _type {
-	case TypeRpm, TypeOstree:
+	case TypeRpm:
 		return nil
 	default:
 		return fmt.Errorf("repo: invalid enum value for type field: %q", _type)
 	}
+}
+
+// OrderOption defines the ordering options for the Repo queries.
+type OrderOption func(*sql.Selector)
+
+// ByID orders the results by the id field.
+func ByID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByType orders the results by the type field.
+func ByType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldType, opts...).ToFunc()
+}
+
+// ByRpmsCount orders the results by rpms count.
+func ByRpmsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newRpmsStep(), opts...)
+	}
+}
+
+// ByRpms orders the results by rpms terms.
+func ByRpms(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRpmsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByKeyField orders the results by key field.
+func ByKeyField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newKeyStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newRpmsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RpmsInverseTable, RpmPackageFieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, RpmsTable, RpmsColumn),
+	)
+}
+func newKeyStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(KeyInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, false, KeyTable, KeyColumn),
+	)
 }

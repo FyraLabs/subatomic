@@ -21,7 +21,7 @@ import (
 type RepoQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []repo.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Repo
 	withRpms   *RpmPackageQuery
@@ -58,7 +58,7 @@ func (rq *RepoQuery) Unique(unique bool) *RepoQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (rq *RepoQuery) Order(o ...OrderFunc) *RepoQuery {
+func (rq *RepoQuery) Order(o ...repo.OrderOption) *RepoQuery {
 	rq.order = append(rq.order, o...)
 	return rq
 }
@@ -296,7 +296,7 @@ func (rq *RepoQuery) Clone() *RepoQuery {
 	return &RepoQuery{
 		config:     rq.config,
 		ctx:        rq.ctx.Clone(),
-		order:      append([]OrderFunc{}, rq.order...),
+		order:      append([]repo.OrderOption{}, rq.order...),
 		inters:     append([]Interceptor{}, rq.inters...),
 		predicates: append([]predicate.Repo{}, rq.predicates...),
 		withRpms:   rq.withRpms.Clone(),
@@ -465,7 +465,7 @@ func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes
 	}
 	query.withFKs = true
 	query.Where(predicate.RpmPackage(func(s *sql.Selector) {
-		s.Where(sql.InValues(repo.RpmsColumn, fks...))
+		s.Where(sql.InValues(s.C(repo.RpmsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -478,7 +478,7 @@ func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "repo_rpms" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "repo_rpms" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

@@ -28,7 +28,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/main.keyResponse"
+                                "$ref": "#/definitions/types.KeyResponse"
                             }
                         }
                     }
@@ -551,20 +551,6 @@
                 }
             }
         },
-        "main.keyResponse": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
         "types.CreateRepoPayload": {
             "type": "object",
             "required": [
@@ -578,8 +564,7 @@
                 "type": {
                     "type": "string",
                     "enum": [
-                        "rpm",
-                        "ostree"
+                        "rpm"
                     ]
                 }
             }
@@ -597,6 +582,20 @@
                 },
                 "status": {
                     "description": "user-level status message",
+                    "type": "string"
+                }
+            }
+        },
+        "types.KeyResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }

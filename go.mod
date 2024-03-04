@@ -14,7 +14,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lestrrat-go/jwx/v2 v2.0.19
 	github.com/lib/pq v1.10.9
-	github.com/ostreedev/ostree-go v0.0.0-20210805093236-719684c64e4f
 	github.com/riandyrn/otelchi v0.5.1
 	github.com/samber/lo v1.39.0
 	github.com/sassoftware/go-rpmutils v0.2.0

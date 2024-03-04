@@ -2,7 +2,7 @@ FROM golang:1.21-bookworm as builder
 
 WORKDIR /app
 
-RUN apt update && apt install -y build-essential libostree-dev
+RUN apt update && apt install -y build-essential
 
 COPY . .
 
@@ -12,7 +12,7 @@ FROM golang:1.21-bookworm
 
 COPY --from=builder /subatomic /subatomic
 
-RUN apt update && apt install -y libostree-1-1 ostree createrepo-c
+RUN apt update && apt install -y createrepo-c
 
 EXPOSE 3000
 

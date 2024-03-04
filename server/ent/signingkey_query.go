@@ -20,7 +20,7 @@ import (
 type SigningKeyQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []signingkey.OrderOption
 	inters     []Interceptor
 	predicates []predicate.SigningKey
 	withRepo   *RepoQuery
@@ -55,7 +55,7 @@ func (skq *SigningKeyQuery) Unique(unique bool) *SigningKeyQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (skq *SigningKeyQuery) Order(o ...OrderFunc) *SigningKeyQuery {
+func (skq *SigningKeyQuery) Order(o ...signingkey.OrderOption) *SigningKeyQuery {
 	skq.order = append(skq.order, o...)
 	return skq
 }
@@ -271,7 +271,7 @@ func (skq *SigningKeyQuery) Clone() *SigningKeyQuery {
 	return &SigningKeyQuery{
 		config:     skq.config,
 		ctx:        skq.ctx.Clone(),
-		order:      append([]OrderFunc{}, skq.order...),
+		order:      append([]signingkey.OrderOption{}, skq.order...),
 		inters:     append([]Interceptor{}, skq.inters...),
 		predicates: append([]predicate.SigningKey{}, skq.predicates...),
 		withRepo:   skq.withRepo.Clone(),
@@ -414,7 +414,7 @@ func (skq *SigningKeyQuery) loadRepo(ctx context.Context, query *RepoQuery, node
 	}
 	query.withFKs = true
 	query.Where(predicate.Repo(func(s *sql.Selector) {
-		s.Where(sql.InValues(signingkey.RepoColumn, fks...))
+		s.Where(sql.InValues(s.C(signingkey.RepoColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -427,7 +427,7 @@ func (skq *SigningKeyQuery) loadRepo(ctx context.Context, query *RepoQuery, node
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "repo_key" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "repo_key" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

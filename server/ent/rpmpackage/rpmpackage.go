@@ -2,6 +2,11 @@
 
 package rpmpackage
 
+import (
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
+)
+
 const (
 	// Label holds the string label denoting the rpmpackage type in the database.
 	Label = "rpm_package"
@@ -70,3 +75,55 @@ var (
 	// EpochValidator is a validator for the "epoch" field. It is called by the builders before save.
 	EpochValidator func(int) error
 )
+
+// OrderOption defines the ordering options for the RpmPackage queries.
+type OrderOption func(*sql.Selector)
+
+// ByID orders the results by the id field.
+func ByID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByName orders the results by the name field.
+func ByName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldName, opts...).ToFunc()
+}
+
+// ByEpoch orders the results by the epoch field.
+func ByEpoch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEpoch, opts...).ToFunc()
+}
+
+// ByVersion orders the results by the version field.
+func ByVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVersion, opts...).ToFunc()
+}
+
+// ByRelease orders the results by the release field.
+func ByRelease(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRelease, opts...).ToFunc()
+}
+
+// ByArch orders the results by the arch field.
+func ByArch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArch, opts...).ToFunc()
+}
+
+// ByFilePath orders the results by the file_path field.
+func ByFilePath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFilePath, opts...).ToFunc()
+}
+
+// ByRepoField orders the results by repo field.
+func ByRepoField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newRepoStep(), sql.OrderByField(field, opts...))
+	}
+}
+func newRepoStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(RepoInverseTable, RepoFieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, RepoTable, RepoColumn),
+	)
+}

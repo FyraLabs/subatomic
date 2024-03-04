@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 )
@@ -25,7 +26,8 @@ type SigningKey struct {
 	Email string `json:"email,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SigningKeyQuery when eager-loading is set.
-	Edges SigningKeyEdges `json:"edges"`
+	Edges        SigningKeyEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // SigningKeyEdges holds the relations/edges for other nodes in the graph.
@@ -54,7 +56,7 @@ func (*SigningKey) scanValues(columns []string) ([]any, error) {
 		case signingkey.FieldID, signingkey.FieldPrivateKey, signingkey.FieldPublicKey, signingkey.FieldName, signingkey.FieldEmail:
 			values[i] = new(sql.NullString)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type SigningKey", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -98,9 +100,17 @@ func (sk *SigningKey) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				sk.Email = value.String
 			}
+		default:
+			sk.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the SigningKey.
+// This includes values selected through modifiers, order, etc.
+func (sk *SigningKey) Value(name string) (ent.Value, error) {
+	return sk.selectValues.Get(name)
 }
 
 // QueryRepo queries the "repo" edge of the SigningKey entity.

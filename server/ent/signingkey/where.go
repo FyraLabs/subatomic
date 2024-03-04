@@ -53,6 +53,16 @@ func IDLTE(id string) predicate.SigningKey {
 	return predicate.SigningKey(sql.FieldLTE(FieldID, id))
 }
 
+// IDEqualFold applies the EqualFold predicate on the ID field.
+func IDEqualFold(id string) predicate.SigningKey {
+	return predicate.SigningKey(sql.FieldEqualFold(FieldID, id))
+}
+
+// IDContainsFold applies the ContainsFold predicate on the ID field.
+func IDContainsFold(id string) predicate.SigningKey {
+	return predicate.SigningKey(sql.FieldContainsFold(FieldID, id))
+}
+
 // PrivateKey applies equality check predicate on the "private_key" field. It's identical to PrivateKeyEQ.
 func PrivateKey(v string) predicate.SigningKey {
 	return predicate.SigningKey(sql.FieldEQ(FieldPrivateKey, v))
@@ -347,11 +357,7 @@ func HasRepo() predicate.SigningKey {
 // HasRepoWith applies the HasEdge predicate on the "repo" edge with a given conditions (other predicates).
 func HasRepoWith(preds ...predicate.Repo) predicate.SigningKey {
 	return predicate.SigningKey(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(RepoInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, true, RepoTable, RepoColumn),
-		)
+		step := newRepoStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -362,32 +368,15 @@ func HasRepoWith(preds ...predicate.Repo) predicate.SigningKey {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.SigningKey) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.SigningKey(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.SigningKey) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.SigningKey(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.SigningKey) predicate.SigningKey {
-	return predicate.SigningKey(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.SigningKey(sql.NotPredicates(p))
 }

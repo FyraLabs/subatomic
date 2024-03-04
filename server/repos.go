@@ -12,7 +12,6 @@ import (
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
-	"github.com/FyraLabs/subatomic/server/ostree"
 	"github.com/FyraLabs/subatomic/server/rpm"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
@@ -122,10 +121,6 @@ func (router *reposRouter) createRepo(w http.ResponseWriter, r *http.Request) {
 	switch payload.RepoType {
 	case "rpm":
 		if err := rpm.CreateRepo(repositoryDir); err != nil {
-			panic(err)
-		}
-	case "ostree":
-		if err := ostree.CreateRepo(repositoryDir); err != nil {
 			panic(err)
 		}
 	}
@@ -358,36 +353,6 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
 			}
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-
-		if _, err := w.Write(nil); err != nil {
-			panic(err)
-		}
-	case repo.TypeOstree:
-		ostreeBranch := r.URL.Query().Get("ostree_branch")
-		if ostreeBranch == "" {
-			render.Render(w, r, types.ErrInvalidRequest(errors.New("ostree branch to push to must be specified under query param ostree_branch")))
-			return
-		}
-
-		for _, fileHeader := range files {
-			reqFile, err := fileHeader.Open()
-			if err != nil {
-				panic(err)
-			}
-
-			defer reqFile.Close()
-
-			if err := ostree.AddTarCommitToRepo(targetDirectory, ostreeBranch, reqFile); err != nil {
-				render.Render(w, r, types.ErrInvalidRequest(err))
-				return
-			}
-		}
-
-		if err := ostree.UpdateSummary(targetDirectory); err != nil {
-			panic(err)
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -795,10 +760,6 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
 			}
-		}
-	case repo.TypeOstree:
-		{
-			panic("not supported")
 		}
 	}
 

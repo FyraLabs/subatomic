@@ -8,7 +8,7 @@ import (
 
 type CreateRepoPayload struct {
 	ID       string `json:"id" validate:"required,hostname"`
-	RepoType string `json:"type" validate:"required,oneof='rpm' 'ostree'"`
+	RepoType string `json:"type" validate:"required,oneof='rpm'"`
 }
 
 func (u *CreateRepoPayload) Bind(r *http.Request) error {

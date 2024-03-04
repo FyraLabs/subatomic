@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 
 	"github.com/FyraLabs/subatomic/server/ent/migrate"
 
@@ -34,9 +35,7 @@ type Client struct {
 
 // NewClient creates a new client configured with the given options.
 func NewClient(opts ...Option) *Client {
-	cfg := config{log: log.Println, hooks: &hooks{}, inters: &inters{}}
-	cfg.options(opts...)
-	client := &Client{config: cfg}
+	client := &Client{config: newConfig(opts...)}
 	client.init()
 	return client
 }
@@ -65,6 +64,13 @@ type (
 	// Option function to configure the client.
 	Option func(*config)
 )
+
+// newConfig creates a new config for the client.
+func newConfig(opts ...Option) config {
+	cfg := config{log: log.Println, hooks: &hooks{}, inters: &inters{}}
+	cfg.options(opts...)
+	return cfg
+}
 
 // options applies the options on the config object.
 func (c *config) options(opts ...Option) {
@@ -113,11 +119,14 @@ func Open(driverName, dataSourceName string, options ...Option) (*Client, error)
 	}
 }
 
+// ErrTxStarted is returned when trying to start a new transaction from a transactional client.
+var ErrTxStarted = errors.New("ent: cannot start a transaction within a transaction")
+
 // Tx returns a new transactional client. The provided context
 // is used until the transaction is committed or rolled back.
 func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	if _, ok := c.driver.(*txDriver); ok {
-		return nil, errors.New("ent: cannot start a transaction within a transaction")
+		return nil, ErrTxStarted
 	}
 	tx, err := newTx(ctx, c.driver)
 	if err != nil {
@@ -238,6 +247,21 @@ func (c *RepoClient) Create() *RepoCreate {
 
 // CreateBulk returns a builder for creating a bulk of Repo entities.
 func (c *RepoClient) CreateBulk(builders ...*RepoCreate) *RepoCreateBulk {
+	return &RepoCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RepoClient) MapCreateBulk(slice any, setFunc func(*RepoCreate, int)) *RepoCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RepoCreateBulk{err: fmt.Errorf("calling to RepoClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RepoCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &RepoCreateBulk{config: c.config, builders: builders}
 }
 
@@ -391,6 +415,21 @@ func (c *RpmPackageClient) CreateBulk(builders ...*RpmPackageCreate) *RpmPackage
 	return &RpmPackageCreateBulk{config: c.config, builders: builders}
 }
 
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RpmPackageClient) MapCreateBulk(slice any, setFunc func(*RpmPackageCreate, int)) *RpmPackageCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RpmPackageCreateBulk{err: fmt.Errorf("calling to RpmPackageClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RpmPackageCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RpmPackageCreateBulk{config: c.config, builders: builders}
+}
+
 // Update returns an update builder for RpmPackage.
 func (c *RpmPackageClient) Update() *RpmPackageUpdate {
 	mutation := newRpmPackageMutation(c.config, OpUpdate)
@@ -522,6 +561,21 @@ func (c *SigningKeyClient) Create() *SigningKeyCreate {
 
 // CreateBulk returns a builder for creating a bulk of SigningKey entities.
 func (c *SigningKeyClient) CreateBulk(builders ...*SigningKeyCreate) *SigningKeyCreateBulk {
+	return &SigningKeyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SigningKeyClient) MapCreateBulk(slice any, setFunc func(*SigningKeyCreate, int)) *SigningKeyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SigningKeyCreateBulk{err: fmt.Errorf("calling to SigningKeyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SigningKeyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
 	return &SigningKeyCreateBulk{config: c.config, builders: builders}
 }
 

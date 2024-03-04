@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/FyraLabs/subatomic/server/ent/repo"
 	"github.com/FyraLabs/subatomic/server/ent/rpmpackage"
@@ -30,8 +31,9 @@ type RpmPackage struct {
 	FilePath string `json:"file_path,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RpmPackageQuery when eager-loading is set.
-	Edges     RpmPackageEdges `json:"edges"`
-	repo_rpms *string
+	Edges        RpmPackageEdges `json:"edges"`
+	repo_rpms    *string
+	selectValues sql.SelectValues
 }
 
 // RpmPackageEdges holds the relations/edges for other nodes in the graph.
@@ -68,7 +70,7 @@ func (*RpmPackage) scanValues(columns []string) ([]any, error) {
 		case rpmpackage.ForeignKeys[0]: // repo_rpms
 			values[i] = new(sql.NullString)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type RpmPackage", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -131,9 +133,17 @@ func (rp *RpmPackage) assignValues(columns []string, values []any) error {
 				rp.repo_rpms = new(string)
 				*rp.repo_rpms = value.String
 			}
+		default:
+			rp.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the RpmPackage.
+// This includes values selected through modifiers, order, etc.
+func (rp *RpmPackage) Value(name string) (ent.Value, error) {
+	return rp.selectValues.Get(name)
 }
 
 // QueryRepo queries the "repo" edge of the RpmPackage entity.
