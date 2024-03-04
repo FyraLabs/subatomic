@@ -42,4 +42,4 @@ go build (server|subatomic-cli)
 
 - Improve the README
 - Refactor some bad (written while out of it) code
-- Deprecate OSTree and go RPM only
+- ~~Deprecate OSTree~~ and go RPM only
