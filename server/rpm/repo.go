@@ -1,11 +1,14 @@
 package rpm
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path"
+
+	"github.com/FyraLabs/subatomic/server/tetsudou"
 
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 	"github.com/sassoftware/go-rpmutils"
@@ -24,6 +27,8 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
+	println("hello!")
+
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
 	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
@@ -47,6 +52,28 @@ func UpdateRepo(repoPath string) error {
 			return fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
 		}
 
+		return err
+	}
+
+	// We calculate and write some metadata for Tetsudou, which is our mirroring system
+	// This is not strictly necessary for the repo to function, but it's useful for our use case (and possibly others)
+	repomd, err := os.Open(path.Join(repoPath, "repodata/repomd.xml"))
+	if err != nil {
+		return err
+	}
+	defer repomd.Close()
+
+	repodata, err := tetsudou.RepodataFromFile(repomd)
+	if err != nil {
+		return err
+	}
+
+	tetsudouJson, err := json.Marshal(repodata)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(path.Join(repoPath, "repodata/tetsudou.json"), tetsudouJson, 0644); err != nil {
 		return err
 	}
 
@@ -93,7 +120,7 @@ func SignRepo(repoPath string, ring *pgp.KeyRing) error {
 		return err
 	}
 
-	if err := os.WriteFile(path.Join(repoPath, "repodata/repomd.xml.asc"), []byte(armoredSig), 0744); err != nil {
+	if err := os.WriteFile(path.Join(repoPath, "repodata/repomd.xml.asc"), []byte(armoredSig), 0644); err != nil {
 		return err
 	}
 
