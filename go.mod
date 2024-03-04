@@ -1,11 +1,9 @@
-module github.com/fyralabs/subatomic
+module github.com/FyraLabs/subatomic
 
 go 1.21.6
 
 require (
 	entgo.io/ent v0.12.5
-	github.com/FyraLabs/subatomic/server v0.0.0-20240123235717-07a9f90d508e
-	github.com/FyraLabs/subatomic/subatomic-cli v0.0.0-20240123235717-07a9f90d508e
 	github.com/Netflix/go-env v0.0.0-20220526054621-78278af1949d
 	github.com/ProtonMail/gopenpgp/v2 v2.7.4
 	github.com/go-chi/chi/v5 v5.0.11
