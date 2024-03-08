@@ -15,8 +15,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-// createCmd represents the create command
-var createCmd = &cobra.Command{
+// repoCreateCmd represents the create command
+var repoCreateCmd = &cobra.Command{
 	Use:   "create [id] [type]",
 	Short: "Create a new repo",
 	Args:  cobra.ExactArgs(2),
@@ -72,15 +72,15 @@ var createCmd = &cobra.Command{
 }
 
 func init() {
-	repoCmd.AddCommand(createCmd)
+	repoCmd.AddCommand(repoCreateCmd)
 
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// createCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// repoCreateCmd.PersistentFlags().String("foo", "", "A help for foo")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// createCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// repoCreateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

@@ -16,6 +16,17 @@ func (u *CreateRepoPayload) Bind(r *http.Request) error {
 	return validate.Struct(u)
 }
 
+type CreateKeyPayload struct {
+	ID    string `json:"id" validate:"required,hostname"`
+	Name  string `json:"name" validate:"required"`
+	Email string `json:"email" validate:"required,email"`
+}
+
+func (u *CreateKeyPayload) Bind(r *http.Request) error {
+	validate := r.Context().Value(ValidateContextKey{}).(*validator.Validate)
+	return validate.Struct(u)
+}
+
 type SetKeyPayload struct {
 	ID string `json:"id" validate:"required,hostname"`
 }

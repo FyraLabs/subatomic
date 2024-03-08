@@ -1,6 +1,17 @@
 basePath: /
 definitions:
-  main.createKeyPayload:
+  main.fullKeyResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      public_key:
+        type: string
+    type: object
+  types.CreateKeyPayload:
     properties:
       email:
         type: string
@@ -12,17 +23,6 @@ definitions:
     - email
     - id
     - name
-    type: object
-  main.fullKeyResponse:
-    properties:
-      email:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      public_key:
-        type: string
     type: object
   types.CreateRepoPayload:
     properties:
@@ -115,10 +115,10 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/main.createKeyPayload'
+          $ref: '#/definitions/types.CreateKeyPayload'
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
         "400":
           description: Bad Request
           schema:

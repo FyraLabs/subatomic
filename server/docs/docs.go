@@ -57,13 +57,13 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/main.createKeyPayload"
+                            "$ref": "#/definitions/types.CreateKeyPayload"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK"
+                    "201": {
+                        "description": "Created"
                     },
                     "400": {
                         "description": "Bad Request",
@@ -522,7 +522,24 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "main.createKeyPayload": {
+        "main.fullKeyResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.CreateKeyPayload": {
             "type": "object",
             "required": [
                 "email",
@@ -537,23 +554,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "main.fullKeyResponse": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "public_key": {
                     "type": "string"
                 }
             }

@@ -53,29 +53,19 @@ func (router *keysRouter) getKeys(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, res)
 }
 
-type createKeyPayload struct {
-	ID    string `json:"id" validate:"required,hostname"`
-	Name  string `json:"name" validate:"required"`
-	Email string `json:"email" validate:"required,email"`
-}
-
-func (u *createKeyPayload) Bind(r *http.Request) error {
-	return validate.Struct(u)
-}
-
 // createKey godoc
 //
 //	@Summary		Create a new key
 //	@Description	create key
 //	@Tags			keys
 //	@Accept			json
-//	@Param			body	body	createKeyPayload	true	"options for the new key"
-//	@Success		200
+//	@Param			body	body	types.CreateKeyPayload	true	"options for the new key"
+//	@Success		201
 //	@Failure		400	{object}	types.ErrResponse
 //	@Failure		409	{object}	types.ErrResponse
 //	@Router			/keys [post]
 func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
-	payload := &createKeyPayload{}
+	payload := &types.CreateKeyPayload{}
 
 	if err := render.Bind(r, payload); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
@@ -96,7 +86,7 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	key, err := router.database.SigningKey.Create().
+	_, err = router.database.SigningKey.Create().
 		SetID(payload.ID).
 		SetPublicKey(armoredPublicKey).
 		SetPrivateKey(armoredPrivateKey).
@@ -108,11 +98,10 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	render.JSON(w, r, &types.KeyResponse{
-		ID:    key.ID,
-		Name:  key.Name,
-		Email: key.Email,
-	})
+	w.WriteHeader(http.StatusCreated)
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
 }
 
 type fullKeyResponse struct {
