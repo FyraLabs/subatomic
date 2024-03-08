@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-// keyCreateCmd represents the create command
-var keyCreateCmd = &cobra.Command{
-	Use:   "create [id] [name] [email]",
-	Short: "Create a new key",
-	Args:  cobra.ExactArgs(3),
+// repoCreateCmd represents the create command
+var repoSetKeyCmd = &cobra.Command{
+	Use:   "set-key [repo_id] [id]",
+	Short: "Set a key for a repo",
+	Args:  cobra.ExactArgs(2),
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
@@ -30,10 +30,8 @@ var keyCreateCmd = &cobra.Command{
 			return errors.New("token must be defined")
 		}
 
-		payload := types.CreateKeyPayload{
-			ID:    args[0],
-			Name:  args[1],
-			Email: args[2],
+		payload := types.SetKeyPayload{
+			ID: args[1],
 		}
 
 		data, err := json.Marshal(payload)
@@ -41,7 +39,7 @@ var keyCreateCmd = &cobra.Command{
 			return err
 		}
 
-		req, err := http.NewRequest(http.MethodPost, server+"/keys", bytes.NewReader(data))
+		req, err := http.NewRequest(http.MethodPut, server+"/repos/"+args[0]+"/key", bytes.NewReader(data))
 		if err != nil {
 			return err
 		}
@@ -56,7 +54,7 @@ var keyCreateCmd = &cobra.Command{
 			return err
 		}
 
-		if res.StatusCode != http.StatusCreated {
+		if res.StatusCode != http.StatusNoContent {
 			var serverError types.ErrResponse
 			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
 				return err
@@ -70,15 +68,15 @@ var keyCreateCmd = &cobra.Command{
 }
 
 func init() {
-	keysCmd.AddCommand(keyCreateCmd)
+	repoCmd.AddCommand(repoSetKeyCmd)
 
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	// keyCreateCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// repoCreateCmd.PersistentFlags().String("foo", "", "A help for foo")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// keyCreateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// repoCreateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

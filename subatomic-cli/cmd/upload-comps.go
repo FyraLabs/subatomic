@@ -1,6 +1,3 @@
-/*
-Copyright © 2022 Fyra Labs
-*/
 package cmd
 
 import (

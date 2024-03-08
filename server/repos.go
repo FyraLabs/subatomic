@@ -582,7 +582,7 @@ func (router *reposRouter) getRepoKey(w http.ResponseWriter, r *http.Request) {
 //	@Description	set repo key
 //	@Tags			repos
 //	@Param			id		path	string					true	"id for the repository"
-//	@Param			body	body	types.CreateRepoPayload	true	"options for the new repository"
+//	@Param			body	body	types.SetKeyPayload	true	"options for the key to set"
 //	@Produce		json
 //	@Success		204
 //	@Failure		404	{object}	types.ErrResponse

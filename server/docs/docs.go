@@ -365,12 +365,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "options for the new repository",
+                        "description": "options for the key to set",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/types.CreateRepoPayload"
+                            "$ref": "#/definitions/types.SetKeyPayload"
                         }
                     }
                 ],
@@ -640,6 +640,17 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "types.SetKeyPayload": {
+            "type": "object",
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
                     "type": "string"
                 }
             }

@@ -81,6 +81,13 @@ definitions:
       version:
         type: string
     type: object
+  types.SetKeyPayload:
+    properties:
+      id:
+        type: string
+    required:
+    - id
+    type: object
 info:
   contact: {}
   description: A modern package delivery server.
@@ -335,12 +342,12 @@ paths:
         name: id
         required: true
         type: string
-      - description: options for the new repository
+      - description: options for the key to set
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/types.CreateRepoPayload'
+          $ref: '#/definitions/types.SetKeyPayload'
       produces:
       - application/json
       responses:
