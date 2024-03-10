@@ -501,7 +501,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rpm, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(r.Context())
+	rpmPackage, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(r.Context())
 
 	if ent.IsNotFound(err) {
 		render.Render(w, r, types.ErrNotFound(errors.New("rpm not found")))
@@ -512,13 +512,18 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := router.database.RpmPackage.DeleteOne(rpm).Exec(r.Context()); err != nil {
+	if err := router.database.RpmPackage.DeleteOne(rpmPackage).Exec(r.Context()); err != nil {
 		panic(err)
 	}
 
-	targetDirectory := path.Join(router.environment.StorageDirectory, id, rpm.FilePath)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
+	rpmPath := path.Join(targetDirectory, rpmPackage.FilePath)
 
-	if err := os.Remove(targetDirectory); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(rpmPath); err != nil && !os.IsNotExist(err) {
+		panic(err)
+	}
+
+	if err := rpm.UpdateRepo(targetDirectory); err != nil {
 		panic(err)
 	}
 
