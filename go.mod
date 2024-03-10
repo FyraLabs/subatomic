@@ -5,7 +5,7 @@ go 1.21.6
 require (
 	entgo.io/ent v0.12.5
 	github.com/Netflix/go-env v0.0.0-20220526054621-78278af1949d
-	github.com/ProtonMail/gopenpgp/v2 v2.7.4
+	github.com/ProtonMail/gopenpgp/v2 v2.7.5
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/jwtauth/v5 v5.3.0
 	github.com/go-chi/render v1.0.3
