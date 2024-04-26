@@ -1,0 +1,18 @@
+name: Docker
+
+on:
+  schedule:
+    - cron: "15 14 * * *"
+  push:
+    branches: ["main"]
+    # Publish semver tags as releases.
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  docker:
+    uses: FyraLabs/actions/.github/workflows/docker.yml@main
+    with:
+      publish: ${{ github.event_name != 'pull_request' }}
