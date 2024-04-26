@@ -13,7 +13,7 @@ Please make sure you have these dependencies first before building.
 golang
 ```
 
-Additionally, you might want to install air, a live reload tool for Go apps. To install the latest version:
+Additionally, you might wansdfdst to install air, a live reload tool for Go apps. To install the latest version:
 
 ```bash
 go install github.com/cosmtrek/air@latest
