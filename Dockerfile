@@ -8,7 +8,7 @@ COPY . .
 
 RUN go build -o /subatomic ./server
 
-FROM golang:1.22.3-bookworm
+FROM debian:bookworm
 
 COPY --from=builder /subatomic /subatomic
 
