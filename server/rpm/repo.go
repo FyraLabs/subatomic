@@ -27,8 +27,6 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
-	println("hello!")
-
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
 	_, err := os.Stat(path.Join(repoPath, "comps.xml"))

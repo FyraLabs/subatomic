@@ -501,6 +501,25 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	key, err := re.QueryKey().Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		panic(err)
+	}
+
+	var ring *pgp.KeyRing
+
+	if key != nil {
+		privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		ring, err = pgp.NewKeyRing(privateKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	rpmPackage, err := re.QueryRpms().Where(rpmpackage.IDEQ(rpmID)).First(r.Context())
 
 	if ent.IsNotFound(err) {
@@ -525,6 +544,12 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 
 	if err := rpm.UpdateRepo(targetDirectory); err != nil {
 		panic(err)
+	}
+
+	if ring != nil {
+		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+			panic(err)
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
