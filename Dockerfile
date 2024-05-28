@@ -2,8 +2,6 @@ FROM golang:1.22.3-bookworm as builder
 
 WORKDIR /app
 
-RUN apt update && apt install -y build-essential
-
 COPY . .
 
 RUN go build -o /subatomic ./server
