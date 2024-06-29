@@ -18,7 +18,7 @@ require (
 	github.com/samber/lo v1.43.0
 	github.com/sassoftware/go-rpmutils v0.4.0
 	github.com/schollz/progressbar/v3 v3.14.4
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/http-swagger v1.3.4
