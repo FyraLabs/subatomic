@@ -139,8 +139,8 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/riandyrn/otelchi v0.8.0 h1:q60HKpwt1MmGjOWgM7m5gGyXYAY3DfTSdfBdBt6ICV4=
-github.com/riandyrn/otelchi v0.8.0/go.mod h1:ErTae2TG7lrOtEPFsd5/hYLOHJpkk0NNyMaeTMWxl0U=
+github.com/riandyrn/otelchi v0.9.0 h1:BuQxXR7/JF2yYOQl21Yyz5d52hns/96ecAaPUZiKQzc=
+github.com/riandyrn/otelchi v0.9.0/go.mod h1:iX30kllzThsf8oEcEbl3GifPJZtN4cnCWUUc+UhE4yM=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
 github.com/rogpeppe/go-internal v1.12.0 h1:exVL4IDcn6na9z1rAb56Vxr+CgyK3nn3O+epU5NdKM8=
