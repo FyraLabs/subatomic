@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/types"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/samber/lo"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
@@ -44,97 +45,107 @@ var uploadCmd = &cobra.Command{
 
 		repoID := args[0]
 
-		pipeReader, pipeWriter := io.Pipe()
-		form := multipart.NewWriter(pipeWriter)
+		return backoff.RetryNotify(func() error {
+			pipeReader, pipeWriter := io.Pipe()
+			form := multipart.NewWriter(pipeWriter)
 
-		req, err := http.NewRequest(http.MethodPut, server+"/repos/"+repoID, pipeReader)
-		if err != nil {
-			return err
-		}
-
-		q := req.URL.Query()
-		q.Add("prune", lo.Ternary(prune, "true", "false"))
-		req.URL.RawQuery = q.Encode()
-
-		req.Header.Add("Content-Type", form.FormDataContentType())
-		req.Header.Add("Accept", "application/json")
-		req.Header.Add("Authorization", "Bearer "+token)
-
-		g := new(errgroup.Group)
-
-		g.Go(func() error {
-			defer pipeWriter.Close()
-			defer form.Close()
-
-			for _, filename := range args[1:] {
-				file, err := os.Open(filename)
-				if err != nil {
-					return err
-				}
-
-				defer file.Close()
-
-				formWriter, err := form.CreateFormFile("file_upload", file.Name())
-				if err != nil {
-					return err
-				}
-
-				stat, err := file.Stat()
-				if err != nil {
-					return err
-				}
-
-				bar := progressbar.DefaultBytes(
-					stat.Size(),
-					"Upload "+file.Name(),
-				)
-
-				if _, err := io.Copy(io.MultiWriter(formWriter, bar), file); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		})
-
-		var res *http.Response
-		defer func() {
-			if res != nil {
-				res.Body.Close()
-			}
-		}()
-
-		g.Go(func() error {
-			client := &http.Client{}
-			res, err = client.Do(req)
+			req, err := http.NewRequest(http.MethodPut, server+"/repos/"+repoID, pipeReader)
 			if err != nil {
 				return err
 			}
+
+			q := req.URL.Query()
+			q.Add("prune", lo.Ternary(prune, "true", "false"))
+			req.URL.RawQuery = q.Encode()
+
+			req.Header.Add("Content-Type", form.FormDataContentType())
+			req.Header.Add("Accept", "application/json")
+			req.Header.Add("Authorization", "Bearer "+token)
+
+			g := new(errgroup.Group)
+
+			g.Go(func() error {
+				defer pipeWriter.Close()
+				defer form.Close()
+
+				for _, filename := range args[1:] {
+					file, err := os.Open(filename)
+					if err != nil {
+						return err
+					}
+
+					defer file.Close()
+
+					formWriter, err := form.CreateFormFile("file_upload", file.Name())
+					if err != nil {
+						return err
+					}
+
+					stat, err := file.Stat()
+					if err != nil {
+						return err
+					}
+
+					bar := progressbar.DefaultBytes(
+						stat.Size(),
+						"Upload "+file.Name(),
+					)
+
+					if _, err := io.Copy(io.MultiWriter(formWriter, bar), file); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			})
+
+			var res *http.Response
+			defer func() {
+				if res != nil {
+					res.Body.Close()
+				}
+			}()
+
+			g.Go(func() error {
+				client := &http.Client{}
+				res, err = client.Do(req)
+				if err != nil {
+					return err
+				}
+				return nil
+			})
+
+			if err := g.Wait(); err != nil {
+				return err
+			}
+
+			if res.StatusCode != http.StatusNoContent {
+				body, err := io.ReadAll(res.Body)
+				if err != nil {
+					return fmt.Errorf("error reading server response: %s", err.Error())
+				}
+
+				bodyReader := bytes.NewReader(body)
+
+				var serverError types.ErrResponse
+				if err := json.NewDecoder(bodyReader).Decode(&serverError); err != nil {
+					log.Printf("body: %s", string(body))
+					return fmt.Errorf("error decoding server response: %s", err.Error())
+				}
+
+				err = fmt.Errorf("API returned error: %s", serverError.ErrorText)
+
+				if res.StatusCode == 404 || res.StatusCode == 401 || res.StatusCode == 400 {
+					return backoff.Permanent(err)
+				}
+
+				return err
+			}
+
 			return nil
+		}, backoff.NewExponentialBackOff(), func(err error, d time.Duration) {
+			log.Printf("retrying in %d seconds, upload failed with: %s", int(d.Seconds()), err.Error())
 		})
-
-		if err := g.Wait(); err != nil {
-			return err
-		}
-
-		if res.StatusCode != http.StatusNoContent {
-			body, err := ioutil.ReadAll(res.Body)
-			if err != nil {
-				return fmt.Errorf("error reading server response: %s", err.Error())
-			}
-
-			bodyReader := bytes.NewReader(body)
-
-			var serverError types.ErrResponse
-			if err := json.NewDecoder(bodyReader).Decode(&serverError); err != nil {
-				log.Printf("body: %s", string(body))
-				return fmt.Errorf("error decoding server response: %s", err.Error())
-			}
-
-			return fmt.Errorf("API returned error: %s", serverError.ErrorText)
-		}
-
-		return nil
 	},
 }
 
