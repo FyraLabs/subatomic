@@ -16,7 +16,7 @@ golang
 Additionally, you might want to install air, a live reload tool for Go apps. To install the latest version:
 
 ```bash
-go install github.com/cosmtrek/air@latest
+go install github.com/air-verse/air@latest
 ```
 
 ## 🏗️ Building
@@ -24,7 +24,7 @@ go install github.com/cosmtrek/air@latest
 Simply clone this repo then:
 
 ```bash
-go build (server|subatomic-cli)
+go build ./(server|subatomic-cli)
 ```
 
 ## Client Configuration
