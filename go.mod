@@ -3,7 +3,7 @@ module github.com/FyraLabs/subatomic
 go 1.22.3
 
 require (
-	entgo.io/ent v0.13.1
+	entgo.io/ent v0.14.0
 	github.com/Netflix/go-env v0.0.0-20220526054621-78278af1949d
 	github.com/ProtonMail/gopenpgp/v2 v2.7.5
 	github.com/cenkalti/backoff/v4 v4.3.0
