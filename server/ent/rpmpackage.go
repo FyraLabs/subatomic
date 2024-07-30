@@ -48,12 +48,10 @@ type RpmPackageEdges struct {
 // RepoOrErr returns the Repo value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e RpmPackageEdges) RepoOrErr() (*Repo, error) {
-	if e.loadedTypes[0] {
-		if e.Repo == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: repo.Label}
-		}
+	if e.Repo != nil {
 		return e.Repo, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: repo.Label}
 	}
 	return nil, &NotLoadedError{edge: "repo"}
 }

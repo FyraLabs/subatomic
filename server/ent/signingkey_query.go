@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -85,7 +86,7 @@ func (skq *SigningKeyQuery) QueryRepo() *RepoQuery {
 // First returns the first SigningKey entity from the query.
 // Returns a *NotFoundError when no SigningKey was found.
 func (skq *SigningKeyQuery) First(ctx context.Context) (*SigningKey, error) {
-	nodes, err := skq.Limit(1).All(setContextOp(ctx, skq.ctx, "First"))
+	nodes, err := skq.Limit(1).All(setContextOp(ctx, skq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func (skq *SigningKeyQuery) FirstX(ctx context.Context) *SigningKey {
 // Returns a *NotFoundError when no SigningKey ID was found.
 func (skq *SigningKeyQuery) FirstID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = skq.Limit(1).IDs(setContextOp(ctx, skq.ctx, "FirstID")); err != nil {
+	if ids, err = skq.Limit(1).IDs(setContextOp(ctx, skq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -131,7 +132,7 @@ func (skq *SigningKeyQuery) FirstIDX(ctx context.Context) string {
 // Returns a *NotSingularError when more than one SigningKey entity is found.
 // Returns a *NotFoundError when no SigningKey entities are found.
 func (skq *SigningKeyQuery) Only(ctx context.Context) (*SigningKey, error) {
-	nodes, err := skq.Limit(2).All(setContextOp(ctx, skq.ctx, "Only"))
+	nodes, err := skq.Limit(2).All(setContextOp(ctx, skq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (skq *SigningKeyQuery) OnlyX(ctx context.Context) *SigningKey {
 // Returns a *NotFoundError when no entities are found.
 func (skq *SigningKeyQuery) OnlyID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = skq.Limit(2).IDs(setContextOp(ctx, skq.ctx, "OnlyID")); err != nil {
+	if ids, err = skq.Limit(2).IDs(setContextOp(ctx, skq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -184,7 +185,7 @@ func (skq *SigningKeyQuery) OnlyIDX(ctx context.Context) string {
 
 // All executes the query and returns a list of SigningKeys.
 func (skq *SigningKeyQuery) All(ctx context.Context) ([]*SigningKey, error) {
-	ctx = setContextOp(ctx, skq.ctx, "All")
+	ctx = setContextOp(ctx, skq.ctx, ent.OpQueryAll)
 	if err := skq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -206,7 +207,7 @@ func (skq *SigningKeyQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if skq.ctx.Unique == nil && skq.path != nil {
 		skq.Unique(true)
 	}
-	ctx = setContextOp(ctx, skq.ctx, "IDs")
+	ctx = setContextOp(ctx, skq.ctx, ent.OpQueryIDs)
 	if err = skq.Select(signingkey.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -224,7 +225,7 @@ func (skq *SigningKeyQuery) IDsX(ctx context.Context) []string {
 
 // Count returns the count of the given query.
 func (skq *SigningKeyQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, skq.ctx, "Count")
+	ctx = setContextOp(ctx, skq.ctx, ent.OpQueryCount)
 	if err := skq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -242,7 +243,7 @@ func (skq *SigningKeyQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (skq *SigningKeyQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, skq.ctx, "Exist")
+	ctx = setContextOp(ctx, skq.ctx, ent.OpQueryExist)
 	switch _, err := skq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -529,7 +530,7 @@ func (skgb *SigningKeyGroupBy) Aggregate(fns ...AggregateFunc) *SigningKeyGroupB
 
 // Scan applies the selector query and scans the result into the given value.
 func (skgb *SigningKeyGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, skgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, skgb.build.ctx, ent.OpQueryGroupBy)
 	if err := skgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -577,7 +578,7 @@ func (sks *SigningKeySelect) Aggregate(fns ...AggregateFunc) *SigningKeySelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (sks *SigningKeySelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, sks.ctx, "Select")
+	ctx = setContextOp(ctx, sks.ctx, ent.OpQuerySelect)
 	if err := sks.prepareQuery(ctx); err != nil {
 		return err
 	}

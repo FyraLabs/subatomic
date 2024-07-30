@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -110,7 +111,7 @@ func (rq *RepoQuery) QueryKey() *SigningKeyQuery {
 // First returns the first Repo entity from the query.
 // Returns a *NotFoundError when no Repo was found.
 func (rq *RepoQuery) First(ctx context.Context) (*Repo, error) {
-	nodes, err := rq.Limit(1).All(setContextOp(ctx, rq.ctx, "First"))
+	nodes, err := rq.Limit(1).All(setContextOp(ctx, rq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +134,7 @@ func (rq *RepoQuery) FirstX(ctx context.Context) *Repo {
 // Returns a *NotFoundError when no Repo ID was found.
 func (rq *RepoQuery) FirstID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = rq.Limit(1).IDs(setContextOp(ctx, rq.ctx, "FirstID")); err != nil {
+	if ids, err = rq.Limit(1).IDs(setContextOp(ctx, rq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -156,7 +157,7 @@ func (rq *RepoQuery) FirstIDX(ctx context.Context) string {
 // Returns a *NotSingularError when more than one Repo entity is found.
 // Returns a *NotFoundError when no Repo entities are found.
 func (rq *RepoQuery) Only(ctx context.Context) (*Repo, error) {
-	nodes, err := rq.Limit(2).All(setContextOp(ctx, rq.ctx, "Only"))
+	nodes, err := rq.Limit(2).All(setContextOp(ctx, rq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +185,7 @@ func (rq *RepoQuery) OnlyX(ctx context.Context) *Repo {
 // Returns a *NotFoundError when no entities are found.
 func (rq *RepoQuery) OnlyID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = rq.Limit(2).IDs(setContextOp(ctx, rq.ctx, "OnlyID")); err != nil {
+	if ids, err = rq.Limit(2).IDs(setContextOp(ctx, rq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -209,7 +210,7 @@ func (rq *RepoQuery) OnlyIDX(ctx context.Context) string {
 
 // All executes the query and returns a list of Repos.
 func (rq *RepoQuery) All(ctx context.Context) ([]*Repo, error) {
-	ctx = setContextOp(ctx, rq.ctx, "All")
+	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryAll)
 	if err := rq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -231,7 +232,7 @@ func (rq *RepoQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if rq.ctx.Unique == nil && rq.path != nil {
 		rq.Unique(true)
 	}
-	ctx = setContextOp(ctx, rq.ctx, "IDs")
+	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryIDs)
 	if err = rq.Select(repo.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func (rq *RepoQuery) IDsX(ctx context.Context) []string {
 
 // Count returns the count of the given query.
 func (rq *RepoQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, rq.ctx, "Count")
+	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryCount)
 	if err := rq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -267,7 +268,7 @@ func (rq *RepoQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (rq *RepoQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, rq.ctx, "Exist")
+	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryExist)
 	switch _, err := rq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -612,7 +613,7 @@ func (rgb *RepoGroupBy) Aggregate(fns ...AggregateFunc) *RepoGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (rgb *RepoGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, rgb.build.ctx, ent.OpQueryGroupBy)
 	if err := rgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -660,7 +661,7 @@ func (rs *RepoSelect) Aggregate(fns ...AggregateFunc) *RepoSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (rs *RepoSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rs.ctx, "Select")
+	ctx = setContextOp(ctx, rs.ctx, ent.OpQuerySelect)
 	if err := rs.prepareQuery(ctx); err != nil {
 		return err
 	}

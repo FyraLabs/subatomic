@@ -49,12 +49,10 @@ func (e RepoEdges) RpmsOrErr() ([]*RpmPackage, error) {
 // KeyOrErr returns the Key value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e RepoEdges) KeyOrErr() (*SigningKey, error) {
-	if e.loadedTypes[1] {
-		if e.Key == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: signingkey.Label}
-		}
+	if e.Key != nil {
 		return e.Key, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: signingkey.Label}
 	}
 	return nil, &NotLoadedError{edge: "key"}
 }

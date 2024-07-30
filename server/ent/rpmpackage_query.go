@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
@@ -85,7 +86,7 @@ func (rpq *RpmPackageQuery) QueryRepo() *RepoQuery {
 // First returns the first RpmPackage entity from the query.
 // Returns a *NotFoundError when no RpmPackage was found.
 func (rpq *RpmPackageQuery) First(ctx context.Context) (*RpmPackage, error) {
-	nodes, err := rpq.Limit(1).All(setContextOp(ctx, rpq.ctx, "First"))
+	nodes, err := rpq.Limit(1).All(setContextOp(ctx, rpq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func (rpq *RpmPackageQuery) FirstX(ctx context.Context) *RpmPackage {
 // Returns a *NotFoundError when no RpmPackage ID was found.
 func (rpq *RpmPackageQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = rpq.Limit(1).IDs(setContextOp(ctx, rpq.ctx, "FirstID")); err != nil {
+	if ids, err = rpq.Limit(1).IDs(setContextOp(ctx, rpq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -131,7 +132,7 @@ func (rpq *RpmPackageQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one RpmPackage entity is found.
 // Returns a *NotFoundError when no RpmPackage entities are found.
 func (rpq *RpmPackageQuery) Only(ctx context.Context) (*RpmPackage, error) {
-	nodes, err := rpq.Limit(2).All(setContextOp(ctx, rpq.ctx, "Only"))
+	nodes, err := rpq.Limit(2).All(setContextOp(ctx, rpq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (rpq *RpmPackageQuery) OnlyX(ctx context.Context) *RpmPackage {
 // Returns a *NotFoundError when no entities are found.
 func (rpq *RpmPackageQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = rpq.Limit(2).IDs(setContextOp(ctx, rpq.ctx, "OnlyID")); err != nil {
+	if ids, err = rpq.Limit(2).IDs(setContextOp(ctx, rpq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -184,7 +185,7 @@ func (rpq *RpmPackageQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of RpmPackages.
 func (rpq *RpmPackageQuery) All(ctx context.Context) ([]*RpmPackage, error) {
-	ctx = setContextOp(ctx, rpq.ctx, "All")
+	ctx = setContextOp(ctx, rpq.ctx, ent.OpQueryAll)
 	if err := rpq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -206,7 +207,7 @@ func (rpq *RpmPackageQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if rpq.ctx.Unique == nil && rpq.path != nil {
 		rpq.Unique(true)
 	}
-	ctx = setContextOp(ctx, rpq.ctx, "IDs")
+	ctx = setContextOp(ctx, rpq.ctx, ent.OpQueryIDs)
 	if err = rpq.Select(rpmpackage.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -224,7 +225,7 @@ func (rpq *RpmPackageQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (rpq *RpmPackageQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, rpq.ctx, "Count")
+	ctx = setContextOp(ctx, rpq.ctx, ent.OpQueryCount)
 	if err := rpq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -242,7 +243,7 @@ func (rpq *RpmPackageQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (rpq *RpmPackageQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, rpq.ctx, "Exist")
+	ctx = setContextOp(ctx, rpq.ctx, ent.OpQueryExist)
 	switch _, err := rpq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -536,7 +537,7 @@ func (rpgb *RpmPackageGroupBy) Aggregate(fns ...AggregateFunc) *RpmPackageGroupB
 
 // Scan applies the selector query and scans the result into the given value.
 func (rpgb *RpmPackageGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rpgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, rpgb.build.ctx, ent.OpQueryGroupBy)
 	if err := rpgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -584,7 +585,7 @@ func (rps *RpmPackageSelect) Aggregate(fns ...AggregateFunc) *RpmPackageSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (rps *RpmPackageSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rps.ctx, "Select")
+	ctx = setContextOp(ctx, rps.ctx, ent.OpQuerySelect)
 	if err := rps.prepareQuery(ctx); err != nil {
 		return err
 	}
