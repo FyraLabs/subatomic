@@ -16,7 +16,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.1.1
 	github.com/lib/pq v1.10.9
 	github.com/riandyrn/otelchi v0.9.0
-	github.com/samber/lo v1.46.0
+	github.com/samber/lo v1.47.0
 	github.com/sassoftware/go-rpmutils v0.4.0
 	github.com/schollz/progressbar/v3 v3.14.6
 	github.com/spf13/cobra v1.8.1
