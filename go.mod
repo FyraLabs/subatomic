@@ -1,9 +1,9 @@
 module github.com/FyraLabs/subatomic
 
-go 1.23.0
+go 1.22.5
 
 require (
-	entgo.io/ent v0.14.1
+	entgo.io/ent v0.14.0
 	github.com/Netflix/go-env v0.1.0
 	github.com/ProtonMail/gopenpgp/v2 v2.7.5
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -28,7 +28,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.30.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.30.0
 	go.opentelemetry.io/otel/sdk v1.30.0
-	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948
+	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 	golang.org/x/sync v0.8.0
 )
 
