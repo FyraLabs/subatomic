@@ -1,10 +1,11 @@
 module github.com/FyraLabs/subatomic
 
 go 1.22.5
+toolchain go1.23.2
 
 require (
 	entgo.io/ent v0.14.0
-	github.com/Netflix/go-env v0.1.0
+	github.com/Netflix/go-env v0.1.2
 	github.com/ProtonMail/gopenpgp/v2 v2.7.5
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-chi/chi/v5 v5.1.0
