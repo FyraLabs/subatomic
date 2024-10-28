@@ -13,7 +13,7 @@ require (
 	github.com/go-playground/form/v4 v4.2.1
 	github.com/go-playground/validator/v10 v10.22.1
 	github.com/joho/godotenv v1.5.1
-	github.com/lestrrat-go/jwx/v2 v2.1.1
+	github.com/lestrrat-go/jwx/v2 v2.1.2
 	github.com/lib/pq v1.10.9
 	github.com/riandyrn/otelchi v0.10.0
 	github.com/samber/lo v1.47.0
