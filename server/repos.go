@@ -330,7 +330,10 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 		if len(toPrune) > 0 {
 			for _, p := range toPrune {
-				if err := os.Remove(path.Join(targetDirectory, p.FilePath)); err != nil && !os.IsNotExist(err) {
+				file_delete_path := path.Join(targetDirectory, p.FilePath)
+				// log
+				fmt.Printf("Pruning %s\n", file_delete_path)
+				if err := os.Remove(file_delete_path); err != nil && !os.IsNotExist(err) {
 					panic(err)
 				}
 			}
