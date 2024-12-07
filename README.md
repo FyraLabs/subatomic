@@ -46,6 +46,8 @@ Currently, the JWT uses HS256. Here is an example payload:
 }
 ```
 
+Certain standard claims, such as `exp` are also supported.
+
 ## 🗒️ Todos
 
 - Improve the README
