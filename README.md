@@ -38,7 +38,7 @@ go build ./(server|subatomic-cli)
 }
 ```
 
-Currently, the JWT uses HS256, as an example payload:
+Currently, the JWT uses HS256. Here is an example payload:
 
 ```json
 {
