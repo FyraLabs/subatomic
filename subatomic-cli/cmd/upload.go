@@ -91,7 +91,11 @@ var uploadCmd = &cobra.Command{
 						"Upload "+file.Name(),
 					)
 
-					if _, err := io.Copy(io.MultiWriter(formWriter, bar), file); err != nil {
+					// io.Copy will return ErrClosedPipe when the server closes the connection or if the network connection is lost during file upload
+					// Ignoring this error allows us to handle the error thrown from the request.Do() call
+					// This will give us a more informative error in the case where the server closes the connection, because we can check the response status code
+					// In the case of a network connection loss, request.Do() should still return an error, which we can handle
+					if _, err := io.Copy(io.MultiWriter(formWriter, bar), file); err != nil && !errors.Is(err, io.ErrClosedPipe) {
 						return err
 					}
 				}
