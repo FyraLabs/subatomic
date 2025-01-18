@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,14 +55,14 @@ var pkgDeleteCmd = &cobra.Command{
 	Use:   "delete [repo] [id or spec]",
 	Short: "Delete a package",
 	// todo: maybe allow multiple packages to be deleted at once
-	Args:  cobra.MinimumNArgs(2),
+	Args: cobra.MinimumNArgs(2),
 	// Args:  cobra.MinimumNArgs(2),
 	Aliases: []string{"rm", "d", "remove", "del"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
 
-		// todo: maybe 
+		// todo: maybe
 		if server == "" {
 			return errors.New("server must be defined")
 		}
@@ -105,30 +106,37 @@ var pkgDeleteCmd = &cobra.Command{
 			}
 		}
 
-		for _, i := range pkgId {
-			req, err := http.NewRequest(http.MethodDelete, server+"/repos/"+repo+"/rpms/"+strconv.Itoa(i), nil)
-			
-			if err != nil {
+		payload := types.BulkDeleteRPMsPayload{
+			IDs: pkgId,
+		}
+
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest(http.MethodDelete, server+"/repos/"+repo+"/rpms", bytes.NewReader(data))
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Add("Accept", "application/json")
+		req.Header.Add("Authorization", "Bearer "+token)
+
+		client := &http.Client{}
+		res, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		if res.StatusCode != http.StatusNoContent {
+			var serverError types.ErrResponse
+			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
 				return err
-			}
-
-			req.Header.Add("Accept", "application/json")
-			req.Header.Add("Authorization", "Bearer "+token)
-
-			client := &http.Client{}
-			res, err := client.Do(req)
-
-			if err != nil {
-				return err
-			}
-
-			if res.StatusCode != http.StatusNoContent {
-				var serverError types.ErrResponse
-				if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
-					return err
-				}
 			}
 		}
+
 		return nil
 	},
 }
