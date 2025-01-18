@@ -55,6 +55,7 @@ func (router *reposRouter) setup() {
 
 	// RPM Specific Endpoints
 	router.Get("/{repoID}/rpms", router.getRPMs)
+	router.Delete("/{repoID}/rpms", router.bulkDeleteRPMs)
 	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
 }
 
@@ -460,6 +461,111 @@ func (router *reposRouter) getRPMs(w http.ResponseWriter, r *http.Request) {
 	})
 
 	render.JSON(w, r, res)
+}
+
+// bulkDeleteRPMs godoc
+//
+//	@Summary		Bulk delete RPMs in a repo
+//	@Description	bulk delete rpms
+//	@Tags			repos
+//	@Param			id		path	string	true	"id for the repository"
+//	@Param			body	body	types.BulkDeleteRPMsPayload	true	"options to bulk delete rpms"
+//	@Success		200
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/rpms [delete]
+func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request) {
+	payload := &types.BulkDeleteRPMsPayload{}
+
+	if err := render.Bind(r, payload); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,hostname"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Type != repo.TypeRpm {
+		render.Render(w, r, types.ErrInvalidRequest(errors.New("can't query RPMs for a non-rpm repo")))
+		return
+	}
+
+	key, err := re.QueryKey().Only(r.Context())
+	if err != nil && !ent.IsNotFound(err) {
+		panic(err)
+	}
+
+	var ring *pgp.KeyRing
+
+	if key != nil {
+		privateKey, err := pgp.NewKeyFromArmored(key.PrivateKey)
+		if err != nil {
+			panic(err)
+		}
+
+		ring, err = pgp.NewKeyRing(privateKey)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	rpmPackages, err := re.QueryRpms().Where(rpmpackage.IDIn(payload.IDs...)).All(r.Context())
+
+	if ent.IsNotFound(err) || len(rpmPackages) != len(payload.IDs) {
+		render.Render(w, r, types.ErrNotFound(errors.New("rpms not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(payload.IDs...)).Exec(r.Context()); err != nil {
+		panic(err)
+	}
+
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
+	rpmPaths := lo.Map(rpmPackages, func(pkg *ent.RpmPackage, _ int) string {
+		return path.Join(targetDirectory, pkg.FilePath)
+	})
+
+	for _, rpmPath := range rpmPaths {
+		if err := os.Remove(rpmPath); err != nil && !os.IsNotExist(err) {
+			panic(err)
+		}
+	}
+
+	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+		panic(err)
+	}
+
+	if ring != nil {
+		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+			panic(err)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
 }
 
 // deleteRPM godoc
