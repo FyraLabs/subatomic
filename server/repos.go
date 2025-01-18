@@ -554,10 +554,6 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 	}
-	
-	if err := rpm.WriteTetsudouMetadata(targetDirectory); err != nil {
-		panic(err)
-	}
 
 	w.WriteHeader(http.StatusNoContent)
 
