@@ -23,7 +23,7 @@ func CreateRepo(repoPath string) error {
 		return err
 	}
 
-	if err := WriteTetsudouMetadata(repoPath); err != nil {
+	if err := writeTetsudouMetadata(repoPath); err != nil {
 		return err
 	}
 
@@ -57,14 +57,14 @@ func UpdateRepo(repoPath string) error {
 		return err
 	}
 
-	if err := WriteTetsudouMetadata(repoPath); err != nil {
+	if err := writeTetsudouMetadata(repoPath); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func WriteTetsudouMetadata(repoPath string) error {
+func writeTetsudouMetadata(repoPath string) error {
 	// We calculate and write some metadata for Tetsudou, which is our mirroring system
 	// This is not strictly necessary for the repo to function, but it's useful for our use case (and possibly others)
 	repomd, err := os.Open(path.Join(repoPath, "repodata/repomd.xml"))
