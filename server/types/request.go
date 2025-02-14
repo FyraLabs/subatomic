@@ -16,6 +16,15 @@ func (u *CreateRepoPayload) Bind(r *http.Request) error {
 	return validate.Struct(u)
 }
 
+type BulkDeleteRPMsPayload struct {
+	IDs []int `json:"ids" validate:"required,gt=0"`
+}
+
+func (u *BulkDeleteRPMsPayload) Bind(r *http.Request) error {
+	validate := r.Context().Value(ValidateContextKey{}).(*validator.Validate)
+	return validate.Struct(u)
+}
+
 type CreateKeyPayload struct {
 	ID    string `json:"id" validate:"required,hostname"`
 	Name  string `json:"name" validate:"required"`
