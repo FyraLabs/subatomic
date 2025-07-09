@@ -7,7 +7,7 @@ require (
 	github.com/Netflix/go-env v0.1.0
 	github.com/ProtonMail/gopenpgp/v2 v2.8.1
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/jwtauth/v5 v5.3.1
 	github.com/go-chi/render v1.0.3
 	github.com/go-playground/form/v4 v4.2.1
