@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
@@ -11,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/riandyrn/otelchi"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -23,14 +26,38 @@ type apiRouter struct {
 	environment      *types.Environment
 	jwtAuthenticator *jwtauth.JWTAuth
 	repoMutex        *keyedmutex.KeyedMutex
+	logger           log.Logger
+}
+
+// logger backend
+func requestLogger(l log.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			start := time.Now()
+
+			defer func() {
+				_ = level.Info(l).Log(
+					"method", r.Method,
+					"url", r.URL.String(),
+					"status", ww.Status(),
+					"bytes", ww.BytesWritten(),
+					"duration", time.Since(start),
+					"remote", r.RemoteAddr,
+				)
+			}()
+
+			next.ServeHTTP(ww, r)
+		})
+	}
 }
 
 func (router *apiRouter) setup() {
 	router.Mux = chi.NewRouter()
 
-	router.Use(middleware.Logger)
+	router.Use(requestLogger(router.logger))
 	router.Use(middleware.Heartbeat("/heartbeat"))
-	router.Use(recovererMiddleware)
+	router.Use(recovererMiddleware(router.logger))
 	router.Use(otelchi.Middleware("api", otelchi.WithChiRoutes(router)))
 
 	router.Use(func(next http.Handler) http.Handler {

@@ -8,8 +8,9 @@ import (
 	"runtime/debug"
 
 	"github.com/FyraLabs/subatomic/server/types"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	kitlog "github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -41,32 +42,37 @@ func initTracerProvider() *sdktrace.TracerProvider {
 		sdktrace.WithResource(res),
 	)
 }
+func recovererMiddleware(l kitlog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
+					// Log the recovered panic and the stack trace using the logger.
+					// Convert the panic value and stack trace to appropriate types for logging.
+					level.Error(l).Log(
+						"msg", "recovered panic in HTTP handler",
+						"panic", fmt.Sprintf("%v", rvr),
+						"stack", string(debug.Stack()),
+						"method", r.Method,
+						"path", r.URL.Path,
+						"remote", r.RemoteAddr,
+					)
+					var err error
 
-func recovererMiddleware(next http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
-				logEntry := middleware.GetLogEntry(r)
-				if logEntry != nil {
-					logEntry.Panic(rvr, debug.Stack())
-				} else {
-					middleware.PrintPrettyStack(rvr)
+					if e, ok := rvr.(error); ok {
+						err = e
+					} else {
+						// For unknown panics, create an error that includes the panic value
+						err = fmt.Errorf("unknown error: %v", rvr)
+					}
+
+					render.Render(w, r, types.ErrInternalServerError(err))
 				}
+			}()
 
-				var err error
+			next.ServeHTTP(w, r)
+		}
 
-				if e, ok := rvr.(error); ok {
-					err = e
-				} else {
-					err = fmt.Errorf("unknown error")
-				}
-
-				render.Render(w, r, types.ErrInternalServerError(err))
-			}
-		}()
-
-		next.ServeHTTP(w, r)
+		return http.HandlerFunc(fn)
 	}
-
-	return http.HandlerFunc(fn)
 }

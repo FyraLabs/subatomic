@@ -3,23 +3,24 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 
+	_ "github.com/FyraLabs/subatomic/server/docs"
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/Netflix/go-env"
 	"github.com/go-chi/jwtauth/v5"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/go-playground/form/v4"
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-
-	_ "github.com/FyraLabs/subatomic/server/docs"
 	_ "github.com/lib/pq"
 	_ "github.com/swaggo/files"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var validate *validator.Validate
@@ -37,12 +38,15 @@ var decoder *form.Decoder
 // @in		header
 // @name	Authorization
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	logger := log.With(log.NewLogfmtLogger(os.Stdout), "ts", log.DefaultTimestampUTC)
+	logger = level.NewFilter(logger, level.AllowInfo())
+	if err := run(logger); err != nil {
+		level.Error(logger).Log("msg", "fatal error", "error", err)
 	}
 }
 
-func run() error {
+func run(logger log.Logger) error {
+
 	validate = validator.New()
 	decoder = form.NewDecoder()
 	var environment types.Environment
@@ -66,7 +70,7 @@ func run() error {
 		tp := initTracerProvider()
 		defer func() {
 			if err := tp.Shutdown(context.Background()); err != nil {
-				log.Printf("Error shutting down tracer provider: %v", err)
+				level.Error(logger).Log("msg", "error shutting down tracer provider", "error", err)
 			}
 		}()
 
@@ -80,9 +84,10 @@ func run() error {
 		environment:      &environment,
 		jwtAuthenticator: jwtauth.New("HS256", []byte(environment.JWTSecret), nil),
 		repoMutex:        &keyedmutex.KeyedMutex{},
+		logger:           logger,
 	}
 	router.setup()
 
-	println("Listening on :3000")
+	level.Info(logger).Log("msg", "listening on port", "port", ":3000")
 	return http.ListenAndServe(":3000", router)
 }
