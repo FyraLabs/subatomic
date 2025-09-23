@@ -54,7 +54,7 @@ func recovererMiddleware(l kitlog.Logger) func(http.Handler) http.Handler {
 						"panic", fmt.Sprintf("%v", rvr),
 						"stack", string(debug.Stack()),
 						"method", r.Method,
-						"url", r.URL,
+						"url", r.URL.String(),
 						"remote", r.RemoteAddr,
 					)
 					var err error
