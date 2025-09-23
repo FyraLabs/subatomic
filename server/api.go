@@ -40,6 +40,7 @@ func requestLogger(l log.Logger) func(http.Handler) http.Handler {
 				_ = level.Info(l).Log(
 					"method", r.Method,
 					"url", r.URL.String(),
+					"host", r.Host,
 					"status", ww.Status(),
 					"bytes", ww.BytesWritten(),
 					"duration", time.Since(start),
