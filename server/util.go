@@ -6,8 +6,10 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/types"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	kitlog "github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -42,6 +44,32 @@ func initTracerProvider() *sdktrace.TracerProvider {
 		sdktrace.WithResource(res),
 	)
 }
+
+// logger backend
+func requestLogger(l kitlog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			start := time.Now()
+
+			defer func() {
+				_ = level.Info(l).Log(
+					"method", r.Method,
+					// #nosec G107: We escape twice using URL encoding and logfmt
+					"url", r.URL.String(),
+					"host", r.Host,
+					"status", ww.Status(),
+					"bytes", ww.BytesWritten(),
+					"duration", time.Since(start),
+					"remote", r.RemoteAddr,
+				)
+			}()
+
+			next.ServeHTTP(ww, r)
+		})
+	}
+}
+
 func recovererMiddleware(l kitlog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +82,7 @@ func recovererMiddleware(l kitlog.Logger) func(http.Handler) http.Handler {
 						"panic", fmt.Sprintf("%v", rvr),
 						"stack", string(debug.Stack()),
 						"method", r.Method,
+						// #nosec G107: We escape twice using URL encoding and logfmt
 						"url", r.URL.String(),
 						"host", r.Host,
 						"remote", r.RemoteAddr,

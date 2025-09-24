@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
@@ -13,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/riandyrn/otelchi"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -27,30 +25,6 @@ type apiRouter struct {
 	jwtAuthenticator *jwtauth.JWTAuth
 	repoMutex        *keyedmutex.KeyedMutex
 	logger           log.Logger
-}
-
-// logger backend
-func requestLogger(l log.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			start := time.Now()
-
-			defer func() {
-				_ = level.Info(l).Log(
-					"method", r.Method,
-					"url", r.URL.String(),
-					"host", r.Host,
-					"status", ww.Status(),
-					"bytes", ww.BytesWritten(),
-					"duration", time.Since(start),
-					"remote", r.RemoteAddr,
-				)
-			}()
-
-			next.ServeHTTP(ww, r)
-		})
-	}
 }
 
 func (router *apiRouter) setup() {
