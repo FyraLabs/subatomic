@@ -6,10 +6,13 @@ import (
 	"log"
 	"net/http"
 	"runtime/debug"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	kitlog "github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -42,31 +45,64 @@ func initTracerProvider() *sdktrace.TracerProvider {
 	)
 }
 
-func recovererMiddleware(next http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
-				logEntry := middleware.GetLogEntry(r)
-				if logEntry != nil {
-					logEntry.Panic(rvr, debug.Stack())
-				} else {
-					middleware.PrintPrettyStack(rvr)
-				}
+// logger backend
+func requestLogger(l kitlog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			start := time.Now()
 
-				var err error
+			defer func() {
+				_ = level.Info(l).Log(
+					"method", r.Method,
+					// #nosec G107: We escape twice using URL encoding and logfmt
+					"url", r.URL.String(),
+					"host", r.Host,
+					"status", ww.Status(),
+					"bytes", ww.BytesWritten(),
+					"duration", time.Since(start),
+					"remote", r.RemoteAddr,
+				)
+			}()
 
-				if e, ok := rvr.(error); ok {
-					err = e
-				} else {
-					err = fmt.Errorf("unknown error")
-				}
-
-				render.Render(w, r, types.ErrInternalServerError(err))
-			}
-		}()
-
-		next.ServeHTTP(w, r)
+			next.ServeHTTP(ww, r)
+		})
 	}
+}
 
-	return http.HandlerFunc(fn)
+func recovererMiddleware(l kitlog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
+					// Log the recovered panic and the stack trace using the logger.
+					// Convert the panic value and stack trace to appropriate types for logging.
+					level.Error(l).Log(
+						"msg", "recovered panic in HTTP handler",
+						"panic", fmt.Sprintf("%v", rvr),
+						"stack", string(debug.Stack()),
+						"method", r.Method,
+						// #nosec G107: We escape twice using URL encoding and logfmt
+						"url", r.URL.String(),
+						"host", r.Host,
+						"remote", r.RemoteAddr,
+					)
+					var err error
+
+					if e, ok := rvr.(error); ok {
+						err = e
+					} else {
+						// For unknown panics, create an error that includes the panic value
+						err = fmt.Errorf("unknown error: %v", rvr)
+					}
+
+					render.Render(w, r, types.ErrInternalServerError(err))
+				}
+			}()
+
+			next.ServeHTTP(w, r)
+		}
+
+		return http.HandlerFunc(fn)
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	"github.com/go-kit/log"
 	"github.com/riandyrn/otelchi"
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -23,14 +24,15 @@ type apiRouter struct {
 	environment      *types.Environment
 	jwtAuthenticator *jwtauth.JWTAuth
 	repoMutex        *keyedmutex.KeyedMutex
+	logger           log.Logger
 }
 
 func (router *apiRouter) setup() {
 	router.Mux = chi.NewRouter()
 
-	router.Use(middleware.Logger)
+	router.Use(requestLogger(router.logger))
 	router.Use(middleware.Heartbeat("/heartbeat"))
-	router.Use(recovererMiddleware)
+	router.Use(recovererMiddleware(router.logger))
 	router.Use(otelchi.Middleware("api", otelchi.WithChiRoutes(router)))
 
 	router.Use(func(next http.Handler) http.Handler {
