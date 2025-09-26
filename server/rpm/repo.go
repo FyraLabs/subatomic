@@ -141,7 +141,8 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	iconsConfig := batchTemplate
 	iconsFile := path.Join(appstreamPath, repoName, "latest/appstream", fmt.Sprintf("%s-icons-128x128.tar.gz", repoName))
 	iconsConfig.Path = iconsFile
-	iconsConfig.NewName = "appstream-icons.tar"
+	iconsConfig.Type = "appstream-icons"
+	iconsConfig.NewName = "appstream-icons-128x128.tar"
 
 	repoBatch := MRepoBatchFile{
 		// AppStreamData: appstreamConfig,
