@@ -53,6 +53,18 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
+	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
+	if appstreamDirEnv != "" {
+		appstreamDir, err := filepath.Abs(appstreamDirEnv)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
+			panic(err)
+		}
+	}
+
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
 	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
@@ -77,18 +89,6 @@ func UpdateRepo(repoPath string) error {
 		}
 
 		return err
-	}
-
-	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
-	if appstreamDirEnv != "" {
-		appstreamDir, err := filepath.Abs(appstreamDirEnv)
-		if err != nil {
-			panic(err)
-		}
-
-		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
-			panic(err)
-		}
 	}
 
 	if err := writeTetsudouMetadata(repoPath); err != nil {
