@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 
 	"github.com/FyraLabs/subatomic/server/tetsudou"
 
@@ -76,6 +77,18 @@ func UpdateRepo(repoPath string) error {
 		}
 
 		return err
+	}
+
+	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
+	if appstreamDirEnv != "" {
+		appstreamDir, err := filepath.Abs(appstreamDirEnv)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
+			panic(err)
+		}
 	}
 
 	if err := writeTetsudouMetadata(repoPath); err != nil {

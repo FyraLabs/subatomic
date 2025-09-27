@@ -353,19 +353,6 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			panic(err)
 		}
 
-		// modifyrepo_c for stuff
-		appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
-		if appstreamDirEnv != "" {
-			appstreamDir, err := filepath.Abs(appstreamDirEnv)
-			if err != nil {
-				panic(err)
-			}
-
-			if err := rpm.ModifyRepoAppStream(targetDirectory, appstreamDir); err != nil {
-				panic(err)
-			}
-		}
-
 		if ring != nil {
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
