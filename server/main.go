@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 
 	_ "github.com/FyraLabs/subatomic/server/docs"
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
+	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/Netflix/go-env"
 	"github.com/go-chi/jwtauth/v5"
@@ -25,6 +25,7 @@ import (
 
 var validate *validator.Validate
 var decoder *form.Decoder
+var main_logger log.Logger = log.With(logging.Logger)
 
 //	@title			Subatomic
 //	@version		1.0
@@ -38,15 +39,12 @@ var decoder *form.Decoder
 // @in		header
 // @name	Authorization
 func main() {
-	logger := log.With(log.NewLogfmtLogger(os.Stdout), "ts", log.DefaultTimestampUTC)
-	logger = level.NewFilter(logger, level.AllowInfo())
-	if err := run(logger); err != nil {
-		level.Error(logger).Log("msg", "fatal error", "error", err)
+	if err := run(main_logger); err != nil {
+		level.Error(main_logger).Log("msg", "fatal error", "error", err)
 	}
 }
 
 func run(logger log.Logger) error {
-
 	validate = validator.New()
 	decoder = form.NewDecoder()
 	var environment types.Environment

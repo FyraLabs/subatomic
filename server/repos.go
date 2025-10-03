@@ -12,10 +12,13 @@ import (
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
+	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/rpm"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/samber/lo"
 	"github.com/sassoftware/go-rpmutils"
 
@@ -25,6 +28,12 @@ import (
 
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 )
+
+func repoLogger(repoID string) log.Logger {
+	return log.With(logging.Logger, "repo_id", repoID, "module", "repos")
+}
+
+var logger = logging.Logger
 
 type reposRouter struct {
 	*chi.Mux
@@ -196,6 +205,7 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 //	@Router			/repos/{id} [put]
 func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "repoID")
+	logger := repoLogger(id)
 	if err := validate.Var(id, "required,hostname"); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
 		return
@@ -333,7 +343,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			for _, p := range toPrune {
 				file_delete_path := path.Join(targetDirectory, p.FilePath)
 				// log
-				fmt.Printf("Pruning %s\n", file_delete_path)
+				level.Info(logger).Log("Pruning outdated file", file_delete_path)
 				if err := os.Remove(file_delete_path); err != nil && !os.IsNotExist(err) {
 					panic(err)
 				}

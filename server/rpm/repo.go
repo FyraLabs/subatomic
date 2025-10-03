@@ -9,12 +9,17 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/tetsudou"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 	"github.com/sassoftware/go-rpmutils"
 	"gopkg.in/ini.v1"
 )
+
+var logger = log.With(logging.Logger, "module", "rpm")
 
 type MRepoBatchFile struct {
 	AppStreamData MRepoCBatchData `ini:"appstream"`
@@ -193,7 +198,7 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 	flags := []string{"-f", *configPath, repodataDir}
 
 	if _, err := exec.Command("modifyrepo_c", flags...).Output(); err != nil {
-		fmt.Println("modifyrepo_c error:", err)
+		level.Error(logger).Log("msg", "modifyrepo_c failed", "error_msg", err)
 		return err
 	}
 
