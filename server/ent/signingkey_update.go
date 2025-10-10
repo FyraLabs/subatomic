@@ -23,116 +23,116 @@ type SigningKeyUpdate struct {
 }
 
 // Where appends a list predicates to the SigningKeyUpdate builder.
-func (sku *SigningKeyUpdate) Where(ps ...predicate.SigningKey) *SigningKeyUpdate {
-	sku.mutation.Where(ps...)
-	return sku
+func (_u *SigningKeyUpdate) Where(ps ...predicate.SigningKey) *SigningKeyUpdate {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // SetPrivateKey sets the "private_key" field.
-func (sku *SigningKeyUpdate) SetPrivateKey(s string) *SigningKeyUpdate {
-	sku.mutation.SetPrivateKey(s)
-	return sku
+func (_u *SigningKeyUpdate) SetPrivateKey(v string) *SigningKeyUpdate {
+	_u.mutation.SetPrivateKey(v)
+	return _u
 }
 
 // SetNillablePrivateKey sets the "private_key" field if the given value is not nil.
-func (sku *SigningKeyUpdate) SetNillablePrivateKey(s *string) *SigningKeyUpdate {
-	if s != nil {
-		sku.SetPrivateKey(*s)
+func (_u *SigningKeyUpdate) SetNillablePrivateKey(v *string) *SigningKeyUpdate {
+	if v != nil {
+		_u.SetPrivateKey(*v)
 	}
-	return sku
+	return _u
 }
 
 // SetPublicKey sets the "public_key" field.
-func (sku *SigningKeyUpdate) SetPublicKey(s string) *SigningKeyUpdate {
-	sku.mutation.SetPublicKey(s)
-	return sku
+func (_u *SigningKeyUpdate) SetPublicKey(v string) *SigningKeyUpdate {
+	_u.mutation.SetPublicKey(v)
+	return _u
 }
 
 // SetNillablePublicKey sets the "public_key" field if the given value is not nil.
-func (sku *SigningKeyUpdate) SetNillablePublicKey(s *string) *SigningKeyUpdate {
-	if s != nil {
-		sku.SetPublicKey(*s)
+func (_u *SigningKeyUpdate) SetNillablePublicKey(v *string) *SigningKeyUpdate {
+	if v != nil {
+		_u.SetPublicKey(*v)
 	}
-	return sku
+	return _u
 }
 
 // SetName sets the "name" field.
-func (sku *SigningKeyUpdate) SetName(s string) *SigningKeyUpdate {
-	sku.mutation.SetName(s)
-	return sku
+func (_u *SigningKeyUpdate) SetName(v string) *SigningKeyUpdate {
+	_u.mutation.SetName(v)
+	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (sku *SigningKeyUpdate) SetNillableName(s *string) *SigningKeyUpdate {
-	if s != nil {
-		sku.SetName(*s)
+func (_u *SigningKeyUpdate) SetNillableName(v *string) *SigningKeyUpdate {
+	if v != nil {
+		_u.SetName(*v)
 	}
-	return sku
+	return _u
 }
 
 // SetEmail sets the "email" field.
-func (sku *SigningKeyUpdate) SetEmail(s string) *SigningKeyUpdate {
-	sku.mutation.SetEmail(s)
-	return sku
+func (_u *SigningKeyUpdate) SetEmail(v string) *SigningKeyUpdate {
+	_u.mutation.SetEmail(v)
+	return _u
 }
 
 // SetNillableEmail sets the "email" field if the given value is not nil.
-func (sku *SigningKeyUpdate) SetNillableEmail(s *string) *SigningKeyUpdate {
-	if s != nil {
-		sku.SetEmail(*s)
+func (_u *SigningKeyUpdate) SetNillableEmail(v *string) *SigningKeyUpdate {
+	if v != nil {
+		_u.SetEmail(*v)
 	}
-	return sku
+	return _u
 }
 
 // AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
-func (sku *SigningKeyUpdate) AddRepoIDs(ids ...string) *SigningKeyUpdate {
-	sku.mutation.AddRepoIDs(ids...)
-	return sku
+func (_u *SigningKeyUpdate) AddRepoIDs(ids ...string) *SigningKeyUpdate {
+	_u.mutation.AddRepoIDs(ids...)
+	return _u
 }
 
 // AddRepo adds the "repo" edges to the Repo entity.
-func (sku *SigningKeyUpdate) AddRepo(r ...*Repo) *SigningKeyUpdate {
-	ids := make([]string, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *SigningKeyUpdate) AddRepo(v ...*Repo) *SigningKeyUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return sku.AddRepoIDs(ids...)
+	return _u.AddRepoIDs(ids...)
 }
 
 // Mutation returns the SigningKeyMutation object of the builder.
-func (sku *SigningKeyUpdate) Mutation() *SigningKeyMutation {
-	return sku.mutation
+func (_u *SigningKeyUpdate) Mutation() *SigningKeyMutation {
+	return _u.mutation
 }
 
 // ClearRepo clears all "repo" edges to the Repo entity.
-func (sku *SigningKeyUpdate) ClearRepo() *SigningKeyUpdate {
-	sku.mutation.ClearRepo()
-	return sku
+func (_u *SigningKeyUpdate) ClearRepo() *SigningKeyUpdate {
+	_u.mutation.ClearRepo()
+	return _u
 }
 
 // RemoveRepoIDs removes the "repo" edge to Repo entities by IDs.
-func (sku *SigningKeyUpdate) RemoveRepoIDs(ids ...string) *SigningKeyUpdate {
-	sku.mutation.RemoveRepoIDs(ids...)
-	return sku
+func (_u *SigningKeyUpdate) RemoveRepoIDs(ids ...string) *SigningKeyUpdate {
+	_u.mutation.RemoveRepoIDs(ids...)
+	return _u
 }
 
 // RemoveRepo removes "repo" edges to Repo entities.
-func (sku *SigningKeyUpdate) RemoveRepo(r ...*Repo) *SigningKeyUpdate {
-	ids := make([]string, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *SigningKeyUpdate) RemoveRepo(v ...*Repo) *SigningKeyUpdate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return sku.RemoveRepoIDs(ids...)
+	return _u.RemoveRepoIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (sku *SigningKeyUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks(ctx, sku.sqlSave, sku.mutation, sku.hooks)
+func (_u *SigningKeyUpdate) Save(ctx context.Context) (int, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (sku *SigningKeyUpdate) SaveX(ctx context.Context) int {
-	affected, err := sku.Save(ctx)
+func (_u *SigningKeyUpdate) SaveX(ctx context.Context) int {
+	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -140,40 +140,40 @@ func (sku *SigningKeyUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (sku *SigningKeyUpdate) Exec(ctx context.Context) error {
-	_, err := sku.Save(ctx)
+func (_u *SigningKeyUpdate) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (sku *SigningKeyUpdate) ExecX(ctx context.Context) {
-	if err := sku.Exec(ctx); err != nil {
+func (_u *SigningKeyUpdate) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
-func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
+func (_u *SigningKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	_spec := sqlgraph.NewUpdateSpec(signingkey.Table, signingkey.Columns, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
-	if ps := sku.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := sku.mutation.PrivateKey(); ok {
+	if value, ok := _u.mutation.PrivateKey(); ok {
 		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 	}
-	if value, ok := sku.mutation.PublicKey(); ok {
+	if value, ok := _u.mutation.PublicKey(); ok {
 		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 	}
-	if value, ok := sku.mutation.Name(); ok {
+	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 	}
-	if value, ok := sku.mutation.Email(); ok {
+	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 	}
-	if sku.mutation.RepoCleared() {
+	if _u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -186,7 +186,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := sku.mutation.RemovedRepoIDs(); len(nodes) > 0 && !sku.mutation.RepoCleared() {
+	if nodes := _u.mutation.RemovedRepoIDs(); len(nodes) > 0 && !_u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -202,7 +202,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := sku.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -218,7 +218,7 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if n, err = sqlgraph.UpdateNodes(ctx, sku.driver, _spec); err != nil {
+	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{signingkey.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -226,8 +226,8 @@ func (sku *SigningKeyUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
-	sku.mutation.done = true
-	return n, nil
+	_u.mutation.done = true
+	return _node, nil
 }
 
 // SigningKeyUpdateOne is the builder for updating a single SigningKey entity.
@@ -239,123 +239,123 @@ type SigningKeyUpdateOne struct {
 }
 
 // SetPrivateKey sets the "private_key" field.
-func (skuo *SigningKeyUpdateOne) SetPrivateKey(s string) *SigningKeyUpdateOne {
-	skuo.mutation.SetPrivateKey(s)
-	return skuo
+func (_u *SigningKeyUpdateOne) SetPrivateKey(v string) *SigningKeyUpdateOne {
+	_u.mutation.SetPrivateKey(v)
+	return _u
 }
 
 // SetNillablePrivateKey sets the "private_key" field if the given value is not nil.
-func (skuo *SigningKeyUpdateOne) SetNillablePrivateKey(s *string) *SigningKeyUpdateOne {
-	if s != nil {
-		skuo.SetPrivateKey(*s)
+func (_u *SigningKeyUpdateOne) SetNillablePrivateKey(v *string) *SigningKeyUpdateOne {
+	if v != nil {
+		_u.SetPrivateKey(*v)
 	}
-	return skuo
+	return _u
 }
 
 // SetPublicKey sets the "public_key" field.
-func (skuo *SigningKeyUpdateOne) SetPublicKey(s string) *SigningKeyUpdateOne {
-	skuo.mutation.SetPublicKey(s)
-	return skuo
+func (_u *SigningKeyUpdateOne) SetPublicKey(v string) *SigningKeyUpdateOne {
+	_u.mutation.SetPublicKey(v)
+	return _u
 }
 
 // SetNillablePublicKey sets the "public_key" field if the given value is not nil.
-func (skuo *SigningKeyUpdateOne) SetNillablePublicKey(s *string) *SigningKeyUpdateOne {
-	if s != nil {
-		skuo.SetPublicKey(*s)
+func (_u *SigningKeyUpdateOne) SetNillablePublicKey(v *string) *SigningKeyUpdateOne {
+	if v != nil {
+		_u.SetPublicKey(*v)
 	}
-	return skuo
+	return _u
 }
 
 // SetName sets the "name" field.
-func (skuo *SigningKeyUpdateOne) SetName(s string) *SigningKeyUpdateOne {
-	skuo.mutation.SetName(s)
-	return skuo
+func (_u *SigningKeyUpdateOne) SetName(v string) *SigningKeyUpdateOne {
+	_u.mutation.SetName(v)
+	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (skuo *SigningKeyUpdateOne) SetNillableName(s *string) *SigningKeyUpdateOne {
-	if s != nil {
-		skuo.SetName(*s)
+func (_u *SigningKeyUpdateOne) SetNillableName(v *string) *SigningKeyUpdateOne {
+	if v != nil {
+		_u.SetName(*v)
 	}
-	return skuo
+	return _u
 }
 
 // SetEmail sets the "email" field.
-func (skuo *SigningKeyUpdateOne) SetEmail(s string) *SigningKeyUpdateOne {
-	skuo.mutation.SetEmail(s)
-	return skuo
+func (_u *SigningKeyUpdateOne) SetEmail(v string) *SigningKeyUpdateOne {
+	_u.mutation.SetEmail(v)
+	return _u
 }
 
 // SetNillableEmail sets the "email" field if the given value is not nil.
-func (skuo *SigningKeyUpdateOne) SetNillableEmail(s *string) *SigningKeyUpdateOne {
-	if s != nil {
-		skuo.SetEmail(*s)
+func (_u *SigningKeyUpdateOne) SetNillableEmail(v *string) *SigningKeyUpdateOne {
+	if v != nil {
+		_u.SetEmail(*v)
 	}
-	return skuo
+	return _u
 }
 
 // AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
-func (skuo *SigningKeyUpdateOne) AddRepoIDs(ids ...string) *SigningKeyUpdateOne {
-	skuo.mutation.AddRepoIDs(ids...)
-	return skuo
+func (_u *SigningKeyUpdateOne) AddRepoIDs(ids ...string) *SigningKeyUpdateOne {
+	_u.mutation.AddRepoIDs(ids...)
+	return _u
 }
 
 // AddRepo adds the "repo" edges to the Repo entity.
-func (skuo *SigningKeyUpdateOne) AddRepo(r ...*Repo) *SigningKeyUpdateOne {
-	ids := make([]string, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *SigningKeyUpdateOne) AddRepo(v ...*Repo) *SigningKeyUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return skuo.AddRepoIDs(ids...)
+	return _u.AddRepoIDs(ids...)
 }
 
 // Mutation returns the SigningKeyMutation object of the builder.
-func (skuo *SigningKeyUpdateOne) Mutation() *SigningKeyMutation {
-	return skuo.mutation
+func (_u *SigningKeyUpdateOne) Mutation() *SigningKeyMutation {
+	return _u.mutation
 }
 
 // ClearRepo clears all "repo" edges to the Repo entity.
-func (skuo *SigningKeyUpdateOne) ClearRepo() *SigningKeyUpdateOne {
-	skuo.mutation.ClearRepo()
-	return skuo
+func (_u *SigningKeyUpdateOne) ClearRepo() *SigningKeyUpdateOne {
+	_u.mutation.ClearRepo()
+	return _u
 }
 
 // RemoveRepoIDs removes the "repo" edge to Repo entities by IDs.
-func (skuo *SigningKeyUpdateOne) RemoveRepoIDs(ids ...string) *SigningKeyUpdateOne {
-	skuo.mutation.RemoveRepoIDs(ids...)
-	return skuo
+func (_u *SigningKeyUpdateOne) RemoveRepoIDs(ids ...string) *SigningKeyUpdateOne {
+	_u.mutation.RemoveRepoIDs(ids...)
+	return _u
 }
 
 // RemoveRepo removes "repo" edges to Repo entities.
-func (skuo *SigningKeyUpdateOne) RemoveRepo(r ...*Repo) *SigningKeyUpdateOne {
-	ids := make([]string, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *SigningKeyUpdateOne) RemoveRepo(v ...*Repo) *SigningKeyUpdateOne {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return skuo.RemoveRepoIDs(ids...)
+	return _u.RemoveRepoIDs(ids...)
 }
 
 // Where appends a list predicates to the SigningKeyUpdate builder.
-func (skuo *SigningKeyUpdateOne) Where(ps ...predicate.SigningKey) *SigningKeyUpdateOne {
-	skuo.mutation.Where(ps...)
-	return skuo
+func (_u *SigningKeyUpdateOne) Where(ps ...predicate.SigningKey) *SigningKeyUpdateOne {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (skuo *SigningKeyUpdateOne) Select(field string, fields ...string) *SigningKeyUpdateOne {
-	skuo.fields = append([]string{field}, fields...)
-	return skuo
+func (_u *SigningKeyUpdateOne) Select(field string, fields ...string) *SigningKeyUpdateOne {
+	_u.fields = append([]string{field}, fields...)
+	return _u
 }
 
 // Save executes the query and returns the updated SigningKey entity.
-func (skuo *SigningKeyUpdateOne) Save(ctx context.Context) (*SigningKey, error) {
-	return withHooks(ctx, skuo.sqlSave, skuo.mutation, skuo.hooks)
+func (_u *SigningKeyUpdateOne) Save(ctx context.Context) (*SigningKey, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (skuo *SigningKeyUpdateOne) SaveX(ctx context.Context) *SigningKey {
-	node, err := skuo.Save(ctx)
+func (_u *SigningKeyUpdateOne) SaveX(ctx context.Context) *SigningKey {
+	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -363,26 +363,26 @@ func (skuo *SigningKeyUpdateOne) SaveX(ctx context.Context) *SigningKey {
 }
 
 // Exec executes the query on the entity.
-func (skuo *SigningKeyUpdateOne) Exec(ctx context.Context) error {
-	_, err := skuo.Save(ctx)
+func (_u *SigningKeyUpdateOne) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (skuo *SigningKeyUpdateOne) ExecX(ctx context.Context) {
-	if err := skuo.Exec(ctx); err != nil {
+func (_u *SigningKeyUpdateOne) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
-func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey, err error) {
+func (_u *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey, err error) {
 	_spec := sqlgraph.NewUpdateSpec(signingkey.Table, signingkey.Columns, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
-	id, ok := skuo.mutation.ID()
+	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "SigningKey.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
-	if fields := skuo.fields; len(fields) > 0 {
+	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, signingkey.FieldID)
 		for _, f := range fields {
@@ -394,26 +394,26 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 			}
 		}
 	}
-	if ps := skuo.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := skuo.mutation.PrivateKey(); ok {
+	if value, ok := _u.mutation.PrivateKey(); ok {
 		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 	}
-	if value, ok := skuo.mutation.PublicKey(); ok {
+	if value, ok := _u.mutation.PublicKey(); ok {
 		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 	}
-	if value, ok := skuo.mutation.Name(); ok {
+	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 	}
-	if value, ok := skuo.mutation.Email(); ok {
+	if value, ok := _u.mutation.Email(); ok {
 		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 	}
-	if skuo.mutation.RepoCleared() {
+	if _u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -426,7 +426,7 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := skuo.mutation.RemovedRepoIDs(); len(nodes) > 0 && !skuo.mutation.RepoCleared() {
+	if nodes := _u.mutation.RemovedRepoIDs(); len(nodes) > 0 && !_u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -442,7 +442,7 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := skuo.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -458,10 +458,10 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &SigningKey{config: skuo.config}
+	_node = &SigningKey{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
-	if err = sqlgraph.UpdateNode(ctx, skuo.driver, _spec); err != nil {
+	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{signingkey.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -469,6 +469,6 @@ func (skuo *SigningKeyUpdateOne) sqlSave(ctx context.Context) (_node *SigningKey
 		}
 		return nil, err
 	}
-	skuo.mutation.done = true
+	_u.mutation.done = true
 	return _node, nil
 }

@@ -66,6 +66,10 @@ func (router *reposRouter) setup() {
 	router.Get("/{repoID}/rpms", router.getRPMs)
 	router.Delete("/{repoID}/rpms", router.bulkDeleteRPMs)
 	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
+
+	// Tetsudou Integration
+	router.Put("/{repoID}/tetsudou", router.putTetsudouConfig)
+	router.Delete("/{repoID}/tetsudou", router.deleteTetsudouConfig)
 }
 
 // getRepos godoc
@@ -1083,6 +1087,100 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// putTetsudouConfig godoc
+//
+//	@Summary		Set the Tetsudou server to refresh when this repository is updated
+//	@Description	set tetsudou config
+//	@Tags			tetsudou
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/tetsudou [put]
+func (router *reposRouter) putTetsudouConfig(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,hostname"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	payload := &types.SetTetsudouConfigPayload{}
+	if err := render.Bind(r, payload); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().SetTetsudouURL(payload.Url).SetTetsudouToken(payload.Token).Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	// TODO: push
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// deleteTetsudouConfig godoc
+//
+//	@Summary		Delete the current tetsudou configuration for this repository
+//	@Description	delete tetsudou config
+//	@Tags			tetsudou
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/tetsudou [delete]
+func (router *reposRouter) deleteTetsudouConfig(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,hostname"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().ClearTetsudouURL().ClearTetsudouToken().Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	// TODO: push
 
 	w.WriteHeader(http.StatusNoContent)
 

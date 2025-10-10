@@ -54,3 +54,13 @@ type QueryRpmParams struct {
 	Arch         *string `form:"arch"`
 	FilePath     *string `form:"file_path"`
 }
+
+type SetTetsudouConfigPayload struct {
+	Url   string `json:"url" validate:"required,https_url"`
+	Token string `json:"token" validate:"required"`
+}
+
+func (u *SetTetsudouConfigPayload) Bind(r *http.Request) error {
+	validate := r.Context().Value(ValidateContextKey{}).(*validator.Validate)
+	return validate.Struct(u)
+}
