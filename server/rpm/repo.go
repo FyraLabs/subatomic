@@ -62,11 +62,11 @@ func UpdateRepo(repoPath string) error {
 	if appstreamDirEnv != "" {
 		appstreamDir, err := filepath.Abs(appstreamDirEnv)
 		if err != nil {
-			panic(err)
+			return err
 		}
 
 		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
-			panic(err)
+			fmt.Printf("failed to modify repo appstream, failing silently: %s", err.Error())
 		}
 	}
 
