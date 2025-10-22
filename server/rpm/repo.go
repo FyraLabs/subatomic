@@ -58,17 +58,9 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
+	level.Debug(logger).Log("msg", "Starting repo update")
 	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
-	if appstreamDirEnv != "" {
-		appstreamDir, err := filepath.Abs(appstreamDirEnv)
-		if err != nil {
-			return err
-		}
-
-		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
-			fmt.Printf("failed to modify repo appstream, failing silently: %s", err.Error())
-		}
-	}
+	level.Debug(logger).Log("msg", "AppStream dir env var", "value", appstreamDirEnv)
 
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
@@ -94,6 +86,21 @@ func UpdateRepo(repoPath string) error {
 		}
 
 		return err
+	}
+	
+	if appstreamDirEnv != "" {
+		level.Debug(logger).Log("msg", "AppStream dir env var is set, modifying repo with AppStream metadata")
+		appstreamDir, err := filepath.Abs(appstreamDirEnv)
+		if err != nil {
+			return err
+		}
+
+		logger.Log("msg", "Modifying repo with AppStream metadata from "+appstreamDir)
+		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
+			level.Error(logger).Log("failed to modify repo appstream, failing silently: %s", err.Error())
+		}
+	} else {
+		level.Debug(logger).Log("msg", "AppStream dir env var is not set, skipping AppStream metadata modification")
 	}
 
 	if err := writeTetsudouMetadata(repoPath); err != nil {
@@ -143,6 +150,7 @@ func writeTetsudouMetadata(repoPath string) error {
 //			x128x128/
 //				<icon files>
 func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
+	level.Debug(logger).Log("msg", "Generating mrepo_c config for repo", "repoPath", repoPath, "appstreamPath", appstreamPath)
 	repoName := path.Base(repoPath)
 
 	batchTemplate := MRepoCBatchData{
@@ -183,15 +191,19 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	if err := inifile.SaveTo(configPath); err != nil {
 		return nil, err
 	}
+	level.Debug(logger).Log("msg", "Generated mrepo_c config", "configPath", configPath)
 
 	return &configPath, nil
 }
 
 func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
+	level.Debug(logger).Log("msg", "Generating mrepo_c config")
 	configPath, err := MrepoCConfig(repoPath, appstreamPath)
 	if err != nil {
 		return err
 	}
+
+	level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "configPath", *configPath)
 
 	// log("Using mrepo_c config at", *configPath)
 	repodataDir := path.Join(repoPath, "repodata")
@@ -202,7 +214,19 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 		return err
 	}
 
-	defer os.Remove(*configPath)
+	level.Debug(logger).Log("msg", "Modified repo with mrepo_c successfully")
+	defer func() {
+		level.Debug(logger).Log("msg", "Config file contents", "contents", func() string {
+					b, err := os.ReadFile(*configPath)
+					if err != nil {
+						return fmt.Sprintf("error reading config file: %v", err)
+					}
+					return string(b)
+				}())
+		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
+		os.Remove(*configPath)
+
+	}()
 	return nil
 }
 
