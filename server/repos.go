@@ -14,6 +14,7 @@ import (
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/rpm"
+	"github.com/FyraLabs/subatomic/server/tetsudou"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -66,6 +67,10 @@ func (router *reposRouter) setup() {
 	router.Get("/{repoID}/rpms", router.getRPMs)
 	router.Delete("/{repoID}/rpms", router.bulkDeleteRPMs)
 	router.Delete("/{repoID}/rpms/{rpmID}", router.deleteRPM)
+
+	// Tetsudou Integration
+	router.Put("/{repoID}/tetsudou", router.setTetsudouConfig)
+	router.Delete("/{repoID}/tetsudou", router.deleteTetsudouConfig)
 }
 
 // getRepos godoc
@@ -183,6 +188,15 @@ func (router *reposRouter) deleteRepo(w http.ResponseWriter, r *http.Request) {
 
 	if err := router.database.Repo.DeleteOne(repo).Exec(r.Context()); err != nil {
 		panic(err)
+	}
+
+	if repo.TetsudouURL != nil {
+		if err := tetsudou.DeleteRepo(&tetsudou.TetsudouConfig{
+			Server: *repo.TetsudouURL,
+			Token:  *repo.TetsudouToken,
+		}, id); err != nil {
+			fmt.Println("error deleting tetsudou repo:", err)
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -366,6 +380,15 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 		if ring != nil {
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
+			}
+		}
+
+		if re.TetsudouURL != nil {
+			if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+				Server: *re.TetsudouURL,
+				Token:  *re.TetsudouToken,
+			}, id); err != nil {
+				fmt.Println("error refreshing tetsudou repo:", err)
 			}
 		}
 
@@ -571,6 +594,15 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	if re.TetsudouURL != nil {
+		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+			Server: *re.TetsudouURL,
+			Token:  *re.TetsudouToken,
+		}, id); err != nil {
+			fmt.Println("error refreshing tetsudou repo:", err)
+		}
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 
 	if _, err := w.Write(nil); err != nil {
@@ -668,6 +700,15 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 	if ring != nil {
 		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 			panic(err)
+		}
+	}
+
+	if re.TetsudouURL != nil {
+		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+			Server: *re.TetsudouURL,
+			Token:  *re.TetsudouToken,
+		}, id); err != nil {
+			fmt.Println("error refreshing tetsudou repo:", err)
 		}
 	}
 
@@ -909,6 +950,15 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 				panic(err)
 			}
+
+			if re.TetsudouURL != nil {
+				if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+					Server: *re.TetsudouURL,
+					Token:  *re.TetsudouToken,
+				}, id); err != nil {
+					fmt.Println("error refreshing tetsudou repo:", err)
+				}
+			}
 		}
 	}
 
@@ -1006,6 +1056,15 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if re.TetsudouURL != nil {
+		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+			Server: *re.TetsudouURL,
+			Token:  *re.TetsudouToken,
+		}, id); err != nil {
+			fmt.Println("error refreshing tetsudou repo:", err)
+		}
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 
 	if _, err := w.Write(nil); err != nil {
@@ -1081,6 +1140,113 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 	if ring != nil {
 		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
 			panic(err)
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// setTetsudouConfig godoc
+//
+//	@Summary		Set the Tetsudou server to refresh when this repository is updated
+//	@Description	set tetsudou config
+//	@Tags			tetsudou
+//	@Param			id	path	string	true	"id for the repository"
+//	@Param			body	body	types.SetTetsudouConfigPayload	true	"the tetsudou config to use to refresh metadata"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/tetsudou [put]
+func (router *reposRouter) setTetsudouConfig(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,hostname"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	payload := &types.SetTetsudouConfigPayload{}
+	if err := render.Bind(r, payload); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().SetTetsudouURL(payload.Url).SetTetsudouToken(payload.Token).Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+		Server: *re.TetsudouURL,
+		Token:  *re.TetsudouToken,
+	}, id); err != nil {
+		fmt.Println("error refreshing tetsudou repo:", err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+	if _, err := w.Write(nil); err != nil {
+		panic(err)
+	}
+}
+
+// deleteTetsudouConfig godoc
+//
+//	@Summary		Delete the current tetsudou configuration for this repository
+//	@Description	delete tetsudou config
+//	@Tags			tetsudou
+//	@Param			id	path	string	true	"id for the repository"
+//	@Produce		json
+//	@Success		204
+//	@Failure		404	{object}	types.ErrResponse
+//	@Router			/repos/{id}/tetsudou [delete]
+func (router *reposRouter) deleteTetsudouConfig(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "repoID")
+	if err := validate.Var(id, "required,hostname"); err != nil {
+		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	router.repoMutex.Lock(id)
+	defer router.repoMutex.Unlock(id)
+
+	re, err := router.database.Repo.Get(r.Context(), id)
+
+	if ent.IsNotFound(err) {
+		render.Render(w, r, types.ErrNotFound(errors.New("repo not found")))
+		return
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := re.Update().ClearTetsudouURL().ClearTetsudouToken().Save(r.Context()); err != nil {
+		panic(err)
+	}
+
+	if re.TetsudouURL != nil {
+		if err := tetsudou.DeleteRepo(&tetsudou.TetsudouConfig{
+			Server: *re.TetsudouURL,
+			Token:  *re.TetsudouToken,
+		}, id); err != nil {
+			fmt.Println("error deleting tetsudou repo:", err)
 		}
 	}
 

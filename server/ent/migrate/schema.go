@@ -12,6 +12,8 @@ var (
 	ReposColumns = []*schema.Column{
 		{Name: "oid", Type: field.TypeString, Unique: true},
 		{Name: "type", Type: field.TypeEnum, Enums: []string{"rpm"}},
+		{Name: "tetsudou_url", Type: field.TypeString, Nullable: true},
+		{Name: "tetsudou_token", Type: field.TypeString, Nullable: true},
 		{Name: "repo_key", Type: field.TypeString, Nullable: true},
 	}
 	// ReposTable holds the schema information for the "repos" table.
@@ -22,7 +24,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "repos_signing_keys_key",
-				Columns:    []*schema.Column{ReposColumns[2]},
+				Columns:    []*schema.Column{ReposColumns[4]},
 				RefColumns: []*schema.Column{SigningKeysColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

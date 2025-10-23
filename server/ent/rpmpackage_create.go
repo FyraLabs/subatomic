@@ -21,73 +21,73 @@ type RpmPackageCreate struct {
 }
 
 // SetName sets the "name" field.
-func (rpc *RpmPackageCreate) SetName(s string) *RpmPackageCreate {
-	rpc.mutation.SetName(s)
-	return rpc
+func (_c *RpmPackageCreate) SetName(v string) *RpmPackageCreate {
+	_c.mutation.SetName(v)
+	return _c
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpc *RpmPackageCreate) SetEpoch(i int) *RpmPackageCreate {
-	rpc.mutation.SetEpoch(i)
-	return rpc
+func (_c *RpmPackageCreate) SetEpoch(v int) *RpmPackageCreate {
+	_c.mutation.SetEpoch(v)
+	return _c
 }
 
 // SetVersion sets the "version" field.
-func (rpc *RpmPackageCreate) SetVersion(s string) *RpmPackageCreate {
-	rpc.mutation.SetVersion(s)
-	return rpc
+func (_c *RpmPackageCreate) SetVersion(v string) *RpmPackageCreate {
+	_c.mutation.SetVersion(v)
+	return _c
 }
 
 // SetRelease sets the "release" field.
-func (rpc *RpmPackageCreate) SetRelease(s string) *RpmPackageCreate {
-	rpc.mutation.SetRelease(s)
-	return rpc
+func (_c *RpmPackageCreate) SetRelease(v string) *RpmPackageCreate {
+	_c.mutation.SetRelease(v)
+	return _c
 }
 
 // SetArch sets the "arch" field.
-func (rpc *RpmPackageCreate) SetArch(s string) *RpmPackageCreate {
-	rpc.mutation.SetArch(s)
-	return rpc
+func (_c *RpmPackageCreate) SetArch(v string) *RpmPackageCreate {
+	_c.mutation.SetArch(v)
+	return _c
 }
 
 // SetFilePath sets the "file_path" field.
-func (rpc *RpmPackageCreate) SetFilePath(s string) *RpmPackageCreate {
-	rpc.mutation.SetFilePath(s)
-	return rpc
+func (_c *RpmPackageCreate) SetFilePath(v string) *RpmPackageCreate {
+	_c.mutation.SetFilePath(v)
+	return _c
 }
 
 // SetRepoID sets the "repo" edge to the Repo entity by ID.
-func (rpc *RpmPackageCreate) SetRepoID(id string) *RpmPackageCreate {
-	rpc.mutation.SetRepoID(id)
-	return rpc
+func (_c *RpmPackageCreate) SetRepoID(id string) *RpmPackageCreate {
+	_c.mutation.SetRepoID(id)
+	return _c
 }
 
 // SetNillableRepoID sets the "repo" edge to the Repo entity by ID if the given value is not nil.
-func (rpc *RpmPackageCreate) SetNillableRepoID(id *string) *RpmPackageCreate {
+func (_c *RpmPackageCreate) SetNillableRepoID(id *string) *RpmPackageCreate {
 	if id != nil {
-		rpc = rpc.SetRepoID(*id)
+		_c = _c.SetRepoID(*id)
 	}
-	return rpc
+	return _c
 }
 
 // SetRepo sets the "repo" edge to the Repo entity.
-func (rpc *RpmPackageCreate) SetRepo(r *Repo) *RpmPackageCreate {
-	return rpc.SetRepoID(r.ID)
+func (_c *RpmPackageCreate) SetRepo(v *Repo) *RpmPackageCreate {
+	return _c.SetRepoID(v.ID)
 }
 
 // Mutation returns the RpmPackageMutation object of the builder.
-func (rpc *RpmPackageCreate) Mutation() *RpmPackageMutation {
-	return rpc.mutation
+func (_c *RpmPackageCreate) Mutation() *RpmPackageMutation {
+	return _c.mutation
 }
 
 // Save creates the RpmPackage in the database.
-func (rpc *RpmPackageCreate) Save(ctx context.Context) (*RpmPackage, error) {
-	return withHooks(ctx, rpc.sqlSave, rpc.mutation, rpc.hooks)
+func (_c *RpmPackageCreate) Save(ctx context.Context) (*RpmPackage, error) {
+	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
-func (rpc *RpmPackageCreate) SaveX(ctx context.Context) *RpmPackage {
-	v, err := rpc.Save(ctx)
+func (_c *RpmPackageCreate) SaveX(ctx context.Context) *RpmPackage {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -95,52 +95,52 @@ func (rpc *RpmPackageCreate) SaveX(ctx context.Context) *RpmPackage {
 }
 
 // Exec executes the query.
-func (rpc *RpmPackageCreate) Exec(ctx context.Context) error {
-	_, err := rpc.Save(ctx)
+func (_c *RpmPackageCreate) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rpc *RpmPackageCreate) ExecX(ctx context.Context) {
-	if err := rpc.Exec(ctx); err != nil {
+func (_c *RpmPackageCreate) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (rpc *RpmPackageCreate) check() error {
-	if _, ok := rpc.mutation.Name(); !ok {
+func (_c *RpmPackageCreate) check() error {
+	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "RpmPackage.name"`)}
 	}
-	if _, ok := rpc.mutation.Epoch(); !ok {
+	if _, ok := _c.mutation.Epoch(); !ok {
 		return &ValidationError{Name: "epoch", err: errors.New(`ent: missing required field "RpmPackage.epoch"`)}
 	}
-	if v, ok := rpc.mutation.Epoch(); ok {
+	if v, ok := _c.mutation.Epoch(); ok {
 		if err := rpmpackage.EpochValidator(v); err != nil {
 			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
 		}
 	}
-	if _, ok := rpc.mutation.Version(); !ok {
+	if _, ok := _c.mutation.Version(); !ok {
 		return &ValidationError{Name: "version", err: errors.New(`ent: missing required field "RpmPackage.version"`)}
 	}
-	if _, ok := rpc.mutation.Release(); !ok {
+	if _, ok := _c.mutation.Release(); !ok {
 		return &ValidationError{Name: "release", err: errors.New(`ent: missing required field "RpmPackage.release"`)}
 	}
-	if _, ok := rpc.mutation.Arch(); !ok {
+	if _, ok := _c.mutation.Arch(); !ok {
 		return &ValidationError{Name: "arch", err: errors.New(`ent: missing required field "RpmPackage.arch"`)}
 	}
-	if _, ok := rpc.mutation.FilePath(); !ok {
+	if _, ok := _c.mutation.FilePath(); !ok {
 		return &ValidationError{Name: "file_path", err: errors.New(`ent: missing required field "RpmPackage.file_path"`)}
 	}
 	return nil
 }
 
-func (rpc *RpmPackageCreate) sqlSave(ctx context.Context) (*RpmPackage, error) {
-	if err := rpc.check(); err != nil {
+func (_c *RpmPackageCreate) sqlSave(ctx context.Context) (*RpmPackage, error) {
+	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := rpc.createSpec()
-	if err := sqlgraph.CreateNode(ctx, rpc.driver, _spec); err != nil {
+	_node, _spec := _c.createSpec()
+	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -148,41 +148,41 @@ func (rpc *RpmPackageCreate) sqlSave(ctx context.Context) (*RpmPackage, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
-	rpc.mutation.id = &_node.ID
-	rpc.mutation.done = true
+	_c.mutation.id = &_node.ID
+	_c.mutation.done = true
 	return _node, nil
 }
 
-func (rpc *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
+func (_c *RpmPackageCreate) createSpec() (*RpmPackage, *sqlgraph.CreateSpec) {
 	var (
-		_node = &RpmPackage{config: rpc.config}
+		_node = &RpmPackage{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(rpmpackage.Table, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
 	)
-	if value, ok := rpc.mutation.Name(); ok {
+	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
-	if value, ok := rpc.mutation.Epoch(); ok {
+	if value, ok := _c.mutation.Epoch(); ok {
 		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 		_node.Epoch = value
 	}
-	if value, ok := rpc.mutation.Version(); ok {
+	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 		_node.Version = value
 	}
-	if value, ok := rpc.mutation.Release(); ok {
+	if value, ok := _c.mutation.Release(); ok {
 		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 		_node.Release = value
 	}
-	if value, ok := rpc.mutation.Arch(); ok {
+	if value, ok := _c.mutation.Arch(); ok {
 		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 		_node.Arch = value
 	}
-	if value, ok := rpc.mutation.FilePath(); ok {
+	if value, ok := _c.mutation.FilePath(); ok {
 		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 		_node.FilePath = value
 	}
-	if nodes := rpc.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
@@ -210,16 +210,16 @@ type RpmPackageCreateBulk struct {
 }
 
 // Save creates the RpmPackage entities in the database.
-func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, error) {
-	if rpcb.err != nil {
-		return nil, rpcb.err
+func (_c *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, error) {
+	if _c.err != nil {
+		return nil, _c.err
 	}
-	specs := make([]*sqlgraph.CreateSpec, len(rpcb.builders))
-	nodes := make([]*RpmPackage, len(rpcb.builders))
-	mutators := make([]Mutator, len(rpcb.builders))
-	for i := range rpcb.builders {
+	specs := make([]*sqlgraph.CreateSpec, len(_c.builders))
+	nodes := make([]*RpmPackage, len(_c.builders))
+	mutators := make([]Mutator, len(_c.builders))
+	for i := range _c.builders {
 		func(i int, root context.Context) {
-			builder := rpcb.builders[i]
+			builder := _c.builders[i]
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*RpmPackageMutation)
 				if !ok {
@@ -232,11 +232,11 @@ func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, erro
 				var err error
 				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
-					_, err = mutators[i+1].Mutate(root, rpcb.builders[i+1].mutation)
+					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, rpcb.driver, spec); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{msg: err.Error(), wrap: err}
 						}
@@ -260,7 +260,7 @@ func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, erro
 		}(i, ctx)
 	}
 	if len(mutators) > 0 {
-		if _, err := mutators[0].Mutate(ctx, rpcb.builders[0].mutation); err != nil {
+		if _, err := mutators[0].Mutate(ctx, _c.builders[0].mutation); err != nil {
 			return nil, err
 		}
 	}
@@ -268,8 +268,8 @@ func (rpcb *RpmPackageCreateBulk) Save(ctx context.Context) ([]*RpmPackage, erro
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (rpcb *RpmPackageCreateBulk) SaveX(ctx context.Context) []*RpmPackage {
-	v, err := rpcb.Save(ctx)
+func (_c *RpmPackageCreateBulk) SaveX(ctx context.Context) []*RpmPackage {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -277,14 +277,14 @@ func (rpcb *RpmPackageCreateBulk) SaveX(ctx context.Context) []*RpmPackage {
 }
 
 // Exec executes the query.
-func (rpcb *RpmPackageCreateBulk) Exec(ctx context.Context) error {
-	_, err := rpcb.Save(ctx)
+func (_c *RpmPackageCreateBulk) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rpcb *RpmPackageCreateBulk) ExecX(ctx context.Context) {
-	if err := rpcb.Exec(ctx); err != nil {
+func (_c *RpmPackageCreateBulk) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

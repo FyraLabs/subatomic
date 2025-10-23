@@ -34,44 +34,44 @@ type RepoQuery struct {
 }
 
 // Where adds a new predicate for the RepoQuery builder.
-func (rq *RepoQuery) Where(ps ...predicate.Repo) *RepoQuery {
-	rq.predicates = append(rq.predicates, ps...)
-	return rq
+func (_q *RepoQuery) Where(ps ...predicate.Repo) *RepoQuery {
+	_q.predicates = append(_q.predicates, ps...)
+	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (rq *RepoQuery) Limit(limit int) *RepoQuery {
-	rq.ctx.Limit = &limit
-	return rq
+func (_q *RepoQuery) Limit(limit int) *RepoQuery {
+	_q.ctx.Limit = &limit
+	return _q
 }
 
 // Offset to start from.
-func (rq *RepoQuery) Offset(offset int) *RepoQuery {
-	rq.ctx.Offset = &offset
-	return rq
+func (_q *RepoQuery) Offset(offset int) *RepoQuery {
+	_q.ctx.Offset = &offset
+	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (rq *RepoQuery) Unique(unique bool) *RepoQuery {
-	rq.ctx.Unique = &unique
-	return rq
+func (_q *RepoQuery) Unique(unique bool) *RepoQuery {
+	_q.ctx.Unique = &unique
+	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (rq *RepoQuery) Order(o ...repo.OrderOption) *RepoQuery {
-	rq.order = append(rq.order, o...)
-	return rq
+func (_q *RepoQuery) Order(o ...repo.OrderOption) *RepoQuery {
+	_q.order = append(_q.order, o...)
+	return _q
 }
 
 // QueryRpms chains the current query on the "rpms" edge.
-func (rq *RepoQuery) QueryRpms() *RpmPackageQuery {
-	query := (&RpmPackageClient{config: rq.config}).Query()
+func (_q *RepoQuery) QueryRpms() *RpmPackageQuery {
+	query := (&RpmPackageClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := rq.prepareQuery(ctx); err != nil {
+		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
 		}
-		selector := rq.sqlQuery(ctx)
+		selector := _q.sqlQuery(ctx)
 		if err := selector.Err(); err != nil {
 			return nil, err
 		}
@@ -80,20 +80,20 @@ func (rq *RepoQuery) QueryRpms() *RpmPackageQuery {
 			sqlgraph.To(rpmpackage.Table, rpmpackage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, repo.RpmsTable, repo.RpmsColumn),
 		)
-		fromU = sqlgraph.SetNeighbors(rq.driver.Dialect(), step)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
 	}
 	return query
 }
 
 // QueryKey chains the current query on the "key" edge.
-func (rq *RepoQuery) QueryKey() *SigningKeyQuery {
-	query := (&SigningKeyClient{config: rq.config}).Query()
+func (_q *RepoQuery) QueryKey() *SigningKeyQuery {
+	query := (&SigningKeyClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := rq.prepareQuery(ctx); err != nil {
+		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
 		}
-		selector := rq.sqlQuery(ctx)
+		selector := _q.sqlQuery(ctx)
 		if err := selector.Err(); err != nil {
 			return nil, err
 		}
@@ -102,7 +102,7 @@ func (rq *RepoQuery) QueryKey() *SigningKeyQuery {
 			sqlgraph.To(signingkey.Table, signingkey.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, false, repo.KeyTable, repo.KeyColumn),
 		)
-		fromU = sqlgraph.SetNeighbors(rq.driver.Dialect(), step)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
 	}
 	return query
@@ -110,8 +110,8 @@ func (rq *RepoQuery) QueryKey() *SigningKeyQuery {
 
 // First returns the first Repo entity from the query.
 // Returns a *NotFoundError when no Repo was found.
-func (rq *RepoQuery) First(ctx context.Context) (*Repo, error) {
-	nodes, err := rq.Limit(1).All(setContextOp(ctx, rq.ctx, ent.OpQueryFirst))
+func (_q *RepoQuery) First(ctx context.Context) (*Repo, error) {
+	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +122,8 @@ func (rq *RepoQuery) First(ctx context.Context) (*Repo, error) {
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (rq *RepoQuery) FirstX(ctx context.Context) *Repo {
-	node, err := rq.First(ctx)
+func (_q *RepoQuery) FirstX(ctx context.Context) *Repo {
+	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
 	}
@@ -132,9 +132,9 @@ func (rq *RepoQuery) FirstX(ctx context.Context) *Repo {
 
 // FirstID returns the first Repo ID from the query.
 // Returns a *NotFoundError when no Repo ID was found.
-func (rq *RepoQuery) FirstID(ctx context.Context) (id string, err error) {
+func (_q *RepoQuery) FirstID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = rq.Limit(1).IDs(setContextOp(ctx, rq.ctx, ent.OpQueryFirstID)); err != nil {
+	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -145,8 +145,8 @@ func (rq *RepoQuery) FirstID(ctx context.Context) (id string, err error) {
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (rq *RepoQuery) FirstIDX(ctx context.Context) string {
-	id, err := rq.FirstID(ctx)
+func (_q *RepoQuery) FirstIDX(ctx context.Context) string {
+	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
 	}
@@ -156,8 +156,8 @@ func (rq *RepoQuery) FirstIDX(ctx context.Context) string {
 // Only returns a single Repo entity found by the query, ensuring it only returns one.
 // Returns a *NotSingularError when more than one Repo entity is found.
 // Returns a *NotFoundError when no Repo entities are found.
-func (rq *RepoQuery) Only(ctx context.Context) (*Repo, error) {
-	nodes, err := rq.Limit(2).All(setContextOp(ctx, rq.ctx, ent.OpQueryOnly))
+func (_q *RepoQuery) Only(ctx context.Context) (*Repo, error) {
+	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +172,8 @@ func (rq *RepoQuery) Only(ctx context.Context) (*Repo, error) {
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (rq *RepoQuery) OnlyX(ctx context.Context) *Repo {
-	node, err := rq.Only(ctx)
+func (_q *RepoQuery) OnlyX(ctx context.Context) *Repo {
+	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -183,9 +183,9 @@ func (rq *RepoQuery) OnlyX(ctx context.Context) *Repo {
 // OnlyID is like Only, but returns the only Repo ID in the query.
 // Returns a *NotSingularError when more than one Repo ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (rq *RepoQuery) OnlyID(ctx context.Context) (id string, err error) {
+func (_q *RepoQuery) OnlyID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = rq.Limit(2).IDs(setContextOp(ctx, rq.ctx, ent.OpQueryOnlyID)); err != nil {
+	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -200,8 +200,8 @@ func (rq *RepoQuery) OnlyID(ctx context.Context) (id string, err error) {
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (rq *RepoQuery) OnlyIDX(ctx context.Context) string {
-	id, err := rq.OnlyID(ctx)
+func (_q *RepoQuery) OnlyIDX(ctx context.Context) string {
+	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -209,18 +209,18 @@ func (rq *RepoQuery) OnlyIDX(ctx context.Context) string {
 }
 
 // All executes the query and returns a list of Repos.
-func (rq *RepoQuery) All(ctx context.Context) ([]*Repo, error) {
-	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryAll)
-	if err := rq.prepareQuery(ctx); err != nil {
+func (_q *RepoQuery) All(ctx context.Context) ([]*Repo, error) {
+	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
+	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
 	qr := querierAll[[]*Repo, *RepoQuery]()
-	return withInterceptors[[]*Repo](ctx, rq, qr, rq.inters)
+	return withInterceptors[[]*Repo](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (rq *RepoQuery) AllX(ctx context.Context) []*Repo {
-	nodes, err := rq.All(ctx)
+func (_q *RepoQuery) AllX(ctx context.Context) []*Repo {
+	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -228,20 +228,20 @@ func (rq *RepoQuery) AllX(ctx context.Context) []*Repo {
 }
 
 // IDs executes the query and returns a list of Repo IDs.
-func (rq *RepoQuery) IDs(ctx context.Context) (ids []string, err error) {
-	if rq.ctx.Unique == nil && rq.path != nil {
-		rq.Unique(true)
+func (_q *RepoQuery) IDs(ctx context.Context) (ids []string, err error) {
+	if _q.ctx.Unique == nil && _q.path != nil {
+		_q.Unique(true)
 	}
-	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryIDs)
-	if err = rq.Select(repo.FieldID).Scan(ctx, &ids); err != nil {
+	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
+	if err = _q.Select(repo.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (rq *RepoQuery) IDsX(ctx context.Context) []string {
-	ids, err := rq.IDs(ctx)
+func (_q *RepoQuery) IDsX(ctx context.Context) []string {
+	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -249,17 +249,17 @@ func (rq *RepoQuery) IDsX(ctx context.Context) []string {
 }
 
 // Count returns the count of the given query.
-func (rq *RepoQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryCount)
-	if err := rq.prepareQuery(ctx); err != nil {
+func (_q *RepoQuery) Count(ctx context.Context) (int, error) {
+	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
+	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, rq, querierCount[*RepoQuery](), rq.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*RepoQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (rq *RepoQuery) CountX(ctx context.Context) int {
-	count, err := rq.Count(ctx)
+func (_q *RepoQuery) CountX(ctx context.Context) int {
+	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -267,9 +267,9 @@ func (rq *RepoQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (rq *RepoQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, rq.ctx, ent.OpQueryExist)
-	switch _, err := rq.FirstID(ctx); {
+func (_q *RepoQuery) Exist(ctx context.Context) (bool, error) {
+	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
+	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
 	case err != nil:
@@ -280,8 +280,8 @@ func (rq *RepoQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (rq *RepoQuery) ExistX(ctx context.Context) bool {
-	exist, err := rq.Exist(ctx)
+func (_q *RepoQuery) ExistX(ctx context.Context) bool {
+	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -290,44 +290,44 @@ func (rq *RepoQuery) ExistX(ctx context.Context) bool {
 
 // Clone returns a duplicate of the RepoQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (rq *RepoQuery) Clone() *RepoQuery {
-	if rq == nil {
+func (_q *RepoQuery) Clone() *RepoQuery {
+	if _q == nil {
 		return nil
 	}
 	return &RepoQuery{
-		config:     rq.config,
-		ctx:        rq.ctx.Clone(),
-		order:      append([]repo.OrderOption{}, rq.order...),
-		inters:     append([]Interceptor{}, rq.inters...),
-		predicates: append([]predicate.Repo{}, rq.predicates...),
-		withRpms:   rq.withRpms.Clone(),
-		withKey:    rq.withKey.Clone(),
+		config:     _q.config,
+		ctx:        _q.ctx.Clone(),
+		order:      append([]repo.OrderOption{}, _q.order...),
+		inters:     append([]Interceptor{}, _q.inters...),
+		predicates: append([]predicate.Repo{}, _q.predicates...),
+		withRpms:   _q.withRpms.Clone(),
+		withKey:    _q.withKey.Clone(),
 		// clone intermediate query.
-		sql:  rq.sql.Clone(),
-		path: rq.path,
+		sql:  _q.sql.Clone(),
+		path: _q.path,
 	}
 }
 
 // WithRpms tells the query-builder to eager-load the nodes that are connected to
 // the "rpms" edge. The optional arguments are used to configure the query builder of the edge.
-func (rq *RepoQuery) WithRpms(opts ...func(*RpmPackageQuery)) *RepoQuery {
-	query := (&RpmPackageClient{config: rq.config}).Query()
+func (_q *RepoQuery) WithRpms(opts ...func(*RpmPackageQuery)) *RepoQuery {
+	query := (&RpmPackageClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	rq.withRpms = query
-	return rq
+	_q.withRpms = query
+	return _q
 }
 
 // WithKey tells the query-builder to eager-load the nodes that are connected to
 // the "key" edge. The optional arguments are used to configure the query builder of the edge.
-func (rq *RepoQuery) WithKey(opts ...func(*SigningKeyQuery)) *RepoQuery {
-	query := (&SigningKeyClient{config: rq.config}).Query()
+func (_q *RepoQuery) WithKey(opts ...func(*SigningKeyQuery)) *RepoQuery {
+	query := (&SigningKeyClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	rq.withKey = query
-	return rq
+	_q.withKey = query
+	return _q
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -344,10 +344,10 @@ func (rq *RepoQuery) WithKey(opts ...func(*SigningKeyQuery)) *RepoQuery {
 //		GroupBy(repo.FieldType).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (rq *RepoQuery) GroupBy(field string, fields ...string) *RepoGroupBy {
-	rq.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &RepoGroupBy{build: rq}
-	grbuild.flds = &rq.ctx.Fields
+func (_q *RepoQuery) GroupBy(field string, fields ...string) *RepoGroupBy {
+	_q.ctx.Fields = append([]string{field}, fields...)
+	grbuild := &RepoGroupBy{build: _q}
+	grbuild.flds = &_q.ctx.Fields
 	grbuild.label = repo.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
@@ -365,56 +365,56 @@ func (rq *RepoQuery) GroupBy(field string, fields ...string) *RepoGroupBy {
 //	client.Repo.Query().
 //		Select(repo.FieldType).
 //		Scan(ctx, &v)
-func (rq *RepoQuery) Select(fields ...string) *RepoSelect {
-	rq.ctx.Fields = append(rq.ctx.Fields, fields...)
-	sbuild := &RepoSelect{RepoQuery: rq}
+func (_q *RepoQuery) Select(fields ...string) *RepoSelect {
+	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
+	sbuild := &RepoSelect{RepoQuery: _q}
 	sbuild.label = repo.Label
-	sbuild.flds, sbuild.scan = &rq.ctx.Fields, sbuild.Scan
+	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
 // Aggregate returns a RepoSelect configured with the given aggregations.
-func (rq *RepoQuery) Aggregate(fns ...AggregateFunc) *RepoSelect {
-	return rq.Select().Aggregate(fns...)
+func (_q *RepoQuery) Aggregate(fns ...AggregateFunc) *RepoSelect {
+	return _q.Select().Aggregate(fns...)
 }
 
-func (rq *RepoQuery) prepareQuery(ctx context.Context) error {
-	for _, inter := range rq.inters {
+func (_q *RepoQuery) prepareQuery(ctx context.Context) error {
+	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
 		}
 		if trv, ok := inter.(Traverser); ok {
-			if err := trv.Traverse(ctx, rq); err != nil {
+			if err := trv.Traverse(ctx, _q); err != nil {
 				return err
 			}
 		}
 	}
-	for _, f := range rq.ctx.Fields {
+	for _, f := range _q.ctx.Fields {
 		if !repo.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
-	if rq.path != nil {
-		prev, err := rq.path(ctx)
+	if _q.path != nil {
+		prev, err := _q.path(ctx)
 		if err != nil {
 			return err
 		}
-		rq.sql = prev
+		_q.sql = prev
 	}
 	return nil
 }
 
-func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, error) {
+func (_q *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, error) {
 	var (
 		nodes       = []*Repo{}
-		withFKs     = rq.withFKs
-		_spec       = rq.querySpec()
+		withFKs     = _q.withFKs
+		_spec       = _q.querySpec()
 		loadedTypes = [2]bool{
-			rq.withRpms != nil,
-			rq.withKey != nil,
+			_q.withRpms != nil,
+			_q.withKey != nil,
 		}
 	)
-	if rq.withKey != nil {
+	if _q.withKey != nil {
 		withFKs = true
 	}
 	if withFKs {
@@ -424,7 +424,7 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 		return (*Repo).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &Repo{config: rq.config}
+		node := &Repo{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -432,21 +432,21 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 	for i := range hooks {
 		hooks[i](ctx, _spec)
 	}
-	if err := sqlgraph.QueryNodes(ctx, rq.driver, _spec); err != nil {
+	if err := sqlgraph.QueryNodes(ctx, _q.driver, _spec); err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := rq.withRpms; query != nil {
-		if err := rq.loadRpms(ctx, query, nodes,
+	if query := _q.withRpms; query != nil {
+		if err := _q.loadRpms(ctx, query, nodes,
 			func(n *Repo) { n.Edges.Rpms = []*RpmPackage{} },
 			func(n *Repo, e *RpmPackage) { n.Edges.Rpms = append(n.Edges.Rpms, e) }); err != nil {
 			return nil, err
 		}
 	}
-	if query := rq.withKey; query != nil {
-		if err := rq.loadKey(ctx, query, nodes, nil,
+	if query := _q.withKey; query != nil {
+		if err := _q.loadKey(ctx, query, nodes, nil,
 			func(n *Repo, e *SigningKey) { n.Edges.Key = e }); err != nil {
 			return nil, err
 		}
@@ -454,7 +454,7 @@ func (rq *RepoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Repo, e
 	return nodes, nil
 }
 
-func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *RpmPackage)) error {
+func (_q *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *RpmPackage)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[string]*Repo)
 	for i := range nodes {
@@ -485,7 +485,7 @@ func (rq *RepoQuery) loadRpms(ctx context.Context, query *RpmPackageQuery, nodes
 	}
 	return nil
 }
-func (rq *RepoQuery) loadKey(ctx context.Context, query *SigningKeyQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *SigningKey)) error {
+func (_q *RepoQuery) loadKey(ctx context.Context, query *SigningKeyQuery, nodes []*Repo, init func(*Repo), assign func(*Repo, *SigningKey)) error {
 	ids := make([]string, 0, len(nodes))
 	nodeids := make(map[string][]*Repo)
 	for i := range nodes {
@@ -518,24 +518,24 @@ func (rq *RepoQuery) loadKey(ctx context.Context, query *SigningKeyQuery, nodes 
 	return nil
 }
 
-func (rq *RepoQuery) sqlCount(ctx context.Context) (int, error) {
-	_spec := rq.querySpec()
-	_spec.Node.Columns = rq.ctx.Fields
-	if len(rq.ctx.Fields) > 0 {
-		_spec.Unique = rq.ctx.Unique != nil && *rq.ctx.Unique
+func (_q *RepoQuery) sqlCount(ctx context.Context) (int, error) {
+	_spec := _q.querySpec()
+	_spec.Node.Columns = _q.ctx.Fields
+	if len(_q.ctx.Fields) > 0 {
+		_spec.Unique = _q.ctx.Unique != nil && *_q.ctx.Unique
 	}
-	return sqlgraph.CountNodes(ctx, rq.driver, _spec)
+	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (rq *RepoQuery) querySpec() *sqlgraph.QuerySpec {
+func (_q *RepoQuery) querySpec() *sqlgraph.QuerySpec {
 	_spec := sqlgraph.NewQuerySpec(repo.Table, repo.Columns, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
-	_spec.From = rq.sql
-	if unique := rq.ctx.Unique; unique != nil {
+	_spec.From = _q.sql
+	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
-	} else if rq.path != nil {
+	} else if _q.path != nil {
 		_spec.Unique = true
 	}
-	if fields := rq.ctx.Fields; len(fields) > 0 {
+	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, repo.FieldID)
 		for i := range fields {
@@ -544,20 +544,20 @@ func (rq *RepoQuery) querySpec() *sqlgraph.QuerySpec {
 			}
 		}
 	}
-	if ps := rq.predicates; len(ps) > 0 {
+	if ps := _q.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if limit := rq.ctx.Limit; limit != nil {
+	if limit := _q.ctx.Limit; limit != nil {
 		_spec.Limit = *limit
 	}
-	if offset := rq.ctx.Offset; offset != nil {
+	if offset := _q.ctx.Offset; offset != nil {
 		_spec.Offset = *offset
 	}
-	if ps := rq.order; len(ps) > 0 {
+	if ps := _q.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
@@ -567,33 +567,33 @@ func (rq *RepoQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (rq *RepoQuery) sqlQuery(ctx context.Context) *sql.Selector {
-	builder := sql.Dialect(rq.driver.Dialect())
+func (_q *RepoQuery) sqlQuery(ctx context.Context) *sql.Selector {
+	builder := sql.Dialect(_q.driver.Dialect())
 	t1 := builder.Table(repo.Table)
-	columns := rq.ctx.Fields
+	columns := _q.ctx.Fields
 	if len(columns) == 0 {
 		columns = repo.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
-	if rq.sql != nil {
-		selector = rq.sql
+	if _q.sql != nil {
+		selector = _q.sql
 		selector.Select(selector.Columns(columns...)...)
 	}
-	if rq.ctx.Unique != nil && *rq.ctx.Unique {
+	if _q.ctx.Unique != nil && *_q.ctx.Unique {
 		selector.Distinct()
 	}
-	for _, p := range rq.predicates {
+	for _, p := range _q.predicates {
 		p(selector)
 	}
-	for _, p := range rq.order {
+	for _, p := range _q.order {
 		p(selector)
 	}
-	if offset := rq.ctx.Offset; offset != nil {
+	if offset := _q.ctx.Offset; offset != nil {
 		// limit is mandatory for offset clause. We start
 		// with default value, and override it below if needed.
 		selector.Offset(*offset).Limit(math.MaxInt32)
 	}
-	if limit := rq.ctx.Limit; limit != nil {
+	if limit := _q.ctx.Limit; limit != nil {
 		selector.Limit(*limit)
 	}
 	return selector
@@ -606,41 +606,41 @@ type RepoGroupBy struct {
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (rgb *RepoGroupBy) Aggregate(fns ...AggregateFunc) *RepoGroupBy {
-	rgb.fns = append(rgb.fns, fns...)
-	return rgb
+func (_g *RepoGroupBy) Aggregate(fns ...AggregateFunc) *RepoGroupBy {
+	_g.fns = append(_g.fns, fns...)
+	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (rgb *RepoGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rgb.build.ctx, ent.OpQueryGroupBy)
-	if err := rgb.build.prepareQuery(ctx); err != nil {
+func (_g *RepoGroupBy) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
+	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*RepoQuery, *RepoGroupBy](ctx, rgb.build, rgb, rgb.build.inters, v)
+	return scanWithInterceptors[*RepoQuery, *RepoGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (rgb *RepoGroupBy) sqlScan(ctx context.Context, root *RepoQuery, v any) error {
+func (_g *RepoGroupBy) sqlScan(ctx context.Context, root *RepoQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
-	aggregation := make([]string, 0, len(rgb.fns))
-	for _, fn := range rgb.fns {
+	aggregation := make([]string, 0, len(_g.fns))
+	for _, fn := range _g.fns {
 		aggregation = append(aggregation, fn(selector))
 	}
 	if len(selector.SelectedColumns()) == 0 {
-		columns := make([]string, 0, len(*rgb.flds)+len(rgb.fns))
-		for _, f := range *rgb.flds {
+		columns := make([]string, 0, len(*_g.flds)+len(_g.fns))
+		for _, f := range *_g.flds {
 			columns = append(columns, selector.C(f))
 		}
 		columns = append(columns, aggregation...)
 		selector.Select(columns...)
 	}
-	selector.GroupBy(selector.Columns(*rgb.flds...)...)
+	selector.GroupBy(selector.Columns(*_g.flds...)...)
 	if err := selector.Err(); err != nil {
 		return err
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := rgb.build.driver.Query(ctx, query, args, rows); err != nil {
+	if err := _g.build.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
@@ -654,27 +654,27 @@ type RepoSelect struct {
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (rs *RepoSelect) Aggregate(fns ...AggregateFunc) *RepoSelect {
-	rs.fns = append(rs.fns, fns...)
-	return rs
+func (_s *RepoSelect) Aggregate(fns ...AggregateFunc) *RepoSelect {
+	_s.fns = append(_s.fns, fns...)
+	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (rs *RepoSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rs.ctx, ent.OpQuerySelect)
-	if err := rs.prepareQuery(ctx); err != nil {
+func (_s *RepoSelect) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
+	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*RepoQuery, *RepoSelect](ctx, rs.RepoQuery, rs, rs.inters, v)
+	return scanWithInterceptors[*RepoQuery, *RepoSelect](ctx, _s.RepoQuery, _s, _s.inters, v)
 }
 
-func (rs *RepoSelect) sqlScan(ctx context.Context, root *RepoQuery, v any) error {
+func (_s *RepoSelect) sqlScan(ctx context.Context, root *RepoQuery, v any) error {
 	selector := root.sqlQuery(ctx)
-	aggregation := make([]string, 0, len(rs.fns))
-	for _, fn := range rs.fns {
+	aggregation := make([]string, 0, len(_s.fns))
+	for _, fn := range _s.fns {
 		aggregation = append(aggregation, fn(selector))
 	}
-	switch n := len(*rs.selector.flds); {
+	switch n := len(*_s.selector.flds); {
 	case n == 0 && len(aggregation) > 0:
 		selector.Select(aggregation...)
 	case n != 0 && len(aggregation) > 0:
@@ -682,7 +682,7 @@ func (rs *RepoSelect) sqlScan(ctx context.Context, root *RepoQuery, v any) error
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := rs.driver.Query(ctx, query, args, rows); err != nil {
+	if err := _s.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()

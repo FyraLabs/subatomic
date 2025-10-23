@@ -19,6 +19,10 @@ type Repo struct {
 	ID string `json:"id,omitempty"`
 	// Type holds the value of the "type" field.
 	Type repo.Type `json:"type,omitempty"`
+	// TetsudouURL holds the value of the "tetsudou_url" field.
+	TetsudouURL *string `json:"tetsudou_url,omitempty"`
+	// TetsudouToken holds the value of the "tetsudou_token" field.
+	TetsudouToken *string `json:"tetsudou_token,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RepoQuery when eager-loading is set.
 	Edges        RepoEdges `json:"edges"`
@@ -62,7 +66,7 @@ func (*Repo) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case repo.FieldID, repo.FieldType:
+		case repo.FieldID, repo.FieldType, repo.FieldTetsudouURL, repo.FieldTetsudouToken:
 			values[i] = new(sql.NullString)
 		case repo.ForeignKeys[0]: // repo_key
 			values[i] = new(sql.NullString)
@@ -75,7 +79,7 @@ func (*Repo) scanValues(columns []string) ([]any, error) {
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
 // to the Repo fields.
-func (r *Repo) assignValues(columns []string, values []any) error {
+func (_m *Repo) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
@@ -85,23 +89,37 @@ func (r *Repo) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
-				r.ID = value.String
+				_m.ID = value.String
 			}
 		case repo.FieldType:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field type", values[i])
 			} else if value.Valid {
-				r.Type = repo.Type(value.String)
+				_m.Type = repo.Type(value.String)
+			}
+		case repo.FieldTetsudouURL:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field tetsudou_url", values[i])
+			} else if value.Valid {
+				_m.TetsudouURL = new(string)
+				*_m.TetsudouURL = value.String
+			}
+		case repo.FieldTetsudouToken:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field tetsudou_token", values[i])
+			} else if value.Valid {
+				_m.TetsudouToken = new(string)
+				*_m.TetsudouToken = value.String
 			}
 		case repo.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field repo_key", values[i])
 			} else if value.Valid {
-				r.repo_key = new(string)
-				*r.repo_key = value.String
+				_m.repo_key = new(string)
+				*_m.repo_key = value.String
 			}
 		default:
-			r.selectValues.Set(columns[i], values[i])
+			_m.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
@@ -109,45 +127,55 @@ func (r *Repo) assignValues(columns []string, values []any) error {
 
 // Value returns the ent.Value that was dynamically selected and assigned to the Repo.
 // This includes values selected through modifiers, order, etc.
-func (r *Repo) Value(name string) (ent.Value, error) {
-	return r.selectValues.Get(name)
+func (_m *Repo) Value(name string) (ent.Value, error) {
+	return _m.selectValues.Get(name)
 }
 
 // QueryRpms queries the "rpms" edge of the Repo entity.
-func (r *Repo) QueryRpms() *RpmPackageQuery {
-	return NewRepoClient(r.config).QueryRpms(r)
+func (_m *Repo) QueryRpms() *RpmPackageQuery {
+	return NewRepoClient(_m.config).QueryRpms(_m)
 }
 
 // QueryKey queries the "key" edge of the Repo entity.
-func (r *Repo) QueryKey() *SigningKeyQuery {
-	return NewRepoClient(r.config).QueryKey(r)
+func (_m *Repo) QueryKey() *SigningKeyQuery {
+	return NewRepoClient(_m.config).QueryKey(_m)
 }
 
 // Update returns a builder for updating this Repo.
 // Note that you need to call Repo.Unwrap() before calling this method if this Repo
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (r *Repo) Update() *RepoUpdateOne {
-	return NewRepoClient(r.config).UpdateOne(r)
+func (_m *Repo) Update() *RepoUpdateOne {
+	return NewRepoClient(_m.config).UpdateOne(_m)
 }
 
 // Unwrap unwraps the Repo entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (r *Repo) Unwrap() *Repo {
-	_tx, ok := r.config.driver.(*txDriver)
+func (_m *Repo) Unwrap() *Repo {
+	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
 		panic("ent: Repo is not a transactional entity")
 	}
-	r.config.driver = _tx.drv
-	return r
+	_m.config.driver = _tx.drv
+	return _m
 }
 
 // String implements the fmt.Stringer.
-func (r *Repo) String() string {
+func (_m *Repo) String() string {
 	var builder strings.Builder
 	builder.WriteString("Repo(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", r.ID))
+	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("type=")
-	builder.WriteString(fmt.Sprintf("%v", r.Type))
+	builder.WriteString(fmt.Sprintf("%v", _m.Type))
+	builder.WriteString(", ")
+	if v := _m.TetsudouURL; v != nil {
+		builder.WriteString("tetsudou_url=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TetsudouToken; v != nil {
+		builder.WriteString("tetsudou_token=")
+		builder.WriteString(*v)
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }
