@@ -8,6 +8,7 @@ import (
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/FyraLabs/subatomic/server/keyedmutex"
 	"github.com/FyraLabs/subatomic/server/types"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
@@ -30,6 +31,11 @@ type apiRouter struct {
 func (router *apiRouter) setup() {
 	router.Mux = chi.NewRouter()
 
+	if router.environment.SentryDSN != "" {
+		router.Use(sentryhttp.New(sentryhttp.Options{
+			Repanic: true,
+		}).Handle)
+	}
 	router.Use(requestLogger(router.logger))
 	router.Use(middleware.Heartbeat("/heartbeat"))
 	router.Use(recovererMiddleware(router.logger))
