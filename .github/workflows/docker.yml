@@ -19,7 +19,7 @@ env:
 
 jobs:
   docker-cli:
-    uses: FyraLabs/actions/.github/workflows/docker.yml@main
+    uses: korewaChino/actions/.github/workflows/docker.yml@cappy/dist-multiarch
     with:
       publish: ${{ github.event_name != 'pull_request' }}
       dockerfile: cli.Dockerfile
@@ -32,7 +32,7 @@ jobs:
       id-token: write
 
   docker:
-    uses: FyraLabs/actions/.github/workflows/docker.yml@main
+    uses: korewaChino/actions/.github/workflows/docker.yml@cappy/dist-multiarch
     with:
       publish: ${{ github.event_name != 'pull_request' }}
     permissions:
