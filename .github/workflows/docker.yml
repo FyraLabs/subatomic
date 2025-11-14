@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "15 14 * * *"
   push:
+    branches: ["test-ci"]
     # Publish semver tags as releases.
     tags: ["v*.*.*"]
   pull_request:
