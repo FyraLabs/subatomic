@@ -149,6 +149,7 @@ func writeTetsudouMetadata(repoPath string) error {
 //			x128x128/
 //				<icon files>
 func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
+	level.Debug(logger).Log("msg", "Generating mrepo_c config for repo", "repoPath", repoPath, "appstreamPath", appstreamPath)
 	repoName := path.Base(repoPath)
 
 	batchTemplate := MRepoCBatchData{
@@ -189,15 +190,19 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	if err := inifile.SaveTo(configPath); err != nil {
 		return nil, err
 	}
+	level.Debug(logger).Log("msg", "Generated mrepo_c config", "configPath", configPath)
 
 	return &configPath, nil
 }
 
 func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
+	level.Debug(logger).Log("msg", "Generating mrepo_c config")
 	configPath, err := MrepoCConfig(repoPath, appstreamPath)
 	if err != nil {
 		return err
 	}
+
+	level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "configPath", *configPath)
 
 	// log("Using mrepo_c config at", *configPath)
 	repodataDir := path.Join(repoPath, "repodata")
@@ -208,7 +213,19 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 		return err
 	}
 
-	defer os.Remove(*configPath)
+	level.Debug(logger).Log("msg", "Modified repo with mrepo_c successfully")
+	defer func() {
+		level.Debug(logger).Log("msg", "Config file contents", "contents", func() string {
+					b, err := os.ReadFile(*configPath)
+					if err != nil {
+						return fmt.Sprintf("error reading config file: %v", err)
+					}
+					return string(b)
+				}())
+		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
+		os.Remove(*configPath)
+
+	}()
 	return nil
 }
 
