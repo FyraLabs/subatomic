@@ -58,17 +58,6 @@ func CreateRepo(repoPath string) error {
 }
 
 func UpdateRepo(repoPath string) error {
-	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
-	if appstreamDirEnv != "" {
-		appstreamDir, err := filepath.Abs(appstreamDirEnv)
-		if err != nil {
-			return err
-		}
-
-		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
-			fmt.Printf("failed to modify repo appstream, failing silently: %s", err.Error())
-		}
-	}
 
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
@@ -87,6 +76,7 @@ func UpdateRepo(repoPath string) error {
 	// Callers of UpdateRepo are expected to lock calls, so we make the assumption this is safe
 	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
 
+	level.Info(logger).Log("msg", "running createrepo_c", "flags", flags)
 	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
 		if err, ok := err.(*exec.ExitError); ok {
 			_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
@@ -94,6 +84,22 @@ func UpdateRepo(repoPath string) error {
 		}
 
 		return err
+	}
+	level.Info(logger).Log("msg", "createrepo_c completed successfully")
+
+	appstreamDirEnv := os.Getenv("SUBATOMIC_APPSTREAM_DIR")
+	if appstreamDirEnv != "" {
+		level.Info(logger).Log("msg", "modifying repo appstream metadata from directory", "dir", appstreamDirEnv)
+		appstreamDir, err := filepath.Abs(appstreamDirEnv)
+		if err != nil {
+			return err
+		}
+
+		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
+			level.Error(logger).Log("msg", "failed to modify repo appstream, failing silently", "error_msg", err.Error())
+		}
+		
+		level.Info(logger).Log("msg", "modified repo appstream metadata successfully")
 	}
 
 	if err := writeTetsudouMetadata(repoPath); err != nil {
