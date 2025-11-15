@@ -24,6 +24,7 @@ jobs:
       publish: ${{ github.event_name != 'pull_request' }}
       dockerfile: cli.Dockerfile
       image_name: ${{ github.repository }}-cli
+      artifact_name: digests-cli
     permissions:
       contents: read
       packages: write
@@ -35,6 +36,7 @@ jobs:
     uses: korewaChino/actions/.github/workflows/docker.yml@cappy/dist-multiarch
     with:
       publish: ${{ github.event_name != 'pull_request' }}
+      artifact_name: digests-app
     permissions:
       contents: read
       packages: write
