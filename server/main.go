@@ -11,6 +11,7 @@ import (
 	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/types"
 	"github.com/Netflix/go-env"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -74,6 +75,14 @@ func run(logger log.Logger) error {
 
 		otel.SetTracerProvider(tp)
 		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	}
+
+	if environment.SentryDSN != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn: environment.SentryDSN,
+		}); err != nil {
+			fmt.Printf("Sentry initialization failed: %v\n", err)
+		}
 	}
 
 	// TODO: Auth

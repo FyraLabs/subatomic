@@ -7,6 +7,7 @@ require (
 	github.com/Netflix/go-env v0.1.2
 	github.com/ProtonMail/gopenpgp/v2 v2.9.0
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/getsentry/sentry-go v0.36.2
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/jwtauth/v5 v5.3.3
 	github.com/go-chi/render v1.0.3
@@ -50,7 +51,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
-	github.com/go-logfmt/logfmt v0.6.1 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/inflect v0.21.3 // indirect
@@ -80,10 +81,8 @@ require (
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
-	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
