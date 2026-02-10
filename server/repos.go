@@ -388,7 +388,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 				Server: *re.TetsudouURL,
 				Token:  *re.TetsudouToken,
 			}, id); err != nil {
-				level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+				level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 			}
 		}
 
@@ -599,7 +599,7 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
 		}, id); err != nil {
-			level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
 
@@ -708,7 +708,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
 		}, id); err != nil {
-			level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
 
@@ -956,7 +956,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 					Server: *re.TetsudouURL,
 					Token:  *re.TetsudouToken,
 				}, id); err != nil {
-					level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+					level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 				}
 			}
 		}
@@ -1061,7 +1061,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
 		}, id); err != nil {
-			level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
 
@@ -1196,7 +1196,7 @@ func (router *reposRouter) setTetsudouConfig(w http.ResponseWriter, r *http.Requ
 		Server: payload.Url,
 		Token:  payload.Token,
 	}, id); err != nil {
-		level.Error(repoLogger(id)).Log("msg", "error deleting tetsudou repo", "error", err)
+		level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
