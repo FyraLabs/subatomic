@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 type TetsudouConfig struct {
@@ -23,7 +24,8 @@ func RefreshRepo(config *TetsudouConfig, repoid string) error {
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.Token))
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -48,7 +50,8 @@ func DeleteRepo(config *TetsudouConfig, repoid string) error {
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.Token))
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
