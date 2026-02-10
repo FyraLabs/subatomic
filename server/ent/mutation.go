@@ -33,19 +33,21 @@ const (
 // RepoMutation represents an operation that mutates the Repo nodes in the graph.
 type RepoMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	_type         *repo.Type
-	clearedFields map[string]struct{}
-	rpms          map[int]struct{}
-	removedrpms   map[int]struct{}
-	clearedrpms   bool
-	key           *string
-	clearedkey    bool
-	done          bool
-	oldValue      func(context.Context) (*Repo, error)
-	predicates    []predicate.Repo
+	op             Op
+	typ            string
+	id             *string
+	_type          *repo.Type
+	tetsudou_url   *string
+	tetsudou_token *string
+	clearedFields  map[string]struct{}
+	rpms           map[int]struct{}
+	removedrpms    map[int]struct{}
+	clearedrpms    bool
+	key            *string
+	clearedkey     bool
+	done           bool
+	oldValue       func(context.Context) (*Repo, error)
+	predicates     []predicate.Repo
 }
 
 var _ ent.Mutation = (*RepoMutation)(nil)
@@ -188,6 +190,104 @@ func (m *RepoMutation) ResetType() {
 	m._type = nil
 }
 
+// SetTetsudouURL sets the "tetsudou_url" field.
+func (m *RepoMutation) SetTetsudouURL(s string) {
+	m.tetsudou_url = &s
+}
+
+// TetsudouURL returns the value of the "tetsudou_url" field in the mutation.
+func (m *RepoMutation) TetsudouURL() (r string, exists bool) {
+	v := m.tetsudou_url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTetsudouURL returns the old "tetsudou_url" field's value of the Repo entity.
+// If the Repo object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RepoMutation) OldTetsudouURL(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTetsudouURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTetsudouURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTetsudouURL: %w", err)
+	}
+	return oldValue.TetsudouURL, nil
+}
+
+// ClearTetsudouURL clears the value of the "tetsudou_url" field.
+func (m *RepoMutation) ClearTetsudouURL() {
+	m.tetsudou_url = nil
+	m.clearedFields[repo.FieldTetsudouURL] = struct{}{}
+}
+
+// TetsudouURLCleared returns if the "tetsudou_url" field was cleared in this mutation.
+func (m *RepoMutation) TetsudouURLCleared() bool {
+	_, ok := m.clearedFields[repo.FieldTetsudouURL]
+	return ok
+}
+
+// ResetTetsudouURL resets all changes to the "tetsudou_url" field.
+func (m *RepoMutation) ResetTetsudouURL() {
+	m.tetsudou_url = nil
+	delete(m.clearedFields, repo.FieldTetsudouURL)
+}
+
+// SetTetsudouToken sets the "tetsudou_token" field.
+func (m *RepoMutation) SetTetsudouToken(s string) {
+	m.tetsudou_token = &s
+}
+
+// TetsudouToken returns the value of the "tetsudou_token" field in the mutation.
+func (m *RepoMutation) TetsudouToken() (r string, exists bool) {
+	v := m.tetsudou_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTetsudouToken returns the old "tetsudou_token" field's value of the Repo entity.
+// If the Repo object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RepoMutation) OldTetsudouToken(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTetsudouToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTetsudouToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTetsudouToken: %w", err)
+	}
+	return oldValue.TetsudouToken, nil
+}
+
+// ClearTetsudouToken clears the value of the "tetsudou_token" field.
+func (m *RepoMutation) ClearTetsudouToken() {
+	m.tetsudou_token = nil
+	m.clearedFields[repo.FieldTetsudouToken] = struct{}{}
+}
+
+// TetsudouTokenCleared returns if the "tetsudou_token" field was cleared in this mutation.
+func (m *RepoMutation) TetsudouTokenCleared() bool {
+	_, ok := m.clearedFields[repo.FieldTetsudouToken]
+	return ok
+}
+
+// ResetTetsudouToken resets all changes to the "tetsudou_token" field.
+func (m *RepoMutation) ResetTetsudouToken() {
+	m.tetsudou_token = nil
+	delete(m.clearedFields, repo.FieldTetsudouToken)
+}
+
 // AddRpmIDs adds the "rpms" edge to the RpmPackage entity by ids.
 func (m *RepoMutation) AddRpmIDs(ids ...int) {
 	if m.rpms == nil {
@@ -315,9 +415,15 @@ func (m *RepoMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *RepoMutation) Fields() []string {
-	fields := make([]string, 0, 1)
+	fields := make([]string, 0, 3)
 	if m._type != nil {
 		fields = append(fields, repo.FieldType)
+	}
+	if m.tetsudou_url != nil {
+		fields = append(fields, repo.FieldTetsudouURL)
+	}
+	if m.tetsudou_token != nil {
+		fields = append(fields, repo.FieldTetsudouToken)
 	}
 	return fields
 }
@@ -329,6 +435,10 @@ func (m *RepoMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case repo.FieldType:
 		return m.GetType()
+	case repo.FieldTetsudouURL:
+		return m.TetsudouURL()
+	case repo.FieldTetsudouToken:
+		return m.TetsudouToken()
 	}
 	return nil, false
 }
@@ -340,6 +450,10 @@ func (m *RepoMutation) OldField(ctx context.Context, name string) (ent.Value, er
 	switch name {
 	case repo.FieldType:
 		return m.OldType(ctx)
+	case repo.FieldTetsudouURL:
+		return m.OldTetsudouURL(ctx)
+	case repo.FieldTetsudouToken:
+		return m.OldTetsudouToken(ctx)
 	}
 	return nil, fmt.Errorf("unknown Repo field %s", name)
 }
@@ -355,6 +469,20 @@ func (m *RepoMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetType(v)
+		return nil
+	case repo.FieldTetsudouURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTetsudouURL(v)
+		return nil
+	case repo.FieldTetsudouToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTetsudouToken(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Repo field %s", name)
@@ -385,7 +513,14 @@ func (m *RepoMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *RepoMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(repo.FieldTetsudouURL) {
+		fields = append(fields, repo.FieldTetsudouURL)
+	}
+	if m.FieldCleared(repo.FieldTetsudouToken) {
+		fields = append(fields, repo.FieldTetsudouToken)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -398,6 +533,14 @@ func (m *RepoMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *RepoMutation) ClearField(name string) error {
+	switch name {
+	case repo.FieldTetsudouURL:
+		m.ClearTetsudouURL()
+		return nil
+	case repo.FieldTetsudouToken:
+		m.ClearTetsudouToken()
+		return nil
+	}
 	return fmt.Errorf("unknown Repo nullable field %s", name)
 }
 
@@ -407,6 +550,12 @@ func (m *RepoMutation) ResetField(name string) error {
 	switch name {
 	case repo.FieldType:
 		m.ResetType()
+		return nil
+	case repo.FieldTetsudouURL:
+		m.ResetTetsudouURL()
+		return nil
+	case repo.FieldTetsudouToken:
+		m.ResetTetsudouToken()
 		return nil
 	}
 	return fmt.Errorf("unknown Repo field %s", name)

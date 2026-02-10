@@ -16,6 +16,8 @@ func (Repo) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Unique().StorageKey("oid"),
 		field.Enum("type").Values("rpm"),
+		field.String("tetsudou_url").Optional().Nillable(),
+		field.String("tetsudou_token").Optional().Nillable(),
 	}
 }
 

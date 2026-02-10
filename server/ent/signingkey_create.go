@@ -21,63 +21,63 @@ type SigningKeyCreate struct {
 }
 
 // SetPrivateKey sets the "private_key" field.
-func (skc *SigningKeyCreate) SetPrivateKey(s string) *SigningKeyCreate {
-	skc.mutation.SetPrivateKey(s)
-	return skc
+func (_c *SigningKeyCreate) SetPrivateKey(v string) *SigningKeyCreate {
+	_c.mutation.SetPrivateKey(v)
+	return _c
 }
 
 // SetPublicKey sets the "public_key" field.
-func (skc *SigningKeyCreate) SetPublicKey(s string) *SigningKeyCreate {
-	skc.mutation.SetPublicKey(s)
-	return skc
+func (_c *SigningKeyCreate) SetPublicKey(v string) *SigningKeyCreate {
+	_c.mutation.SetPublicKey(v)
+	return _c
 }
 
 // SetName sets the "name" field.
-func (skc *SigningKeyCreate) SetName(s string) *SigningKeyCreate {
-	skc.mutation.SetName(s)
-	return skc
+func (_c *SigningKeyCreate) SetName(v string) *SigningKeyCreate {
+	_c.mutation.SetName(v)
+	return _c
 }
 
 // SetEmail sets the "email" field.
-func (skc *SigningKeyCreate) SetEmail(s string) *SigningKeyCreate {
-	skc.mutation.SetEmail(s)
-	return skc
+func (_c *SigningKeyCreate) SetEmail(v string) *SigningKeyCreate {
+	_c.mutation.SetEmail(v)
+	return _c
 }
 
 // SetID sets the "id" field.
-func (skc *SigningKeyCreate) SetID(s string) *SigningKeyCreate {
-	skc.mutation.SetID(s)
-	return skc
+func (_c *SigningKeyCreate) SetID(v string) *SigningKeyCreate {
+	_c.mutation.SetID(v)
+	return _c
 }
 
 // AddRepoIDs adds the "repo" edge to the Repo entity by IDs.
-func (skc *SigningKeyCreate) AddRepoIDs(ids ...string) *SigningKeyCreate {
-	skc.mutation.AddRepoIDs(ids...)
-	return skc
+func (_c *SigningKeyCreate) AddRepoIDs(ids ...string) *SigningKeyCreate {
+	_c.mutation.AddRepoIDs(ids...)
+	return _c
 }
 
 // AddRepo adds the "repo" edges to the Repo entity.
-func (skc *SigningKeyCreate) AddRepo(r ...*Repo) *SigningKeyCreate {
-	ids := make([]string, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_c *SigningKeyCreate) AddRepo(v ...*Repo) *SigningKeyCreate {
+	ids := make([]string, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return skc.AddRepoIDs(ids...)
+	return _c.AddRepoIDs(ids...)
 }
 
 // Mutation returns the SigningKeyMutation object of the builder.
-func (skc *SigningKeyCreate) Mutation() *SigningKeyMutation {
-	return skc.mutation
+func (_c *SigningKeyCreate) Mutation() *SigningKeyMutation {
+	return _c.mutation
 }
 
 // Save creates the SigningKey in the database.
-func (skc *SigningKeyCreate) Save(ctx context.Context) (*SigningKey, error) {
-	return withHooks(ctx, skc.sqlSave, skc.mutation, skc.hooks)
+func (_c *SigningKeyCreate) Save(ctx context.Context) (*SigningKey, error) {
+	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
-func (skc *SigningKeyCreate) SaveX(ctx context.Context) *SigningKey {
-	v, err := skc.Save(ctx)
+func (_c *SigningKeyCreate) SaveX(ctx context.Context) *SigningKey {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -85,41 +85,41 @@ func (skc *SigningKeyCreate) SaveX(ctx context.Context) *SigningKey {
 }
 
 // Exec executes the query.
-func (skc *SigningKeyCreate) Exec(ctx context.Context) error {
-	_, err := skc.Save(ctx)
+func (_c *SigningKeyCreate) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (skc *SigningKeyCreate) ExecX(ctx context.Context) {
-	if err := skc.Exec(ctx); err != nil {
+func (_c *SigningKeyCreate) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (skc *SigningKeyCreate) check() error {
-	if _, ok := skc.mutation.PrivateKey(); !ok {
+func (_c *SigningKeyCreate) check() error {
+	if _, ok := _c.mutation.PrivateKey(); !ok {
 		return &ValidationError{Name: "private_key", err: errors.New(`ent: missing required field "SigningKey.private_key"`)}
 	}
-	if _, ok := skc.mutation.PublicKey(); !ok {
+	if _, ok := _c.mutation.PublicKey(); !ok {
 		return &ValidationError{Name: "public_key", err: errors.New(`ent: missing required field "SigningKey.public_key"`)}
 	}
-	if _, ok := skc.mutation.Name(); !ok {
+	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "SigningKey.name"`)}
 	}
-	if _, ok := skc.mutation.Email(); !ok {
+	if _, ok := _c.mutation.Email(); !ok {
 		return &ValidationError{Name: "email", err: errors.New(`ent: missing required field "SigningKey.email"`)}
 	}
 	return nil
 }
 
-func (skc *SigningKeyCreate) sqlSave(ctx context.Context) (*SigningKey, error) {
-	if err := skc.check(); err != nil {
+func (_c *SigningKeyCreate) sqlSave(ctx context.Context) (*SigningKey, error) {
+	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := skc.createSpec()
-	if err := sqlgraph.CreateNode(ctx, skc.driver, _spec); err != nil {
+	_node, _spec := _c.createSpec()
+	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -132,37 +132,37 @@ func (skc *SigningKeyCreate) sqlSave(ctx context.Context) (*SigningKey, error) {
 			return nil, fmt.Errorf("unexpected SigningKey.ID type: %T", _spec.ID.Value)
 		}
 	}
-	skc.mutation.id = &_node.ID
-	skc.mutation.done = true
+	_c.mutation.id = &_node.ID
+	_c.mutation.done = true
 	return _node, nil
 }
 
-func (skc *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
+func (_c *SigningKeyCreate) createSpec() (*SigningKey, *sqlgraph.CreateSpec) {
 	var (
-		_node = &SigningKey{config: skc.config}
+		_node = &SigningKey{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(signingkey.Table, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
 	)
-	if id, ok := skc.mutation.ID(); ok {
+	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
-	if value, ok := skc.mutation.PrivateKey(); ok {
+	if value, ok := _c.mutation.PrivateKey(); ok {
 		_spec.SetField(signingkey.FieldPrivateKey, field.TypeString, value)
 		_node.PrivateKey = value
 	}
-	if value, ok := skc.mutation.PublicKey(); ok {
+	if value, ok := _c.mutation.PublicKey(); ok {
 		_spec.SetField(signingkey.FieldPublicKey, field.TypeString, value)
 		_node.PublicKey = value
 	}
-	if value, ok := skc.mutation.Name(); ok {
+	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(signingkey.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
-	if value, ok := skc.mutation.Email(); ok {
+	if value, ok := _c.mutation.Email(); ok {
 		_spec.SetField(signingkey.FieldEmail, field.TypeString, value)
 		_node.Email = value
 	}
-	if nodes := skc.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: true,
@@ -189,16 +189,16 @@ type SigningKeyCreateBulk struct {
 }
 
 // Save creates the SigningKey entities in the database.
-func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, error) {
-	if skcb.err != nil {
-		return nil, skcb.err
+func (_c *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, error) {
+	if _c.err != nil {
+		return nil, _c.err
 	}
-	specs := make([]*sqlgraph.CreateSpec, len(skcb.builders))
-	nodes := make([]*SigningKey, len(skcb.builders))
-	mutators := make([]Mutator, len(skcb.builders))
-	for i := range skcb.builders {
+	specs := make([]*sqlgraph.CreateSpec, len(_c.builders))
+	nodes := make([]*SigningKey, len(_c.builders))
+	mutators := make([]Mutator, len(_c.builders))
+	for i := range _c.builders {
 		func(i int, root context.Context) {
-			builder := skcb.builders[i]
+			builder := _c.builders[i]
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*SigningKeyMutation)
 				if !ok {
@@ -211,11 +211,11 @@ func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, erro
 				var err error
 				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
-					_, err = mutators[i+1].Mutate(root, skcb.builders[i+1].mutation)
+					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, skcb.driver, spec); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{msg: err.Error(), wrap: err}
 						}
@@ -235,7 +235,7 @@ func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, erro
 		}(i, ctx)
 	}
 	if len(mutators) > 0 {
-		if _, err := mutators[0].Mutate(ctx, skcb.builders[0].mutation); err != nil {
+		if _, err := mutators[0].Mutate(ctx, _c.builders[0].mutation); err != nil {
 			return nil, err
 		}
 	}
@@ -243,8 +243,8 @@ func (skcb *SigningKeyCreateBulk) Save(ctx context.Context) ([]*SigningKey, erro
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (skcb *SigningKeyCreateBulk) SaveX(ctx context.Context) []*SigningKey {
-	v, err := skcb.Save(ctx)
+func (_c *SigningKeyCreateBulk) SaveX(ctx context.Context) []*SigningKey {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -252,14 +252,14 @@ func (skcb *SigningKeyCreateBulk) SaveX(ctx context.Context) []*SigningKey {
 }
 
 // Exec executes the query.
-func (skcb *SigningKeyCreateBulk) Exec(ctx context.Context) error {
-	_, err := skcb.Save(ctx)
+func (_c *SigningKeyCreateBulk) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (skcb *SigningKeyCreateBulk) ExecX(ctx context.Context) {
-	if err := skcb.Exec(ctx); err != nil {
+func (_c *SigningKeyCreateBulk) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

@@ -272,8 +272,8 @@ func (c *RepoClient) Update() *RepoUpdate {
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *RepoClient) UpdateOne(r *Repo) *RepoUpdateOne {
-	mutation := newRepoMutation(c.config, OpUpdateOne, withRepo(r))
+func (c *RepoClient) UpdateOne(_m *Repo) *RepoUpdateOne {
+	mutation := newRepoMutation(c.config, OpUpdateOne, withRepo(_m))
 	return &RepoUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -290,8 +290,8 @@ func (c *RepoClient) Delete() *RepoDelete {
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *RepoClient) DeleteOne(r *Repo) *RepoDeleteOne {
-	return c.DeleteOneID(r.ID)
+func (c *RepoClient) DeleteOne(_m *Repo) *RepoDeleteOne {
+	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
@@ -326,32 +326,32 @@ func (c *RepoClient) GetX(ctx context.Context, id string) *Repo {
 }
 
 // QueryRpms queries the rpms edge of a Repo.
-func (c *RepoClient) QueryRpms(r *Repo) *RpmPackageQuery {
+func (c *RepoClient) QueryRpms(_m *Repo) *RpmPackageQuery {
 	query := (&RpmPackageClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := r.ID
+		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(repo.Table, repo.FieldID, id),
 			sqlgraph.To(rpmpackage.Table, rpmpackage.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, repo.RpmsTable, repo.RpmsColumn),
 		)
-		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
 	}
 	return query
 }
 
 // QueryKey queries the key edge of a Repo.
-func (c *RepoClient) QueryKey(r *Repo) *SigningKeyQuery {
+func (c *RepoClient) QueryKey(_m *Repo) *SigningKeyQuery {
 	query := (&SigningKeyClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := r.ID
+		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(repo.Table, repo.FieldID, id),
 			sqlgraph.To(signingkey.Table, signingkey.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, false, repo.KeyTable, repo.KeyColumn),
 		)
-		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
 	}
 	return query
@@ -437,8 +437,8 @@ func (c *RpmPackageClient) Update() *RpmPackageUpdate {
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *RpmPackageClient) UpdateOne(rp *RpmPackage) *RpmPackageUpdateOne {
-	mutation := newRpmPackageMutation(c.config, OpUpdateOne, withRpmPackage(rp))
+func (c *RpmPackageClient) UpdateOne(_m *RpmPackage) *RpmPackageUpdateOne {
+	mutation := newRpmPackageMutation(c.config, OpUpdateOne, withRpmPackage(_m))
 	return &RpmPackageUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -455,8 +455,8 @@ func (c *RpmPackageClient) Delete() *RpmPackageDelete {
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *RpmPackageClient) DeleteOne(rp *RpmPackage) *RpmPackageDeleteOne {
-	return c.DeleteOneID(rp.ID)
+func (c *RpmPackageClient) DeleteOne(_m *RpmPackage) *RpmPackageDeleteOne {
+	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
@@ -491,16 +491,16 @@ func (c *RpmPackageClient) GetX(ctx context.Context, id int) *RpmPackage {
 }
 
 // QueryRepo queries the repo edge of a RpmPackage.
-func (c *RpmPackageClient) QueryRepo(rp *RpmPackage) *RepoQuery {
+func (c *RpmPackageClient) QueryRepo(_m *RpmPackage) *RepoQuery {
 	query := (&RepoClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := rp.ID
+		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(rpmpackage.Table, rpmpackage.FieldID, id),
 			sqlgraph.To(repo.Table, repo.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, rpmpackage.RepoTable, rpmpackage.RepoColumn),
 		)
-		fromV = sqlgraph.Neighbors(rp.driver.Dialect(), step)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
 	}
 	return query
@@ -586,8 +586,8 @@ func (c *SigningKeyClient) Update() *SigningKeyUpdate {
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *SigningKeyClient) UpdateOne(sk *SigningKey) *SigningKeyUpdateOne {
-	mutation := newSigningKeyMutation(c.config, OpUpdateOne, withSigningKey(sk))
+func (c *SigningKeyClient) UpdateOne(_m *SigningKey) *SigningKeyUpdateOne {
+	mutation := newSigningKeyMutation(c.config, OpUpdateOne, withSigningKey(_m))
 	return &SigningKeyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
@@ -604,8 +604,8 @@ func (c *SigningKeyClient) Delete() *SigningKeyDelete {
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *SigningKeyClient) DeleteOne(sk *SigningKey) *SigningKeyDeleteOne {
-	return c.DeleteOneID(sk.ID)
+func (c *SigningKeyClient) DeleteOne(_m *SigningKey) *SigningKeyDeleteOne {
+	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
@@ -640,16 +640,16 @@ func (c *SigningKeyClient) GetX(ctx context.Context, id string) *SigningKey {
 }
 
 // QueryRepo queries the repo edge of a SigningKey.
-func (c *SigningKeyClient) QueryRepo(sk *SigningKey) *RepoQuery {
+func (c *SigningKeyClient) QueryRepo(_m *SigningKey) *RepoQuery {
 	query := (&RepoClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := sk.ID
+		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(signingkey.Table, signingkey.FieldID, id),
 			sqlgraph.To(repo.Table, repo.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, true, signingkey.RepoTable, signingkey.RepoColumn),
 		)
-		fromV = sqlgraph.Neighbors(sk.driver.Dialect(), step)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
 	}
 	return query

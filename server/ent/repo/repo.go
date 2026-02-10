@@ -16,6 +16,10 @@ const (
 	FieldID = "oid"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
+	// FieldTetsudouURL holds the string denoting the tetsudou_url field in the database.
+	FieldTetsudouURL = "tetsudou_url"
+	// FieldTetsudouToken holds the string denoting the tetsudou_token field in the database.
+	FieldTetsudouToken = "tetsudou_token"
 	// EdgeRpms holds the string denoting the rpms edge name in mutations.
 	EdgeRpms = "rpms"
 	// EdgeKey holds the string denoting the key edge name in mutations.
@@ -44,6 +48,8 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldType,
+	FieldTetsudouURL,
+	FieldTetsudouToken,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "repos"
@@ -100,6 +106,16 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByType orders the results by the type field.
 func ByType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldType, opts...).ToFunc()
+}
+
+// ByTetsudouURL orders the results by the tetsudou_url field.
+func ByTetsudouURL(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTetsudouURL, opts...).ToFunc()
+}
+
+// ByTetsudouToken orders the results by the tetsudou_token field.
+func ByTetsudouToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTetsudouToken, opts...).ToFunc()
 }
 
 // ByRpmsCount orders the results by rpms count.

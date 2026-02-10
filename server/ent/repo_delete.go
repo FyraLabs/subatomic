@@ -20,56 +20,56 @@ type RepoDelete struct {
 }
 
 // Where appends a list predicates to the RepoDelete builder.
-func (rd *RepoDelete) Where(ps ...predicate.Repo) *RepoDelete {
-	rd.mutation.Where(ps...)
-	return rd
+func (_d *RepoDelete) Where(ps ...predicate.Repo) *RepoDelete {
+	_d.mutation.Where(ps...)
+	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (rd *RepoDelete) Exec(ctx context.Context) (int, error) {
-	return withHooks(ctx, rd.sqlExec, rd.mutation, rd.hooks)
+func (_d *RepoDelete) Exec(ctx context.Context) (int, error) {
+	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rd *RepoDelete) ExecX(ctx context.Context) int {
-	n, err := rd.Exec(ctx)
+func (_d *RepoDelete) ExecX(ctx context.Context) int {
+	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
 	}
 	return n
 }
 
-func (rd *RepoDelete) sqlExec(ctx context.Context) (int, error) {
+func (_d *RepoDelete) sqlExec(ctx context.Context) (int, error) {
 	_spec := sqlgraph.NewDeleteSpec(repo.Table, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
-	if ps := rd.mutation.predicates; len(ps) > 0 {
+	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	affected, err := sqlgraph.DeleteNodes(ctx, rd.driver, _spec)
+	affected, err := sqlgraph.DeleteNodes(ctx, _d.driver, _spec)
 	if err != nil && sqlgraph.IsConstraintError(err) {
 		err = &ConstraintError{msg: err.Error(), wrap: err}
 	}
-	rd.mutation.done = true
+	_d.mutation.done = true
 	return affected, err
 }
 
 // RepoDeleteOne is the builder for deleting a single Repo entity.
 type RepoDeleteOne struct {
-	rd *RepoDelete
+	_d *RepoDelete
 }
 
 // Where appends a list predicates to the RepoDelete builder.
-func (rdo *RepoDeleteOne) Where(ps ...predicate.Repo) *RepoDeleteOne {
-	rdo.rd.mutation.Where(ps...)
-	return rdo
+func (_d *RepoDeleteOne) Where(ps ...predicate.Repo) *RepoDeleteOne {
+	_d._d.mutation.Where(ps...)
+	return _d
 }
 
 // Exec executes the deletion query.
-func (rdo *RepoDeleteOne) Exec(ctx context.Context) error {
-	n, err := rdo.rd.Exec(ctx)
+func (_d *RepoDeleteOne) Exec(ctx context.Context) error {
+	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
@@ -81,8 +81,8 @@ func (rdo *RepoDeleteOne) Exec(ctx context.Context) error {
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rdo *RepoDeleteOne) ExecX(ctx context.Context) {
-	if err := rdo.Exec(ctx); err != nil {
+func (_d *RepoDeleteOne) ExecX(ctx context.Context) {
+	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

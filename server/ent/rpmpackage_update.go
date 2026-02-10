@@ -23,140 +23,140 @@ type RpmPackageUpdate struct {
 }
 
 // Where appends a list predicates to the RpmPackageUpdate builder.
-func (rpu *RpmPackageUpdate) Where(ps ...predicate.RpmPackage) *RpmPackageUpdate {
-	rpu.mutation.Where(ps...)
-	return rpu
+func (_u *RpmPackageUpdate) Where(ps ...predicate.RpmPackage) *RpmPackageUpdate {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // SetName sets the "name" field.
-func (rpu *RpmPackageUpdate) SetName(s string) *RpmPackageUpdate {
-	rpu.mutation.SetName(s)
-	return rpu
+func (_u *RpmPackageUpdate) SetName(v string) *RpmPackageUpdate {
+	_u.mutation.SetName(v)
+	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableName(s *string) *RpmPackageUpdate {
-	if s != nil {
-		rpu.SetName(*s)
+func (_u *RpmPackageUpdate) SetNillableName(v *string) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetName(*v)
 	}
-	return rpu
+	return _u
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpu *RpmPackageUpdate) SetEpoch(i int) *RpmPackageUpdate {
-	rpu.mutation.ResetEpoch()
-	rpu.mutation.SetEpoch(i)
-	return rpu
+func (_u *RpmPackageUpdate) SetEpoch(v int) *RpmPackageUpdate {
+	_u.mutation.ResetEpoch()
+	_u.mutation.SetEpoch(v)
+	return _u
 }
 
 // SetNillableEpoch sets the "epoch" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableEpoch(i *int) *RpmPackageUpdate {
-	if i != nil {
-		rpu.SetEpoch(*i)
+func (_u *RpmPackageUpdate) SetNillableEpoch(v *int) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetEpoch(*v)
 	}
-	return rpu
+	return _u
 }
 
-// AddEpoch adds i to the "epoch" field.
-func (rpu *RpmPackageUpdate) AddEpoch(i int) *RpmPackageUpdate {
-	rpu.mutation.AddEpoch(i)
-	return rpu
+// AddEpoch adds value to the "epoch" field.
+func (_u *RpmPackageUpdate) AddEpoch(v int) *RpmPackageUpdate {
+	_u.mutation.AddEpoch(v)
+	return _u
 }
 
 // SetVersion sets the "version" field.
-func (rpu *RpmPackageUpdate) SetVersion(s string) *RpmPackageUpdate {
-	rpu.mutation.SetVersion(s)
-	return rpu
+func (_u *RpmPackageUpdate) SetVersion(v string) *RpmPackageUpdate {
+	_u.mutation.SetVersion(v)
+	return _u
 }
 
 // SetNillableVersion sets the "version" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableVersion(s *string) *RpmPackageUpdate {
-	if s != nil {
-		rpu.SetVersion(*s)
+func (_u *RpmPackageUpdate) SetNillableVersion(v *string) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetVersion(*v)
 	}
-	return rpu
+	return _u
 }
 
 // SetRelease sets the "release" field.
-func (rpu *RpmPackageUpdate) SetRelease(s string) *RpmPackageUpdate {
-	rpu.mutation.SetRelease(s)
-	return rpu
+func (_u *RpmPackageUpdate) SetRelease(v string) *RpmPackageUpdate {
+	_u.mutation.SetRelease(v)
+	return _u
 }
 
 // SetNillableRelease sets the "release" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableRelease(s *string) *RpmPackageUpdate {
-	if s != nil {
-		rpu.SetRelease(*s)
+func (_u *RpmPackageUpdate) SetNillableRelease(v *string) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetRelease(*v)
 	}
-	return rpu
+	return _u
 }
 
 // SetArch sets the "arch" field.
-func (rpu *RpmPackageUpdate) SetArch(s string) *RpmPackageUpdate {
-	rpu.mutation.SetArch(s)
-	return rpu
+func (_u *RpmPackageUpdate) SetArch(v string) *RpmPackageUpdate {
+	_u.mutation.SetArch(v)
+	return _u
 }
 
 // SetNillableArch sets the "arch" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableArch(s *string) *RpmPackageUpdate {
-	if s != nil {
-		rpu.SetArch(*s)
+func (_u *RpmPackageUpdate) SetNillableArch(v *string) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetArch(*v)
 	}
-	return rpu
+	return _u
 }
 
 // SetFilePath sets the "file_path" field.
-func (rpu *RpmPackageUpdate) SetFilePath(s string) *RpmPackageUpdate {
-	rpu.mutation.SetFilePath(s)
-	return rpu
+func (_u *RpmPackageUpdate) SetFilePath(v string) *RpmPackageUpdate {
+	_u.mutation.SetFilePath(v)
+	return _u
 }
 
 // SetNillableFilePath sets the "file_path" field if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableFilePath(s *string) *RpmPackageUpdate {
-	if s != nil {
-		rpu.SetFilePath(*s)
+func (_u *RpmPackageUpdate) SetNillableFilePath(v *string) *RpmPackageUpdate {
+	if v != nil {
+		_u.SetFilePath(*v)
 	}
-	return rpu
+	return _u
 }
 
 // SetRepoID sets the "repo" edge to the Repo entity by ID.
-func (rpu *RpmPackageUpdate) SetRepoID(id string) *RpmPackageUpdate {
-	rpu.mutation.SetRepoID(id)
-	return rpu
+func (_u *RpmPackageUpdate) SetRepoID(id string) *RpmPackageUpdate {
+	_u.mutation.SetRepoID(id)
+	return _u
 }
 
 // SetNillableRepoID sets the "repo" edge to the Repo entity by ID if the given value is not nil.
-func (rpu *RpmPackageUpdate) SetNillableRepoID(id *string) *RpmPackageUpdate {
+func (_u *RpmPackageUpdate) SetNillableRepoID(id *string) *RpmPackageUpdate {
 	if id != nil {
-		rpu = rpu.SetRepoID(*id)
+		_u = _u.SetRepoID(*id)
 	}
-	return rpu
+	return _u
 }
 
 // SetRepo sets the "repo" edge to the Repo entity.
-func (rpu *RpmPackageUpdate) SetRepo(r *Repo) *RpmPackageUpdate {
-	return rpu.SetRepoID(r.ID)
+func (_u *RpmPackageUpdate) SetRepo(v *Repo) *RpmPackageUpdate {
+	return _u.SetRepoID(v.ID)
 }
 
 // Mutation returns the RpmPackageMutation object of the builder.
-func (rpu *RpmPackageUpdate) Mutation() *RpmPackageMutation {
-	return rpu.mutation
+func (_u *RpmPackageUpdate) Mutation() *RpmPackageMutation {
+	return _u.mutation
 }
 
 // ClearRepo clears the "repo" edge to the Repo entity.
-func (rpu *RpmPackageUpdate) ClearRepo() *RpmPackageUpdate {
-	rpu.mutation.ClearRepo()
-	return rpu
+func (_u *RpmPackageUpdate) ClearRepo() *RpmPackageUpdate {
+	_u.mutation.ClearRepo()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (rpu *RpmPackageUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks(ctx, rpu.sqlSave, rpu.mutation, rpu.hooks)
+func (_u *RpmPackageUpdate) Save(ctx context.Context) (int, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (rpu *RpmPackageUpdate) SaveX(ctx context.Context) int {
-	affected, err := rpu.Save(ctx)
+func (_u *RpmPackageUpdate) SaveX(ctx context.Context) int {
+	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -164,21 +164,21 @@ func (rpu *RpmPackageUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (rpu *RpmPackageUpdate) Exec(ctx context.Context) error {
-	_, err := rpu.Save(ctx)
+func (_u *RpmPackageUpdate) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rpu *RpmPackageUpdate) ExecX(ctx context.Context) {
-	if err := rpu.Exec(ctx); err != nil {
+func (_u *RpmPackageUpdate) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (rpu *RpmPackageUpdate) check() error {
-	if v, ok := rpu.mutation.Epoch(); ok {
+func (_u *RpmPackageUpdate) check() error {
+	if v, ok := _u.mutation.Epoch(); ok {
 		if err := rpmpackage.EpochValidator(v); err != nil {
 			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
 		}
@@ -186,40 +186,40 @@ func (rpu *RpmPackageUpdate) check() error {
 	return nil
 }
 
-func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	if err := rpu.check(); err != nil {
-		return n, err
+func (_u *RpmPackageUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(rpmpackage.Table, rpmpackage.Columns, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
-	if ps := rpu.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := rpu.mutation.Name(); ok {
+	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 	}
-	if value, ok := rpu.mutation.Epoch(); ok {
+	if value, ok := _u.mutation.Epoch(); ok {
 		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
-	if value, ok := rpu.mutation.AddedEpoch(); ok {
+	if value, ok := _u.mutation.AddedEpoch(); ok {
 		_spec.AddField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
-	if value, ok := rpu.mutation.Version(); ok {
+	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 	}
-	if value, ok := rpu.mutation.Release(); ok {
+	if value, ok := _u.mutation.Release(); ok {
 		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 	}
-	if value, ok := rpu.mutation.Arch(); ok {
+	if value, ok := _u.mutation.Arch(); ok {
 		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 	}
-	if value, ok := rpu.mutation.FilePath(); ok {
+	if value, ok := _u.mutation.FilePath(); ok {
 		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 	}
-	if rpu.mutation.RepoCleared() {
+	if _u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
@@ -232,7 +232,7 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := rpu.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
@@ -248,7 +248,7 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if n, err = sqlgraph.UpdateNodes(ctx, rpu.driver, _spec); err != nil {
+	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{rpmpackage.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -256,8 +256,8 @@ func (rpu *RpmPackageUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
-	rpu.mutation.done = true
-	return n, nil
+	_u.mutation.done = true
+	return _node, nil
 }
 
 // RpmPackageUpdateOne is the builder for updating a single RpmPackage entity.
@@ -269,147 +269,147 @@ type RpmPackageUpdateOne struct {
 }
 
 // SetName sets the "name" field.
-func (rpuo *RpmPackageUpdateOne) SetName(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetName(s)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetName(v string) *RpmPackageUpdateOne {
+	_u.mutation.SetName(v)
+	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableName(s *string) *RpmPackageUpdateOne {
-	if s != nil {
-		rpuo.SetName(*s)
+func (_u *RpmPackageUpdateOne) SetNillableName(v *string) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetName(*v)
 	}
-	return rpuo
+	return _u
 }
 
 // SetEpoch sets the "epoch" field.
-func (rpuo *RpmPackageUpdateOne) SetEpoch(i int) *RpmPackageUpdateOne {
-	rpuo.mutation.ResetEpoch()
-	rpuo.mutation.SetEpoch(i)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetEpoch(v int) *RpmPackageUpdateOne {
+	_u.mutation.ResetEpoch()
+	_u.mutation.SetEpoch(v)
+	return _u
 }
 
 // SetNillableEpoch sets the "epoch" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableEpoch(i *int) *RpmPackageUpdateOne {
-	if i != nil {
-		rpuo.SetEpoch(*i)
+func (_u *RpmPackageUpdateOne) SetNillableEpoch(v *int) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetEpoch(*v)
 	}
-	return rpuo
+	return _u
 }
 
-// AddEpoch adds i to the "epoch" field.
-func (rpuo *RpmPackageUpdateOne) AddEpoch(i int) *RpmPackageUpdateOne {
-	rpuo.mutation.AddEpoch(i)
-	return rpuo
+// AddEpoch adds value to the "epoch" field.
+func (_u *RpmPackageUpdateOne) AddEpoch(v int) *RpmPackageUpdateOne {
+	_u.mutation.AddEpoch(v)
+	return _u
 }
 
 // SetVersion sets the "version" field.
-func (rpuo *RpmPackageUpdateOne) SetVersion(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetVersion(s)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetVersion(v string) *RpmPackageUpdateOne {
+	_u.mutation.SetVersion(v)
+	return _u
 }
 
 // SetNillableVersion sets the "version" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableVersion(s *string) *RpmPackageUpdateOne {
-	if s != nil {
-		rpuo.SetVersion(*s)
+func (_u *RpmPackageUpdateOne) SetNillableVersion(v *string) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetVersion(*v)
 	}
-	return rpuo
+	return _u
 }
 
 // SetRelease sets the "release" field.
-func (rpuo *RpmPackageUpdateOne) SetRelease(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetRelease(s)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetRelease(v string) *RpmPackageUpdateOne {
+	_u.mutation.SetRelease(v)
+	return _u
 }
 
 // SetNillableRelease sets the "release" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableRelease(s *string) *RpmPackageUpdateOne {
-	if s != nil {
-		rpuo.SetRelease(*s)
+func (_u *RpmPackageUpdateOne) SetNillableRelease(v *string) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetRelease(*v)
 	}
-	return rpuo
+	return _u
 }
 
 // SetArch sets the "arch" field.
-func (rpuo *RpmPackageUpdateOne) SetArch(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetArch(s)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetArch(v string) *RpmPackageUpdateOne {
+	_u.mutation.SetArch(v)
+	return _u
 }
 
 // SetNillableArch sets the "arch" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableArch(s *string) *RpmPackageUpdateOne {
-	if s != nil {
-		rpuo.SetArch(*s)
+func (_u *RpmPackageUpdateOne) SetNillableArch(v *string) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetArch(*v)
 	}
-	return rpuo
+	return _u
 }
 
 // SetFilePath sets the "file_path" field.
-func (rpuo *RpmPackageUpdateOne) SetFilePath(s string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetFilePath(s)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetFilePath(v string) *RpmPackageUpdateOne {
+	_u.mutation.SetFilePath(v)
+	return _u
 }
 
 // SetNillableFilePath sets the "file_path" field if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableFilePath(s *string) *RpmPackageUpdateOne {
-	if s != nil {
-		rpuo.SetFilePath(*s)
+func (_u *RpmPackageUpdateOne) SetNillableFilePath(v *string) *RpmPackageUpdateOne {
+	if v != nil {
+		_u.SetFilePath(*v)
 	}
-	return rpuo
+	return _u
 }
 
 // SetRepoID sets the "repo" edge to the Repo entity by ID.
-func (rpuo *RpmPackageUpdateOne) SetRepoID(id string) *RpmPackageUpdateOne {
-	rpuo.mutation.SetRepoID(id)
-	return rpuo
+func (_u *RpmPackageUpdateOne) SetRepoID(id string) *RpmPackageUpdateOne {
+	_u.mutation.SetRepoID(id)
+	return _u
 }
 
 // SetNillableRepoID sets the "repo" edge to the Repo entity by ID if the given value is not nil.
-func (rpuo *RpmPackageUpdateOne) SetNillableRepoID(id *string) *RpmPackageUpdateOne {
+func (_u *RpmPackageUpdateOne) SetNillableRepoID(id *string) *RpmPackageUpdateOne {
 	if id != nil {
-		rpuo = rpuo.SetRepoID(*id)
+		_u = _u.SetRepoID(*id)
 	}
-	return rpuo
+	return _u
 }
 
 // SetRepo sets the "repo" edge to the Repo entity.
-func (rpuo *RpmPackageUpdateOne) SetRepo(r *Repo) *RpmPackageUpdateOne {
-	return rpuo.SetRepoID(r.ID)
+func (_u *RpmPackageUpdateOne) SetRepo(v *Repo) *RpmPackageUpdateOne {
+	return _u.SetRepoID(v.ID)
 }
 
 // Mutation returns the RpmPackageMutation object of the builder.
-func (rpuo *RpmPackageUpdateOne) Mutation() *RpmPackageMutation {
-	return rpuo.mutation
+func (_u *RpmPackageUpdateOne) Mutation() *RpmPackageMutation {
+	return _u.mutation
 }
 
 // ClearRepo clears the "repo" edge to the Repo entity.
-func (rpuo *RpmPackageUpdateOne) ClearRepo() *RpmPackageUpdateOne {
-	rpuo.mutation.ClearRepo()
-	return rpuo
+func (_u *RpmPackageUpdateOne) ClearRepo() *RpmPackageUpdateOne {
+	_u.mutation.ClearRepo()
+	return _u
 }
 
 // Where appends a list predicates to the RpmPackageUpdate builder.
-func (rpuo *RpmPackageUpdateOne) Where(ps ...predicate.RpmPackage) *RpmPackageUpdateOne {
-	rpuo.mutation.Where(ps...)
-	return rpuo
+func (_u *RpmPackageUpdateOne) Where(ps ...predicate.RpmPackage) *RpmPackageUpdateOne {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (rpuo *RpmPackageUpdateOne) Select(field string, fields ...string) *RpmPackageUpdateOne {
-	rpuo.fields = append([]string{field}, fields...)
-	return rpuo
+func (_u *RpmPackageUpdateOne) Select(field string, fields ...string) *RpmPackageUpdateOne {
+	_u.fields = append([]string{field}, fields...)
+	return _u
 }
 
 // Save executes the query and returns the updated RpmPackage entity.
-func (rpuo *RpmPackageUpdateOne) Save(ctx context.Context) (*RpmPackage, error) {
-	return withHooks(ctx, rpuo.sqlSave, rpuo.mutation, rpuo.hooks)
+func (_u *RpmPackageUpdateOne) Save(ctx context.Context) (*RpmPackage, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (rpuo *RpmPackageUpdateOne) SaveX(ctx context.Context) *RpmPackage {
-	node, err := rpuo.Save(ctx)
+func (_u *RpmPackageUpdateOne) SaveX(ctx context.Context) *RpmPackage {
+	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -417,21 +417,21 @@ func (rpuo *RpmPackageUpdateOne) SaveX(ctx context.Context) *RpmPackage {
 }
 
 // Exec executes the query on the entity.
-func (rpuo *RpmPackageUpdateOne) Exec(ctx context.Context) error {
-	_, err := rpuo.Save(ctx)
+func (_u *RpmPackageUpdateOne) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rpuo *RpmPackageUpdateOne) ExecX(ctx context.Context) {
-	if err := rpuo.Exec(ctx); err != nil {
+func (_u *RpmPackageUpdateOne) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (rpuo *RpmPackageUpdateOne) check() error {
-	if v, ok := rpuo.mutation.Epoch(); ok {
+func (_u *RpmPackageUpdateOne) check() error {
+	if v, ok := _u.mutation.Epoch(); ok {
 		if err := rpmpackage.EpochValidator(v); err != nil {
 			return &ValidationError{Name: "epoch", err: fmt.Errorf(`ent: validator failed for field "RpmPackage.epoch": %w`, err)}
 		}
@@ -439,17 +439,17 @@ func (rpuo *RpmPackageUpdateOne) check() error {
 	return nil
 }
 
-func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage, err error) {
-	if err := rpuo.check(); err != nil {
+func (_u *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage, err error) {
+	if err := _u.check(); err != nil {
 		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(rpmpackage.Table, rpmpackage.Columns, sqlgraph.NewFieldSpec(rpmpackage.FieldID, field.TypeInt))
-	id, ok := rpuo.mutation.ID()
+	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "RpmPackage.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
-	if fields := rpuo.fields; len(fields) > 0 {
+	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, rpmpackage.FieldID)
 		for _, f := range fields {
@@ -461,35 +461,35 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 			}
 		}
 	}
-	if ps := rpuo.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := rpuo.mutation.Name(); ok {
+	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(rpmpackage.FieldName, field.TypeString, value)
 	}
-	if value, ok := rpuo.mutation.Epoch(); ok {
+	if value, ok := _u.mutation.Epoch(); ok {
 		_spec.SetField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
-	if value, ok := rpuo.mutation.AddedEpoch(); ok {
+	if value, ok := _u.mutation.AddedEpoch(); ok {
 		_spec.AddField(rpmpackage.FieldEpoch, field.TypeInt, value)
 	}
-	if value, ok := rpuo.mutation.Version(); ok {
+	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(rpmpackage.FieldVersion, field.TypeString, value)
 	}
-	if value, ok := rpuo.mutation.Release(); ok {
+	if value, ok := _u.mutation.Release(); ok {
 		_spec.SetField(rpmpackage.FieldRelease, field.TypeString, value)
 	}
-	if value, ok := rpuo.mutation.Arch(); ok {
+	if value, ok := _u.mutation.Arch(); ok {
 		_spec.SetField(rpmpackage.FieldArch, field.TypeString, value)
 	}
-	if value, ok := rpuo.mutation.FilePath(); ok {
+	if value, ok := _u.mutation.FilePath(); ok {
 		_spec.SetField(rpmpackage.FieldFilePath, field.TypeString, value)
 	}
-	if rpuo.mutation.RepoCleared() {
+	if _u.mutation.RepoCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
@@ -502,7 +502,7 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := rpuo.mutation.RepoIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RepoIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
@@ -518,10 +518,10 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &RpmPackage{config: rpuo.config}
+	_node = &RpmPackage{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
-	if err = sqlgraph.UpdateNode(ctx, rpuo.driver, _spec); err != nil {
+	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{rpmpackage.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -529,6 +529,6 @@ func (rpuo *RpmPackageUpdateOne) sqlSave(ctx context.Context) (_node *RpmPackage
 		}
 		return nil, err
 	}
-	rpuo.mutation.done = true
+	_u.mutation.done = true
 	return _node, nil
 }

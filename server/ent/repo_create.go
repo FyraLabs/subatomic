@@ -22,64 +22,92 @@ type RepoCreate struct {
 }
 
 // SetType sets the "type" field.
-func (rc *RepoCreate) SetType(r repo.Type) *RepoCreate {
-	rc.mutation.SetType(r)
-	return rc
+func (_c *RepoCreate) SetType(v repo.Type) *RepoCreate {
+	_c.mutation.SetType(v)
+	return _c
+}
+
+// SetTetsudouURL sets the "tetsudou_url" field.
+func (_c *RepoCreate) SetTetsudouURL(v string) *RepoCreate {
+	_c.mutation.SetTetsudouURL(v)
+	return _c
+}
+
+// SetNillableTetsudouURL sets the "tetsudou_url" field if the given value is not nil.
+func (_c *RepoCreate) SetNillableTetsudouURL(v *string) *RepoCreate {
+	if v != nil {
+		_c.SetTetsudouURL(*v)
+	}
+	return _c
+}
+
+// SetTetsudouToken sets the "tetsudou_token" field.
+func (_c *RepoCreate) SetTetsudouToken(v string) *RepoCreate {
+	_c.mutation.SetTetsudouToken(v)
+	return _c
+}
+
+// SetNillableTetsudouToken sets the "tetsudou_token" field if the given value is not nil.
+func (_c *RepoCreate) SetNillableTetsudouToken(v *string) *RepoCreate {
+	if v != nil {
+		_c.SetTetsudouToken(*v)
+	}
+	return _c
 }
 
 // SetID sets the "id" field.
-func (rc *RepoCreate) SetID(s string) *RepoCreate {
-	rc.mutation.SetID(s)
-	return rc
+func (_c *RepoCreate) SetID(v string) *RepoCreate {
+	_c.mutation.SetID(v)
+	return _c
 }
 
 // AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
-func (rc *RepoCreate) AddRpmIDs(ids ...int) *RepoCreate {
-	rc.mutation.AddRpmIDs(ids...)
-	return rc
+func (_c *RepoCreate) AddRpmIDs(ids ...int) *RepoCreate {
+	_c.mutation.AddRpmIDs(ids...)
+	return _c
 }
 
 // AddRpms adds the "rpms" edges to the RpmPackage entity.
-func (rc *RepoCreate) AddRpms(r ...*RpmPackage) *RepoCreate {
-	ids := make([]int, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_c *RepoCreate) AddRpms(v ...*RpmPackage) *RepoCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return rc.AddRpmIDs(ids...)
+	return _c.AddRpmIDs(ids...)
 }
 
 // SetKeyID sets the "key" edge to the SigningKey entity by ID.
-func (rc *RepoCreate) SetKeyID(id string) *RepoCreate {
-	rc.mutation.SetKeyID(id)
-	return rc
+func (_c *RepoCreate) SetKeyID(id string) *RepoCreate {
+	_c.mutation.SetKeyID(id)
+	return _c
 }
 
 // SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
-func (rc *RepoCreate) SetNillableKeyID(id *string) *RepoCreate {
+func (_c *RepoCreate) SetNillableKeyID(id *string) *RepoCreate {
 	if id != nil {
-		rc = rc.SetKeyID(*id)
+		_c = _c.SetKeyID(*id)
 	}
-	return rc
+	return _c
 }
 
 // SetKey sets the "key" edge to the SigningKey entity.
-func (rc *RepoCreate) SetKey(s *SigningKey) *RepoCreate {
-	return rc.SetKeyID(s.ID)
+func (_c *RepoCreate) SetKey(v *SigningKey) *RepoCreate {
+	return _c.SetKeyID(v.ID)
 }
 
 // Mutation returns the RepoMutation object of the builder.
-func (rc *RepoCreate) Mutation() *RepoMutation {
-	return rc.mutation
+func (_c *RepoCreate) Mutation() *RepoMutation {
+	return _c.mutation
 }
 
 // Save creates the Repo in the database.
-func (rc *RepoCreate) Save(ctx context.Context) (*Repo, error) {
-	return withHooks(ctx, rc.sqlSave, rc.mutation, rc.hooks)
+func (_c *RepoCreate) Save(ctx context.Context) (*Repo, error) {
+	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
-func (rc *RepoCreate) SaveX(ctx context.Context) *Repo {
-	v, err := rc.Save(ctx)
+func (_c *RepoCreate) SaveX(ctx context.Context) *Repo {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -87,24 +115,24 @@ func (rc *RepoCreate) SaveX(ctx context.Context) *Repo {
 }
 
 // Exec executes the query.
-func (rc *RepoCreate) Exec(ctx context.Context) error {
-	_, err := rc.Save(ctx)
+func (_c *RepoCreate) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rc *RepoCreate) ExecX(ctx context.Context) {
-	if err := rc.Exec(ctx); err != nil {
+func (_c *RepoCreate) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (rc *RepoCreate) check() error {
-	if _, ok := rc.mutation.GetType(); !ok {
+func (_c *RepoCreate) check() error {
+	if _, ok := _c.mutation.GetType(); !ok {
 		return &ValidationError{Name: "type", err: errors.New(`ent: missing required field "Repo.type"`)}
 	}
-	if v, ok := rc.mutation.GetType(); ok {
+	if v, ok := _c.mutation.GetType(); ok {
 		if err := repo.TypeValidator(v); err != nil {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Repo.type": %w`, err)}
 		}
@@ -112,12 +140,12 @@ func (rc *RepoCreate) check() error {
 	return nil
 }
 
-func (rc *RepoCreate) sqlSave(ctx context.Context) (*Repo, error) {
-	if err := rc.check(); err != nil {
+func (_c *RepoCreate) sqlSave(ctx context.Context) (*Repo, error) {
+	if err := _c.check(); err != nil {
 		return nil, err
 	}
-	_node, _spec := rc.createSpec()
-	if err := sqlgraph.CreateNode(ctx, rc.driver, _spec); err != nil {
+	_node, _spec := _c.createSpec()
+	if err := sqlgraph.CreateNode(ctx, _c.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -130,25 +158,33 @@ func (rc *RepoCreate) sqlSave(ctx context.Context) (*Repo, error) {
 			return nil, fmt.Errorf("unexpected Repo.ID type: %T", _spec.ID.Value)
 		}
 	}
-	rc.mutation.id = &_node.ID
-	rc.mutation.done = true
+	_c.mutation.id = &_node.ID
+	_c.mutation.done = true
 	return _node, nil
 }
 
-func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
+func (_c *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 	var (
-		_node = &Repo{config: rc.config}
+		_node = &Repo{config: _c.config}
 		_spec = sqlgraph.NewCreateSpec(repo.Table, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
 	)
-	if id, ok := rc.mutation.ID(); ok {
+	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
-	if value, ok := rc.mutation.GetType(); ok {
+	if value, ok := _c.mutation.GetType(); ok {
 		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 		_node.Type = value
 	}
-	if nodes := rc.mutation.RpmsIDs(); len(nodes) > 0 {
+	if value, ok := _c.mutation.TetsudouURL(); ok {
+		_spec.SetField(repo.FieldTetsudouURL, field.TypeString, value)
+		_node.TetsudouURL = &value
+	}
+	if value, ok := _c.mutation.TetsudouToken(); ok {
+		_spec.SetField(repo.FieldTetsudouToken, field.TypeString, value)
+		_node.TetsudouToken = &value
+	}
+	if nodes := _c.mutation.RpmsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -164,7 +200,7 @@ func (rc *RepoCreate) createSpec() (*Repo, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := rc.mutation.KeyIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.KeyIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: false,
@@ -192,16 +228,16 @@ type RepoCreateBulk struct {
 }
 
 // Save creates the Repo entities in the database.
-func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
-	if rcb.err != nil {
-		return nil, rcb.err
+func (_c *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
+	if _c.err != nil {
+		return nil, _c.err
 	}
-	specs := make([]*sqlgraph.CreateSpec, len(rcb.builders))
-	nodes := make([]*Repo, len(rcb.builders))
-	mutators := make([]Mutator, len(rcb.builders))
-	for i := range rcb.builders {
+	specs := make([]*sqlgraph.CreateSpec, len(_c.builders))
+	nodes := make([]*Repo, len(_c.builders))
+	mutators := make([]Mutator, len(_c.builders))
+	for i := range _c.builders {
 		func(i int, root context.Context) {
-			builder := rcb.builders[i]
+			builder := _c.builders[i]
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*RepoMutation)
 				if !ok {
@@ -214,11 +250,11 @@ func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
 				var err error
 				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
-					_, err = mutators[i+1].Mutate(root, rcb.builders[i+1].mutation)
+					_, err = mutators[i+1].Mutate(root, _c.builders[i+1].mutation)
 				} else {
 					spec := &sqlgraph.BatchCreateSpec{Nodes: specs}
 					// Invoke the actual operation on the latest mutation in the chain.
-					if err = sqlgraph.BatchCreate(ctx, rcb.driver, spec); err != nil {
+					if err = sqlgraph.BatchCreate(ctx, _c.driver, spec); err != nil {
 						if sqlgraph.IsConstraintError(err) {
 							err = &ConstraintError{msg: err.Error(), wrap: err}
 						}
@@ -238,7 +274,7 @@ func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
 		}(i, ctx)
 	}
 	if len(mutators) > 0 {
-		if _, err := mutators[0].Mutate(ctx, rcb.builders[0].mutation); err != nil {
+		if _, err := mutators[0].Mutate(ctx, _c.builders[0].mutation); err != nil {
 			return nil, err
 		}
 	}
@@ -246,8 +282,8 @@ func (rcb *RepoCreateBulk) Save(ctx context.Context) ([]*Repo, error) {
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (rcb *RepoCreateBulk) SaveX(ctx context.Context) []*Repo {
-	v, err := rcb.Save(ctx)
+func (_c *RepoCreateBulk) SaveX(ctx context.Context) []*Repo {
+	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -255,14 +291,14 @@ func (rcb *RepoCreateBulk) SaveX(ctx context.Context) []*Repo {
 }
 
 // Exec executes the query.
-func (rcb *RepoCreateBulk) Exec(ctx context.Context) error {
-	_, err := rcb.Save(ctx)
+func (_c *RepoCreateBulk) Exec(ctx context.Context) error {
+	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (rcb *RepoCreateBulk) ExecX(ctx context.Context) {
-	if err := rcb.Exec(ctx); err != nil {
+func (_c *RepoCreateBulk) ExecX(ctx context.Context) {
+	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

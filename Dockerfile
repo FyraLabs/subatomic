@@ -1,4 +1,4 @@
-FROM golang:1.23.0-bookworm as builder
+FROM golang:1.25.2-trixie as builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -o /subatomic ./server
 
-FROM debian:bookworm
+FROM debian:trixie
 
 COPY --from=builder /subatomic /subatomic
 

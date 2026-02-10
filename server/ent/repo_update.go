@@ -24,99 +24,139 @@ type RepoUpdate struct {
 }
 
 // Where appends a list predicates to the RepoUpdate builder.
-func (ru *RepoUpdate) Where(ps ...predicate.Repo) *RepoUpdate {
-	ru.mutation.Where(ps...)
-	return ru
+func (_u *RepoUpdate) Where(ps ...predicate.Repo) *RepoUpdate {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // SetType sets the "type" field.
-func (ru *RepoUpdate) SetType(r repo.Type) *RepoUpdate {
-	ru.mutation.SetType(r)
-	return ru
+func (_u *RepoUpdate) SetType(v repo.Type) *RepoUpdate {
+	_u.mutation.SetType(v)
+	return _u
 }
 
 // SetNillableType sets the "type" field if the given value is not nil.
-func (ru *RepoUpdate) SetNillableType(r *repo.Type) *RepoUpdate {
-	if r != nil {
-		ru.SetType(*r)
+func (_u *RepoUpdate) SetNillableType(v *repo.Type) *RepoUpdate {
+	if v != nil {
+		_u.SetType(*v)
 	}
-	return ru
+	return _u
+}
+
+// SetTetsudouURL sets the "tetsudou_url" field.
+func (_u *RepoUpdate) SetTetsudouURL(v string) *RepoUpdate {
+	_u.mutation.SetTetsudouURL(v)
+	return _u
+}
+
+// SetNillableTetsudouURL sets the "tetsudou_url" field if the given value is not nil.
+func (_u *RepoUpdate) SetNillableTetsudouURL(v *string) *RepoUpdate {
+	if v != nil {
+		_u.SetTetsudouURL(*v)
+	}
+	return _u
+}
+
+// ClearTetsudouURL clears the value of the "tetsudou_url" field.
+func (_u *RepoUpdate) ClearTetsudouURL() *RepoUpdate {
+	_u.mutation.ClearTetsudouURL()
+	return _u
+}
+
+// SetTetsudouToken sets the "tetsudou_token" field.
+func (_u *RepoUpdate) SetTetsudouToken(v string) *RepoUpdate {
+	_u.mutation.SetTetsudouToken(v)
+	return _u
+}
+
+// SetNillableTetsudouToken sets the "tetsudou_token" field if the given value is not nil.
+func (_u *RepoUpdate) SetNillableTetsudouToken(v *string) *RepoUpdate {
+	if v != nil {
+		_u.SetTetsudouToken(*v)
+	}
+	return _u
+}
+
+// ClearTetsudouToken clears the value of the "tetsudou_token" field.
+func (_u *RepoUpdate) ClearTetsudouToken() *RepoUpdate {
+	_u.mutation.ClearTetsudouToken()
+	return _u
 }
 
 // AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
-func (ru *RepoUpdate) AddRpmIDs(ids ...int) *RepoUpdate {
-	ru.mutation.AddRpmIDs(ids...)
-	return ru
+func (_u *RepoUpdate) AddRpmIDs(ids ...int) *RepoUpdate {
+	_u.mutation.AddRpmIDs(ids...)
+	return _u
 }
 
 // AddRpms adds the "rpms" edges to the RpmPackage entity.
-func (ru *RepoUpdate) AddRpms(r ...*RpmPackage) *RepoUpdate {
-	ids := make([]int, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *RepoUpdate) AddRpms(v ...*RpmPackage) *RepoUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return ru.AddRpmIDs(ids...)
+	return _u.AddRpmIDs(ids...)
 }
 
 // SetKeyID sets the "key" edge to the SigningKey entity by ID.
-func (ru *RepoUpdate) SetKeyID(id string) *RepoUpdate {
-	ru.mutation.SetKeyID(id)
-	return ru
+func (_u *RepoUpdate) SetKeyID(id string) *RepoUpdate {
+	_u.mutation.SetKeyID(id)
+	return _u
 }
 
 // SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
-func (ru *RepoUpdate) SetNillableKeyID(id *string) *RepoUpdate {
+func (_u *RepoUpdate) SetNillableKeyID(id *string) *RepoUpdate {
 	if id != nil {
-		ru = ru.SetKeyID(*id)
+		_u = _u.SetKeyID(*id)
 	}
-	return ru
+	return _u
 }
 
 // SetKey sets the "key" edge to the SigningKey entity.
-func (ru *RepoUpdate) SetKey(s *SigningKey) *RepoUpdate {
-	return ru.SetKeyID(s.ID)
+func (_u *RepoUpdate) SetKey(v *SigningKey) *RepoUpdate {
+	return _u.SetKeyID(v.ID)
 }
 
 // Mutation returns the RepoMutation object of the builder.
-func (ru *RepoUpdate) Mutation() *RepoMutation {
-	return ru.mutation
+func (_u *RepoUpdate) Mutation() *RepoMutation {
+	return _u.mutation
 }
 
 // ClearRpms clears all "rpms" edges to the RpmPackage entity.
-func (ru *RepoUpdate) ClearRpms() *RepoUpdate {
-	ru.mutation.ClearRpms()
-	return ru
+func (_u *RepoUpdate) ClearRpms() *RepoUpdate {
+	_u.mutation.ClearRpms()
+	return _u
 }
 
 // RemoveRpmIDs removes the "rpms" edge to RpmPackage entities by IDs.
-func (ru *RepoUpdate) RemoveRpmIDs(ids ...int) *RepoUpdate {
-	ru.mutation.RemoveRpmIDs(ids...)
-	return ru
+func (_u *RepoUpdate) RemoveRpmIDs(ids ...int) *RepoUpdate {
+	_u.mutation.RemoveRpmIDs(ids...)
+	return _u
 }
 
 // RemoveRpms removes "rpms" edges to RpmPackage entities.
-func (ru *RepoUpdate) RemoveRpms(r ...*RpmPackage) *RepoUpdate {
-	ids := make([]int, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *RepoUpdate) RemoveRpms(v ...*RpmPackage) *RepoUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return ru.RemoveRpmIDs(ids...)
+	return _u.RemoveRpmIDs(ids...)
 }
 
 // ClearKey clears the "key" edge to the SigningKey entity.
-func (ru *RepoUpdate) ClearKey() *RepoUpdate {
-	ru.mutation.ClearKey()
-	return ru
+func (_u *RepoUpdate) ClearKey() *RepoUpdate {
+	_u.mutation.ClearKey()
+	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (ru *RepoUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks(ctx, ru.sqlSave, ru.mutation, ru.hooks)
+func (_u *RepoUpdate) Save(ctx context.Context) (int, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (ru *RepoUpdate) SaveX(ctx context.Context) int {
-	affected, err := ru.Save(ctx)
+func (_u *RepoUpdate) SaveX(ctx context.Context) int {
+	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -124,21 +164,21 @@ func (ru *RepoUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (ru *RepoUpdate) Exec(ctx context.Context) error {
-	_, err := ru.Save(ctx)
+func (_u *RepoUpdate) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (ru *RepoUpdate) ExecX(ctx context.Context) {
-	if err := ru.Exec(ctx); err != nil {
+func (_u *RepoUpdate) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (ru *RepoUpdate) check() error {
-	if v, ok := ru.mutation.GetType(); ok {
+func (_u *RepoUpdate) check() error {
+	if v, ok := _u.mutation.GetType(); ok {
 		if err := repo.TypeValidator(v); err != nil {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Repo.type": %w`, err)}
 		}
@@ -146,22 +186,34 @@ func (ru *RepoUpdate) check() error {
 	return nil
 }
 
-func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	if err := ru.check(); err != nil {
-		return n, err
+func (_u *RepoUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(repo.Table, repo.Columns, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
-	if ps := ru.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := ru.mutation.GetType(); ok {
+	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 	}
-	if ru.mutation.RpmsCleared() {
+	if value, ok := _u.mutation.TetsudouURL(); ok {
+		_spec.SetField(repo.FieldTetsudouURL, field.TypeString, value)
+	}
+	if _u.mutation.TetsudouURLCleared() {
+		_spec.ClearField(repo.FieldTetsudouURL, field.TypeString)
+	}
+	if value, ok := _u.mutation.TetsudouToken(); ok {
+		_spec.SetField(repo.FieldTetsudouToken, field.TypeString, value)
+	}
+	if _u.mutation.TetsudouTokenCleared() {
+		_spec.ClearField(repo.FieldTetsudouToken, field.TypeString)
+	}
+	if _u.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -174,7 +226,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ru.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !ru.mutation.RpmsCleared() {
+	if nodes := _u.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !_u.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -190,7 +242,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ru.mutation.RpmsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RpmsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -206,7 +258,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if ru.mutation.KeyCleared() {
+	if _u.mutation.KeyCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: false,
@@ -219,7 +271,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ru.mutation.KeyIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.KeyIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: false,
@@ -235,7 +287,7 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if n, err = sqlgraph.UpdateNodes(ctx, ru.driver, _spec); err != nil {
+	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{repo.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -243,8 +295,8 @@ func (ru *RepoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
-	ru.mutation.done = true
-	return n, nil
+	_u.mutation.done = true
+	return _node, nil
 }
 
 // RepoUpdateOne is the builder for updating a single Repo entity.
@@ -256,106 +308,146 @@ type RepoUpdateOne struct {
 }
 
 // SetType sets the "type" field.
-func (ruo *RepoUpdateOne) SetType(r repo.Type) *RepoUpdateOne {
-	ruo.mutation.SetType(r)
-	return ruo
+func (_u *RepoUpdateOne) SetType(v repo.Type) *RepoUpdateOne {
+	_u.mutation.SetType(v)
+	return _u
 }
 
 // SetNillableType sets the "type" field if the given value is not nil.
-func (ruo *RepoUpdateOne) SetNillableType(r *repo.Type) *RepoUpdateOne {
-	if r != nil {
-		ruo.SetType(*r)
+func (_u *RepoUpdateOne) SetNillableType(v *repo.Type) *RepoUpdateOne {
+	if v != nil {
+		_u.SetType(*v)
 	}
-	return ruo
+	return _u
+}
+
+// SetTetsudouURL sets the "tetsudou_url" field.
+func (_u *RepoUpdateOne) SetTetsudouURL(v string) *RepoUpdateOne {
+	_u.mutation.SetTetsudouURL(v)
+	return _u
+}
+
+// SetNillableTetsudouURL sets the "tetsudou_url" field if the given value is not nil.
+func (_u *RepoUpdateOne) SetNillableTetsudouURL(v *string) *RepoUpdateOne {
+	if v != nil {
+		_u.SetTetsudouURL(*v)
+	}
+	return _u
+}
+
+// ClearTetsudouURL clears the value of the "tetsudou_url" field.
+func (_u *RepoUpdateOne) ClearTetsudouURL() *RepoUpdateOne {
+	_u.mutation.ClearTetsudouURL()
+	return _u
+}
+
+// SetTetsudouToken sets the "tetsudou_token" field.
+func (_u *RepoUpdateOne) SetTetsudouToken(v string) *RepoUpdateOne {
+	_u.mutation.SetTetsudouToken(v)
+	return _u
+}
+
+// SetNillableTetsudouToken sets the "tetsudou_token" field if the given value is not nil.
+func (_u *RepoUpdateOne) SetNillableTetsudouToken(v *string) *RepoUpdateOne {
+	if v != nil {
+		_u.SetTetsudouToken(*v)
+	}
+	return _u
+}
+
+// ClearTetsudouToken clears the value of the "tetsudou_token" field.
+func (_u *RepoUpdateOne) ClearTetsudouToken() *RepoUpdateOne {
+	_u.mutation.ClearTetsudouToken()
+	return _u
 }
 
 // AddRpmIDs adds the "rpms" edge to the RpmPackage entity by IDs.
-func (ruo *RepoUpdateOne) AddRpmIDs(ids ...int) *RepoUpdateOne {
-	ruo.mutation.AddRpmIDs(ids...)
-	return ruo
+func (_u *RepoUpdateOne) AddRpmIDs(ids ...int) *RepoUpdateOne {
+	_u.mutation.AddRpmIDs(ids...)
+	return _u
 }
 
 // AddRpms adds the "rpms" edges to the RpmPackage entity.
-func (ruo *RepoUpdateOne) AddRpms(r ...*RpmPackage) *RepoUpdateOne {
-	ids := make([]int, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *RepoUpdateOne) AddRpms(v ...*RpmPackage) *RepoUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return ruo.AddRpmIDs(ids...)
+	return _u.AddRpmIDs(ids...)
 }
 
 // SetKeyID sets the "key" edge to the SigningKey entity by ID.
-func (ruo *RepoUpdateOne) SetKeyID(id string) *RepoUpdateOne {
-	ruo.mutation.SetKeyID(id)
-	return ruo
+func (_u *RepoUpdateOne) SetKeyID(id string) *RepoUpdateOne {
+	_u.mutation.SetKeyID(id)
+	return _u
 }
 
 // SetNillableKeyID sets the "key" edge to the SigningKey entity by ID if the given value is not nil.
-func (ruo *RepoUpdateOne) SetNillableKeyID(id *string) *RepoUpdateOne {
+func (_u *RepoUpdateOne) SetNillableKeyID(id *string) *RepoUpdateOne {
 	if id != nil {
-		ruo = ruo.SetKeyID(*id)
+		_u = _u.SetKeyID(*id)
 	}
-	return ruo
+	return _u
 }
 
 // SetKey sets the "key" edge to the SigningKey entity.
-func (ruo *RepoUpdateOne) SetKey(s *SigningKey) *RepoUpdateOne {
-	return ruo.SetKeyID(s.ID)
+func (_u *RepoUpdateOne) SetKey(v *SigningKey) *RepoUpdateOne {
+	return _u.SetKeyID(v.ID)
 }
 
 // Mutation returns the RepoMutation object of the builder.
-func (ruo *RepoUpdateOne) Mutation() *RepoMutation {
-	return ruo.mutation
+func (_u *RepoUpdateOne) Mutation() *RepoMutation {
+	return _u.mutation
 }
 
 // ClearRpms clears all "rpms" edges to the RpmPackage entity.
-func (ruo *RepoUpdateOne) ClearRpms() *RepoUpdateOne {
-	ruo.mutation.ClearRpms()
-	return ruo
+func (_u *RepoUpdateOne) ClearRpms() *RepoUpdateOne {
+	_u.mutation.ClearRpms()
+	return _u
 }
 
 // RemoveRpmIDs removes the "rpms" edge to RpmPackage entities by IDs.
-func (ruo *RepoUpdateOne) RemoveRpmIDs(ids ...int) *RepoUpdateOne {
-	ruo.mutation.RemoveRpmIDs(ids...)
-	return ruo
+func (_u *RepoUpdateOne) RemoveRpmIDs(ids ...int) *RepoUpdateOne {
+	_u.mutation.RemoveRpmIDs(ids...)
+	return _u
 }
 
 // RemoveRpms removes "rpms" edges to RpmPackage entities.
-func (ruo *RepoUpdateOne) RemoveRpms(r ...*RpmPackage) *RepoUpdateOne {
-	ids := make([]int, len(r))
-	for i := range r {
-		ids[i] = r[i].ID
+func (_u *RepoUpdateOne) RemoveRpms(v ...*RpmPackage) *RepoUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
 	}
-	return ruo.RemoveRpmIDs(ids...)
+	return _u.RemoveRpmIDs(ids...)
 }
 
 // ClearKey clears the "key" edge to the SigningKey entity.
-func (ruo *RepoUpdateOne) ClearKey() *RepoUpdateOne {
-	ruo.mutation.ClearKey()
-	return ruo
+func (_u *RepoUpdateOne) ClearKey() *RepoUpdateOne {
+	_u.mutation.ClearKey()
+	return _u
 }
 
 // Where appends a list predicates to the RepoUpdate builder.
-func (ruo *RepoUpdateOne) Where(ps ...predicate.Repo) *RepoUpdateOne {
-	ruo.mutation.Where(ps...)
-	return ruo
+func (_u *RepoUpdateOne) Where(ps ...predicate.Repo) *RepoUpdateOne {
+	_u.mutation.Where(ps...)
+	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (ruo *RepoUpdateOne) Select(field string, fields ...string) *RepoUpdateOne {
-	ruo.fields = append([]string{field}, fields...)
-	return ruo
+func (_u *RepoUpdateOne) Select(field string, fields ...string) *RepoUpdateOne {
+	_u.fields = append([]string{field}, fields...)
+	return _u
 }
 
 // Save executes the query and returns the updated Repo entity.
-func (ruo *RepoUpdateOne) Save(ctx context.Context) (*Repo, error) {
-	return withHooks(ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
+func (_u *RepoUpdateOne) Save(ctx context.Context) (*Repo, error) {
+	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (ruo *RepoUpdateOne) SaveX(ctx context.Context) *Repo {
-	node, err := ruo.Save(ctx)
+func (_u *RepoUpdateOne) SaveX(ctx context.Context) *Repo {
+	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -363,21 +455,21 @@ func (ruo *RepoUpdateOne) SaveX(ctx context.Context) *Repo {
 }
 
 // Exec executes the query on the entity.
-func (ruo *RepoUpdateOne) Exec(ctx context.Context) error {
-	_, err := ruo.Save(ctx)
+func (_u *RepoUpdateOne) Exec(ctx context.Context) error {
+	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (ruo *RepoUpdateOne) ExecX(ctx context.Context) {
-	if err := ruo.Exec(ctx); err != nil {
+func (_u *RepoUpdateOne) ExecX(ctx context.Context) {
+	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (ruo *RepoUpdateOne) check() error {
-	if v, ok := ruo.mutation.GetType(); ok {
+func (_u *RepoUpdateOne) check() error {
+	if v, ok := _u.mutation.GetType(); ok {
 		if err := repo.TypeValidator(v); err != nil {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Repo.type": %w`, err)}
 		}
@@ -385,17 +477,17 @@ func (ruo *RepoUpdateOne) check() error {
 	return nil
 }
 
-func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) {
-	if err := ruo.check(); err != nil {
+func (_u *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) {
+	if err := _u.check(); err != nil {
 		return _node, err
 	}
 	_spec := sqlgraph.NewUpdateSpec(repo.Table, repo.Columns, sqlgraph.NewFieldSpec(repo.FieldID, field.TypeString))
-	id, ok := ruo.mutation.ID()
+	id, ok := _u.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Repo.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
-	if fields := ruo.fields; len(fields) > 0 {
+	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, repo.FieldID)
 		for _, f := range fields {
@@ -407,17 +499,29 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 			}
 		}
 	}
-	if ps := ruo.mutation.predicates; len(ps) > 0 {
+	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	if value, ok := ruo.mutation.GetType(); ok {
+	if value, ok := _u.mutation.GetType(); ok {
 		_spec.SetField(repo.FieldType, field.TypeEnum, value)
 	}
-	if ruo.mutation.RpmsCleared() {
+	if value, ok := _u.mutation.TetsudouURL(); ok {
+		_spec.SetField(repo.FieldTetsudouURL, field.TypeString, value)
+	}
+	if _u.mutation.TetsudouURLCleared() {
+		_spec.ClearField(repo.FieldTetsudouURL, field.TypeString)
+	}
+	if value, ok := _u.mutation.TetsudouToken(); ok {
+		_spec.SetField(repo.FieldTetsudouToken, field.TypeString, value)
+	}
+	if _u.mutation.TetsudouTokenCleared() {
+		_spec.ClearField(repo.FieldTetsudouToken, field.TypeString)
+	}
+	if _u.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -430,7 +534,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ruo.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !ruo.mutation.RpmsCleared() {
+	if nodes := _u.mutation.RemovedRpmsIDs(); len(nodes) > 0 && !_u.mutation.RpmsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -446,7 +550,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ruo.mutation.RpmsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RpmsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
@@ -462,7 +566,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if ruo.mutation.KeyCleared() {
+	if _u.mutation.KeyCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: false,
@@ -475,7 +579,7 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := ruo.mutation.KeyIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.KeyIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: false,
@@ -491,10 +595,10 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &Repo{config: ruo.config}
+	_node = &Repo{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
-	if err = sqlgraph.UpdateNode(ctx, ruo.driver, _spec); err != nil {
+	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{repo.Label}
 		} else if sqlgraph.IsConstraintError(err) {
@@ -502,6 +606,6 @@ func (ruo *RepoUpdateOne) sqlSave(ctx context.Context) (_node *Repo, err error) 
 		}
 		return nil, err
 	}
-	ruo.mutation.done = true
+	_u.mutation.done = true
 	return _node, nil
 }

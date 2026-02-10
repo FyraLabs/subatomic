@@ -20,56 +20,56 @@ type SigningKeyDelete struct {
 }
 
 // Where appends a list predicates to the SigningKeyDelete builder.
-func (skd *SigningKeyDelete) Where(ps ...predicate.SigningKey) *SigningKeyDelete {
-	skd.mutation.Where(ps...)
-	return skd
+func (_d *SigningKeyDelete) Where(ps ...predicate.SigningKey) *SigningKeyDelete {
+	_d.mutation.Where(ps...)
+	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (skd *SigningKeyDelete) Exec(ctx context.Context) (int, error) {
-	return withHooks(ctx, skd.sqlExec, skd.mutation, skd.hooks)
+func (_d *SigningKeyDelete) Exec(ctx context.Context) (int, error) {
+	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (skd *SigningKeyDelete) ExecX(ctx context.Context) int {
-	n, err := skd.Exec(ctx)
+func (_d *SigningKeyDelete) ExecX(ctx context.Context) int {
+	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
 	}
 	return n
 }
 
-func (skd *SigningKeyDelete) sqlExec(ctx context.Context) (int, error) {
+func (_d *SigningKeyDelete) sqlExec(ctx context.Context) (int, error) {
 	_spec := sqlgraph.NewDeleteSpec(signingkey.Table, sqlgraph.NewFieldSpec(signingkey.FieldID, field.TypeString))
-	if ps := skd.mutation.predicates; len(ps) > 0 {
+	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
 				ps[i](selector)
 			}
 		}
 	}
-	affected, err := sqlgraph.DeleteNodes(ctx, skd.driver, _spec)
+	affected, err := sqlgraph.DeleteNodes(ctx, _d.driver, _spec)
 	if err != nil && sqlgraph.IsConstraintError(err) {
 		err = &ConstraintError{msg: err.Error(), wrap: err}
 	}
-	skd.mutation.done = true
+	_d.mutation.done = true
 	return affected, err
 }
 
 // SigningKeyDeleteOne is the builder for deleting a single SigningKey entity.
 type SigningKeyDeleteOne struct {
-	skd *SigningKeyDelete
+	_d *SigningKeyDelete
 }
 
 // Where appends a list predicates to the SigningKeyDelete builder.
-func (skdo *SigningKeyDeleteOne) Where(ps ...predicate.SigningKey) *SigningKeyDeleteOne {
-	skdo.skd.mutation.Where(ps...)
-	return skdo
+func (_d *SigningKeyDeleteOne) Where(ps ...predicate.SigningKey) *SigningKeyDeleteOne {
+	_d._d.mutation.Where(ps...)
+	return _d
 }
 
 // Exec executes the deletion query.
-func (skdo *SigningKeyDeleteOne) Exec(ctx context.Context) error {
-	n, err := skdo.skd.Exec(ctx)
+func (_d *SigningKeyDeleteOne) Exec(ctx context.Context) error {
+	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
@@ -81,8 +81,8 @@ func (skdo *SigningKeyDeleteOne) Exec(ctx context.Context) error {
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (skdo *SigningKeyDeleteOne) ExecX(ctx context.Context) {
-	if err := skdo.Exec(ctx); err != nil {
+func (_d *SigningKeyDeleteOne) ExecX(ctx context.Context) {
+	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}
 }

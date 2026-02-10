@@ -76,7 +76,7 @@ func (*RpmPackage) scanValues(columns []string) ([]any, error) {
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
 // to the RpmPackage fields.
-func (rp *RpmPackage) assignValues(columns []string, values []any) error {
+func (_m *RpmPackage) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
@@ -87,52 +87,52 @@ func (rp *RpmPackage) assignValues(columns []string, values []any) error {
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
-			rp.ID = int(value.Int64)
+			_m.ID = int(value.Int64)
 		case rpmpackage.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
-				rp.Name = value.String
+				_m.Name = value.String
 			}
 		case rpmpackage.FieldEpoch:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field epoch", values[i])
 			} else if value.Valid {
-				rp.Epoch = int(value.Int64)
+				_m.Epoch = int(value.Int64)
 			}
 		case rpmpackage.FieldVersion:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field version", values[i])
 			} else if value.Valid {
-				rp.Version = value.String
+				_m.Version = value.String
 			}
 		case rpmpackage.FieldRelease:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field release", values[i])
 			} else if value.Valid {
-				rp.Release = value.String
+				_m.Release = value.String
 			}
 		case rpmpackage.FieldArch:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field arch", values[i])
 			} else if value.Valid {
-				rp.Arch = value.String
+				_m.Arch = value.String
 			}
 		case rpmpackage.FieldFilePath:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field file_path", values[i])
 			} else if value.Valid {
-				rp.FilePath = value.String
+				_m.FilePath = value.String
 			}
 		case rpmpackage.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field repo_rpms", values[i])
 			} else if value.Valid {
-				rp.repo_rpms = new(string)
-				*rp.repo_rpms = value.String
+				_m.repo_rpms = new(string)
+				*_m.repo_rpms = value.String
 			}
 		default:
-			rp.selectValues.Set(columns[i], values[i])
+			_m.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
@@ -140,55 +140,55 @@ func (rp *RpmPackage) assignValues(columns []string, values []any) error {
 
 // Value returns the ent.Value that was dynamically selected and assigned to the RpmPackage.
 // This includes values selected through modifiers, order, etc.
-func (rp *RpmPackage) Value(name string) (ent.Value, error) {
-	return rp.selectValues.Get(name)
+func (_m *RpmPackage) Value(name string) (ent.Value, error) {
+	return _m.selectValues.Get(name)
 }
 
 // QueryRepo queries the "repo" edge of the RpmPackage entity.
-func (rp *RpmPackage) QueryRepo() *RepoQuery {
-	return NewRpmPackageClient(rp.config).QueryRepo(rp)
+func (_m *RpmPackage) QueryRepo() *RepoQuery {
+	return NewRpmPackageClient(_m.config).QueryRepo(_m)
 }
 
 // Update returns a builder for updating this RpmPackage.
 // Note that you need to call RpmPackage.Unwrap() before calling this method if this RpmPackage
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (rp *RpmPackage) Update() *RpmPackageUpdateOne {
-	return NewRpmPackageClient(rp.config).UpdateOne(rp)
+func (_m *RpmPackage) Update() *RpmPackageUpdateOne {
+	return NewRpmPackageClient(_m.config).UpdateOne(_m)
 }
 
 // Unwrap unwraps the RpmPackage entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (rp *RpmPackage) Unwrap() *RpmPackage {
-	_tx, ok := rp.config.driver.(*txDriver)
+func (_m *RpmPackage) Unwrap() *RpmPackage {
+	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
 		panic("ent: RpmPackage is not a transactional entity")
 	}
-	rp.config.driver = _tx.drv
-	return rp
+	_m.config.driver = _tx.drv
+	return _m
 }
 
 // String implements the fmt.Stringer.
-func (rp *RpmPackage) String() string {
+func (_m *RpmPackage) String() string {
 	var builder strings.Builder
 	builder.WriteString("RpmPackage(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", rp.ID))
+	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("name=")
-	builder.WriteString(rp.Name)
+	builder.WriteString(_m.Name)
 	builder.WriteString(", ")
 	builder.WriteString("epoch=")
-	builder.WriteString(fmt.Sprintf("%v", rp.Epoch))
+	builder.WriteString(fmt.Sprintf("%v", _m.Epoch))
 	builder.WriteString(", ")
 	builder.WriteString("version=")
-	builder.WriteString(rp.Version)
+	builder.WriteString(_m.Version)
 	builder.WriteString(", ")
 	builder.WriteString("release=")
-	builder.WriteString(rp.Release)
+	builder.WriteString(_m.Release)
 	builder.WriteString(", ")
 	builder.WriteString("arch=")
-	builder.WriteString(rp.Arch)
+	builder.WriteString(_m.Arch)
 	builder.WriteString(", ")
 	builder.WriteString("file_path=")
-	builder.WriteString(rp.FilePath)
+	builder.WriteString(_m.FilePath)
 	builder.WriteByte(')')
 	return builder.String()
 }

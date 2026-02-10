@@ -63,6 +63,16 @@ func IDContainsFold(id string) predicate.Repo {
 	return predicate.Repo(sql.FieldContainsFold(FieldID, id))
 }
 
+// TetsudouURL applies equality check predicate on the "tetsudou_url" field. It's identical to TetsudouURLEQ.
+func TetsudouURL(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEQ(FieldTetsudouURL, v))
+}
+
+// TetsudouToken applies equality check predicate on the "tetsudou_token" field. It's identical to TetsudouTokenEQ.
+func TetsudouToken(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEQ(FieldTetsudouToken, v))
+}
+
 // TypeEQ applies the EQ predicate on the "type" field.
 func TypeEQ(v Type) predicate.Repo {
 	return predicate.Repo(sql.FieldEQ(FieldType, v))
@@ -81,6 +91,156 @@ func TypeIn(vs ...Type) predicate.Repo {
 // TypeNotIn applies the NotIn predicate on the "type" field.
 func TypeNotIn(vs ...Type) predicate.Repo {
 	return predicate.Repo(sql.FieldNotIn(FieldType, vs...))
+}
+
+// TetsudouURLEQ applies the EQ predicate on the "tetsudou_url" field.
+func TetsudouURLEQ(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEQ(FieldTetsudouURL, v))
+}
+
+// TetsudouURLNEQ applies the NEQ predicate on the "tetsudou_url" field.
+func TetsudouURLNEQ(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldNEQ(FieldTetsudouURL, v))
+}
+
+// TetsudouURLIn applies the In predicate on the "tetsudou_url" field.
+func TetsudouURLIn(vs ...string) predicate.Repo {
+	return predicate.Repo(sql.FieldIn(FieldTetsudouURL, vs...))
+}
+
+// TetsudouURLNotIn applies the NotIn predicate on the "tetsudou_url" field.
+func TetsudouURLNotIn(vs ...string) predicate.Repo {
+	return predicate.Repo(sql.FieldNotIn(FieldTetsudouURL, vs...))
+}
+
+// TetsudouURLGT applies the GT predicate on the "tetsudou_url" field.
+func TetsudouURLGT(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldGT(FieldTetsudouURL, v))
+}
+
+// TetsudouURLGTE applies the GTE predicate on the "tetsudou_url" field.
+func TetsudouURLGTE(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldGTE(FieldTetsudouURL, v))
+}
+
+// TetsudouURLLT applies the LT predicate on the "tetsudou_url" field.
+func TetsudouURLLT(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldLT(FieldTetsudouURL, v))
+}
+
+// TetsudouURLLTE applies the LTE predicate on the "tetsudou_url" field.
+func TetsudouURLLTE(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldLTE(FieldTetsudouURL, v))
+}
+
+// TetsudouURLContains applies the Contains predicate on the "tetsudou_url" field.
+func TetsudouURLContains(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldContains(FieldTetsudouURL, v))
+}
+
+// TetsudouURLHasPrefix applies the HasPrefix predicate on the "tetsudou_url" field.
+func TetsudouURLHasPrefix(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldHasPrefix(FieldTetsudouURL, v))
+}
+
+// TetsudouURLHasSuffix applies the HasSuffix predicate on the "tetsudou_url" field.
+func TetsudouURLHasSuffix(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldHasSuffix(FieldTetsudouURL, v))
+}
+
+// TetsudouURLIsNil applies the IsNil predicate on the "tetsudou_url" field.
+func TetsudouURLIsNil() predicate.Repo {
+	return predicate.Repo(sql.FieldIsNull(FieldTetsudouURL))
+}
+
+// TetsudouURLNotNil applies the NotNil predicate on the "tetsudou_url" field.
+func TetsudouURLNotNil() predicate.Repo {
+	return predicate.Repo(sql.FieldNotNull(FieldTetsudouURL))
+}
+
+// TetsudouURLEqualFold applies the EqualFold predicate on the "tetsudou_url" field.
+func TetsudouURLEqualFold(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEqualFold(FieldTetsudouURL, v))
+}
+
+// TetsudouURLContainsFold applies the ContainsFold predicate on the "tetsudou_url" field.
+func TetsudouURLContainsFold(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldContainsFold(FieldTetsudouURL, v))
+}
+
+// TetsudouTokenEQ applies the EQ predicate on the "tetsudou_token" field.
+func TetsudouTokenEQ(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEQ(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenNEQ applies the NEQ predicate on the "tetsudou_token" field.
+func TetsudouTokenNEQ(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldNEQ(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenIn applies the In predicate on the "tetsudou_token" field.
+func TetsudouTokenIn(vs ...string) predicate.Repo {
+	return predicate.Repo(sql.FieldIn(FieldTetsudouToken, vs...))
+}
+
+// TetsudouTokenNotIn applies the NotIn predicate on the "tetsudou_token" field.
+func TetsudouTokenNotIn(vs ...string) predicate.Repo {
+	return predicate.Repo(sql.FieldNotIn(FieldTetsudouToken, vs...))
+}
+
+// TetsudouTokenGT applies the GT predicate on the "tetsudou_token" field.
+func TetsudouTokenGT(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldGT(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenGTE applies the GTE predicate on the "tetsudou_token" field.
+func TetsudouTokenGTE(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldGTE(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenLT applies the LT predicate on the "tetsudou_token" field.
+func TetsudouTokenLT(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldLT(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenLTE applies the LTE predicate on the "tetsudou_token" field.
+func TetsudouTokenLTE(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldLTE(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenContains applies the Contains predicate on the "tetsudou_token" field.
+func TetsudouTokenContains(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldContains(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenHasPrefix applies the HasPrefix predicate on the "tetsudou_token" field.
+func TetsudouTokenHasPrefix(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldHasPrefix(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenHasSuffix applies the HasSuffix predicate on the "tetsudou_token" field.
+func TetsudouTokenHasSuffix(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldHasSuffix(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenIsNil applies the IsNil predicate on the "tetsudou_token" field.
+func TetsudouTokenIsNil() predicate.Repo {
+	return predicate.Repo(sql.FieldIsNull(FieldTetsudouToken))
+}
+
+// TetsudouTokenNotNil applies the NotNil predicate on the "tetsudou_token" field.
+func TetsudouTokenNotNil() predicate.Repo {
+	return predicate.Repo(sql.FieldNotNull(FieldTetsudouToken))
+}
+
+// TetsudouTokenEqualFold applies the EqualFold predicate on the "tetsudou_token" field.
+func TetsudouTokenEqualFold(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldEqualFold(FieldTetsudouToken, v))
+}
+
+// TetsudouTokenContainsFold applies the ContainsFold predicate on the "tetsudou_token" field.
+func TetsudouTokenContainsFold(v string) predicate.Repo {
+	return predicate.Repo(sql.FieldContainsFold(FieldTetsudouToken, v))
 }
 
 // HasRpms applies the HasEdge predicate on the "rpms" edge.
