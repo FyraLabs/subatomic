@@ -3,8 +3,8 @@ package rpm
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/FyraLabs/subatomic/server/ent"
 	"github.com/samber/lo"
@@ -46,7 +46,7 @@ func GetRpmInfo(file io.ReadSeeker) (*RpmInfo, error) {
 		return nil, err
 	}
 
-	fileName := strings.TrimSuffix(nevra.String(), ".rpm") + lo.Ternary(isSource, ".src.rpm", ".rpm")
+	fileName := FileNameFromNEVRA(*nevra, isSource)
 
 	return &RpmInfo{
 		Name:     nevra.Name,
@@ -59,6 +59,29 @@ func GetRpmInfo(file io.ReadSeeker) (*RpmInfo, error) {
 		Rpm:      rpmPackage,
 		NEVRA:    nevra,
 	}, nil
+}
+
+func FileNameFromNEVRA(nevra rpmutils.NEVRA, isSource bool) string {
+	arch := lo.Ternary(isSource, "src", nevra.Arch)
+	return fmt.Sprintf("%s-%s:%s-%s.%s.rpm", nevra.Name, nevra.Epoch, nevra.Version, nevra.Release, arch)
+}
+
+func FileNameFromParts(name string, epoch int, version string, release string, arch string) string {
+	return FileNameFromNEVRA(rpmutils.NEVRA{
+		Name:    name,
+		Epoch:   strconv.Itoa(epoch),
+		Version: version,
+		Release: release,
+		Arch:    arch,
+	}, arch == "src")
+}
+
+func FileNameFromPackage(pkg ent.RpmPackage) string {
+	return FileNameFromParts(pkg.Name, pkg.Epoch, pkg.Version, pkg.Release, pkg.Arch)
+}
+
+func PackagePath(repoPath string, pkg ent.RpmPackage) string {
+	return filepath.Join(repoPath, FileNameFromPackage(pkg))
 }
 
 func DBPackageToNEVRA(pkg ent.RpmPackage) rpmutils.NEVRA {

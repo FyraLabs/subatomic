@@ -36,6 +36,53 @@ func repoLogger(repoID string) log.Logger {
 
 var logger = logging.Logger
 
+func rpmPackagePaths(repoPath string, pkg ent.RpmPackage) []string {
+	canonicalPath := rpm.PackagePath(repoPath, pkg)
+	if pkg.FilePath == "" {
+		return []string{canonicalPath}
+	}
+
+	storedPath := filepath.Join(repoPath, pkg.FilePath)
+	if storedPath == canonicalPath {
+		return []string{canonicalPath}
+	}
+
+	return []string{canonicalPath, storedPath}
+}
+
+func resolveRpmPackagePath(repoPath string, pkg ent.RpmPackage) (string, error) {
+	paths := rpmPackagePaths(repoPath, pkg)
+	missingPaths := make([]string, 0, len(paths))
+
+	for _, rpmPath := range paths {
+		if _, err := os.Stat(rpmPath); err != nil {
+			if os.IsNotExist(err) {
+				missingPaths = append(missingPaths, rpmPath)
+				continue
+			}
+
+			return "", fmt.Errorf("failed to stat RPM package file %q: %w", rpmPath, err)
+		}
+
+		return rpmPath, nil
+	}
+
+	return "", fmt.Errorf("failed to find RPM package file: none of the expected paths exist: %v", missingPaths)
+}
+
+func removeRpmPackageFile(repoPath string, pkg ent.RpmPackage) (string, error) {
+	rpmPath, err := resolveRpmPackagePath(repoPath, pkg)
+	if err != nil {
+		return "", err
+	}
+
+	if err := os.Remove(rpmPath); err != nil {
+		return "", fmt.Errorf("failed to delete RPM package file %q: %w", rpmPath, err)
+	}
+
+	return rpmPath, nil
+}
+
 type reposRouter struct {
 	*chi.Mux
 	database    *ent.Client
@@ -317,7 +364,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 					SetRelease(info.Release).
 					SetArch(info.Arch).
 					SetRepo(re).
-					SetFilePath(info.FileName).
+					SetFilePath(rpm.FileNameFromParts(info.Name, info.Epoch, info.Version, info.Release, info.Arch)).
 					Save(r.Context())
 				if err != nil {
 					panic(err)
@@ -355,12 +402,11 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 
 		if len(toPrune) > 0 {
 			for _, p := range toPrune {
-				file_delete_path := path.Join(targetDirectory, p.FilePath)
-				// log
-				level.Info(logger).Log("Pruning outdated file", file_delete_path)
-				if err := os.Remove(file_delete_path); err != nil && !os.IsNotExist(err) {
+				deletedPath, err := removeRpmPackageFile(targetDirectory, *p)
+				if err != nil {
 					panic(err)
 				}
+				level.Info(logger).Log("msg", "pruning outdated file", "path", deletedPath)
 			}
 
 			ids := lo.Map(toPrune, func(pkg *ent.RpmPackage, index int) int {
@@ -569,19 +615,29 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 		panic(err)
 	}
 
-	if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(payload.IDs...)).Exec(r.Context()); err != nil {
-		panic(err)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
+	rpmPaths := make([]string, 0, len(rpmPackages))
+	for _, rpmPackage := range rpmPackages {
+		rpmPath, err := resolveRpmPackagePath(targetDirectory, *rpmPackage)
+		if err != nil {
+			level.Error(repoLogger(id)).Log("msg", "failed to resolve RPM package file for deletion", "rpm_id", rpmPackage.ID, "error", err)
+			render.Render(w, r, types.ErrInternalServerError(err))
+			return
+		}
+		rpmPaths = append(rpmPaths, rpmPath)
 	}
 
-	targetDirectory := path.Join(router.environment.StorageDirectory, id)
-	rpmPaths := lo.Map(rpmPackages, func(pkg *ent.RpmPackage, _ int) string {
-		return path.Join(targetDirectory, pkg.FilePath)
-	})
-
 	for _, rpmPath := range rpmPaths {
-		if err := os.Remove(rpmPath); err != nil && !os.IsNotExist(err) {
-			panic(err)
+		if err := os.Remove(rpmPath); err != nil {
+			err := fmt.Errorf("failed to delete RPM package file %q: %w", rpmPath, err)
+			level.Error(repoLogger(id)).Log("msg", "failed to delete RPM package file", "path", rpmPath, "error", err)
+			render.Render(w, r, types.ErrInternalServerError(err))
+			return
 		}
+	}
+
+	if _, err := router.database.RpmPackage.Delete().Where(rpmpackage.IDIn(payload.IDs...)).Exec(r.Context()); err != nil {
+		panic(err)
 	}
 
 	if err := rpm.UpdateRepo(targetDirectory); err != nil {
@@ -682,14 +738,14 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := router.database.RpmPackage.DeleteOne(rpmPackage).Exec(r.Context()); err != nil {
-		panic(err)
+	targetDirectory := path.Join(router.environment.StorageDirectory, id)
+	if _, err := removeRpmPackageFile(targetDirectory, *rpmPackage); err != nil {
+		level.Error(repoLogger(id)).Log("msg", "failed to delete RPM package file", "rpm_id", rpmPackage.ID, "error", err)
+		render.Render(w, r, types.ErrInternalServerError(err))
+		return
 	}
 
-	targetDirectory := path.Join(router.environment.StorageDirectory, id)
-	rpmPath := path.Join(targetDirectory, rpmPackage.FilePath)
-
-	if err := os.Remove(rpmPath); err != nil && !os.IsNotExist(err) {
+	if err := router.database.RpmPackage.DeleteOne(rpmPackage).Exec(r.Context()); err != nil {
 		panic(err)
 	}
 
