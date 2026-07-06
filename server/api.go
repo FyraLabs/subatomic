@@ -49,12 +49,12 @@ func (router *apiRouter) setup() {
 	})
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		if err := render.Render(w, r, types.ErrNotFound(errors.New("route not found"))); err != err {
+		if err := render.Render(w, r, types.ErrNotFound(errors.New("route not found"))); err != nil {
 			panic(err)
 		}
 	})
 	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		if err := render.Render(w, r, types.MethodNotAllowed(errors.New("method not allowed for route"))); err != err {
+		if err := render.Render(w, r, types.MethodNotAllowed(errors.New("method not allowed for route"))); err != nil {
 			panic(err)
 		}
 	})

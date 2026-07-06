@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/FyraLabs/subatomic/server/ent"
+	"github.com/FyraLabs/subatomic/server/ent/signingkey"
 	"github.com/FyraLabs/subatomic/server/types"
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 	"github.com/go-chi/chi/v5"
@@ -69,6 +70,17 @@ func (router *keysRouter) createKey(w http.ResponseWriter, r *http.Request) {
 
 	if err := render.Bind(r, payload); err != nil {
 		render.Render(w, r, types.ErrInvalidRequest(err))
+		return
+	}
+
+	exists, err := router.database.SigningKey.Query().Where(signingkey.IDEQ(payload.ID)).Exist(r.Context())
+
+	if err != nil {
+		panic(err)
+	}
+
+	if exists {
+		render.Render(w, r, types.ErrAlreadyExists(errors.New("key already exists")))
 		return
 	}
 

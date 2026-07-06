@@ -43,7 +43,7 @@ type MRepoCBatchData struct {
 
 func CreateRepo(repoPath string) error {
 	if err := os.MkdirAll(repoPath, os.ModePerm); err != nil {
-		return nil
+		return err
 	}
 
 	if _, err := exec.Command("createrepo_c", repoPath).Output(); err != nil {
@@ -183,11 +183,21 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	ini.PrettyFormat = false
 
 	inifile := ini.Empty()
-	inifile.ReflectFrom(&repoBatch)
+	if err := inifile.ReflectFrom(&repoBatch); err != nil {
+		return nil, err
+	}
 
-	configFileName := fmt.Sprintf("%s-mrepoc.ini", repoName)
-	configPath := path.Join("/tmp", configFileName)
+	configFile, err := os.CreateTemp("", fmt.Sprintf("%s-mrepoc-*.ini", repoName))
+	if err != nil {
+		return nil, err
+	}
+	configPath := configFile.Name()
+	if err := configFile.Close(); err != nil {
+		return nil, err
+	}
+
 	if err := inifile.SaveTo(configPath); err != nil {
+		os.Remove(configPath)
 		return nil, err
 	}
 	level.Debug(logger).Log("msg", "Generated mrepo_c config", "configPath", configPath)
@@ -202,9 +212,13 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 		return err
 	}
 
+	defer func() {
+		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
+		os.Remove(*configPath)
+	}()
+
 	level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "configPath", *configPath)
 
-	// log("Using mrepo_c config at", *configPath)
 	repodataDir := path.Join(repoPath, "repodata")
 	flags := []string{"-f", *configPath, repodataDir}
 
@@ -214,18 +228,6 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 	}
 
 	level.Debug(logger).Log("msg", "Modified repo with mrepo_c successfully")
-	defer func() {
-		level.Debug(logger).Log("msg", "Config file contents", "contents", func() string {
-					b, err := os.ReadFile(*configPath)
-					if err != nil {
-						return fmt.Sprintf("error reading config file: %v", err)
-					}
-					return string(b)
-				}())
-		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
-		os.Remove(*configPath)
-
-	}()
 	return nil
 }
 

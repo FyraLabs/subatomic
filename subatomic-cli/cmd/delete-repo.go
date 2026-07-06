@@ -15,6 +15,7 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete [id]",
 	Short: "Delete a repo",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")

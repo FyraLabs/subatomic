@@ -48,6 +48,8 @@ var keysListCmd = &cobra.Command{
 			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
 				return err
 			}
+
+			return fmt.Errorf("API returned error: %s", serverError.ErrorText)
 		}
 
 		if err := json.NewDecoder(res.Body).Decode(&result); err != nil {

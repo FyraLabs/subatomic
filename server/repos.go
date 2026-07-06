@@ -400,6 +400,13 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
+		// Suppose you upload two packages with the same name, but of different versions.
+		// In that case, toPrune will have two entries of the old package, one for each package that we check for older versions of.
+		// We will delete the package successfully the first time, then fail on the second since the package is already deleted.
+		toPrune = lo.UniqBy(toPrune, func(pkg *ent.RpmPackage) int {
+			return pkg.ID
+		})
+
 		if len(toPrune) > 0 {
 			for _, p := range toPrune {
 				deletedPath, err := removeRpmPackageFile(targetDirectory, *p)
@@ -606,13 +613,13 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 
 	rpmPackages, err := re.QueryRpms().Where(rpmpackage.IDIn(payload.IDs...)).All(r.Context())
 
-	if ent.IsNotFound(err) || len(rpmPackages) != len(payload.IDs) {
-		render.Render(w, r, types.ErrNotFound(errors.New("rpms not found")))
-		return
-	}
-
 	if err != nil {
 		panic(err)
+	}
+
+	if len(rpmPackages) != len(lo.Uniq(payload.IDs)) {
+		render.Render(w, r, types.ErrNotFound(errors.New("rpms not found")))
+		return
 	}
 
 	targetDirectory := path.Join(router.environment.StorageDirectory, id)
@@ -921,7 +928,7 @@ func (router *reposRouter) deleteRepoKey(w http.ResponseWriter, r *http.Request)
 		panic(err)
 	}
 
-	if err := os.Remove(path.Join(router.environment.StorageDirectory, id, "key.asc")); err != nil {
+	if err := os.Remove(path.Join(router.environment.StorageDirectory, id, "key.asc")); err != nil && !os.IsNotExist(err) {
 		panic(err)
 	}
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,6 +19,15 @@ var pkgListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		server := viper.GetString("server")
 		token := viper.GetString("token")
+
+		if server == "" {
+			return errors.New("server must be defined")
+		}
+
+		if token == "" {
+			return errors.New("token must be defined")
+		}
+
 		repo := args[0]
 		// todo: Maybe add a flag to make them a table?
 
@@ -42,6 +52,8 @@ var pkgListCmd = &cobra.Command{
 			if err := json.NewDecoder(res.Body).Decode(&serverError); err != nil {
 				return err
 			}
+
+			return fmt.Errorf("API returned error: %s", serverError.ErrorText)
 		}
 
 		// now decode the response into result

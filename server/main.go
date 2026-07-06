@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	_ "github.com/FyraLabs/subatomic/server/docs"
 	"github.com/FyraLabs/subatomic/server/ent"
@@ -42,6 +43,7 @@ var main_logger log.Logger = log.With(logging.Logger)
 func main() {
 	if err := run(main_logger); err != nil {
 		level.Error(main_logger).Log("msg", "fatal error", "error", err)
+		os.Exit(1)
 	}
 }
 
