@@ -14,7 +14,10 @@ tracing-logfmt = "0.3.7"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 
-[lints.clippy]
+[lints]
+workspace = true
+
+[workspace.lints.clippy]
 complexity = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }

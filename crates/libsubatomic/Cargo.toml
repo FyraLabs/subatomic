@@ -10,3 +10,7 @@ path = "./lib.rs"
 quick-xml = { version = "0.41.0", features = ["serialize"] }
 rpm = "0.25.1"
 serde = { version = "1.0.229", features = ["derive"] }
+smartstring = { version = "1.0.1", features = ["serde"] }
+
+[lints]
+workspace = true

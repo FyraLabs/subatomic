@@ -1,4 +1,4 @@
-use serde::Serialize;
+use crate::prelude::*;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "metadata")]
@@ -45,9 +45,9 @@ pub struct Version {
 #[derive(Clone, Debug, Serialize)]
 pub struct PackageChecksum {
     #[serde(rename = "@type")]
-    pub checksum_type: String,
+    pub checksum_type: &'static str = "YES",
     #[serde(rename = "@pkgid")]
-    pub pkgid: String,
+    pub pkgid: &'static str = "YES",
     #[serde(rename = "$text")]
     pub value: String,
 }
@@ -90,16 +90,22 @@ pub struct Format {
     pub sourcerpm: String,
     #[serde(rename = "rpm:header-range")]
     pub header_range: HeaderRange,
-    #[serde(rename = "rpm:provides")]
-    pub provides: Provides,
-    #[serde(rename = "rpm:requires")]
-    pub requires: Requires,
-    #[serde(rename = "rpm:obsoletes", default, skip_serializing_if = "Option::is_none")]
-    pub obsoletes: Option<Obsoletes>,
-    #[serde(rename = "rpm:recommends", default, skip_serializing_if = "Option::is_none")]
-    pub recommends: Option<Recommends>,
-    #[serde(rename = "rpm:supplements", default, skip_serializing_if = "Option::is_none")]
-    pub supplements: Option<Supplements>,
+    #[serde(rename = "rpm:requires", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub requires: Dependencies,
+    #[serde(rename = "rpm:provides", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub provides: Dependencies,
+    #[serde(rename = "rpm:conflicts", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub conflicts: Dependencies,
+    #[serde(rename = "rpm:obsoletes", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub obsoletes: Dependencies,
+    #[serde(rename = "rpm:recommends", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub recommends: Dependencies,
+    #[serde(rename = "rpm:suggests", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub suggests: Dependencies,
+    #[serde(rename = "rpm:supplements", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub supplements: Dependencies,
+    #[serde(rename = "rpm:enhances", default, skip_serializing_if = "Dependencies::is_empty")]
+    pub enhances: Dependencies,
     #[serde(rename = "file", default)]
     pub files: Vec<String>,
 }
@@ -112,34 +118,16 @@ pub struct HeaderRange {
     pub end: u64,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
-pub struct Provides {
+#[derive(Clone, Debug, Serialize)]
+pub struct Dependencies {
     #[serde(rename = "rpm:entry", default)]
     pub entries: Vec<Entry>,
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
-pub struct Requires {
-    #[serde(rename = "rpm:entry", default)]
-    pub entries: Vec<Entry>,
-}
-
-#[derive(Clone, Debug, Serialize, Default)]
-pub struct Obsoletes {
-    #[serde(rename = "rpm:entry", default)]
-    pub entries: Vec<Entry>,
-}
-
-#[derive(Clone, Debug, Serialize, Default)]
-pub struct Recommends {
-    #[serde(rename = "rpm:entry", default)]
-    pub entries: Vec<Entry>,
-}
-
-#[derive(Clone, Debug, Serialize, Default)]
-pub struct Supplements {
-    #[serde(rename = "rpm:entry", default)]
-    pub entries: Vec<Entry>,
+impl Dependencies {
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
