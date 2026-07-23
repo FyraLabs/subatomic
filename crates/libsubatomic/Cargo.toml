@@ -1,0 +1,12 @@
+[package]
+name = "libsubatomic"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies]
+quick-xml = { version = "0.41.0", features = ["serialize"] }
+rpm = "0.25.1"
+serde = { version = "1.0.229", features = ["derive"] }

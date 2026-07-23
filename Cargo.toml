@@ -1,0 +1,55 @@
+[workspace]
+members = ["crates/libsubatomic"]
+
+[package]
+name = "subatomic"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.9"
+tokio = { version = "1.53.1", features = ["full"] }
+tracing = "0.1.44"
+tracing-logfmt = "0.3.7"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+
+[lints.clippy]
+complexity = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+disallowed-macros = "deny"
+excessive-nesting = "warn"
+
+assertions_on_result_states = "warn"
+clone_on_ref_ptr = "warn"
+create_dir = "warn"
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+field_scoped_visibility_modifiers = "deny"
+format_push_string = "warn"
+get_unwrap = "warn"
+if_then_some_else_none = "warn"
+impl_trait_in_params = "warn"
+infinite_loop = "deny"
+let_underscore_must_use = "deny"
+let_underscore_untyped = "warn"
+needless_raw_strings = "warn"
+rc_buffer = "warn"
+rc_mutex = "deny"
+redundant_type_annotations = "warn"
+renamed_function_params = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+semicolon_outside_block = "warn"
+str_to_string = "warn"
+string_lit_chars_any = "warn"
+tests_outside_test_module = "warn"
+todo = "warn"
+try_err = "warn"
+undocumented_unsafe_blocks = "deny"
+unimplemented = "warn"
+unneeded_field_pattern = "warn"
+unwrap_in_result = "warn"
+needless_for_each = "allow"
