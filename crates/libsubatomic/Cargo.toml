@@ -7,9 +7,11 @@ edition = "2024"
 path = "./lib.rs"
 
 [dependencies]
+hex = "0.4.3"
 quick-xml = { version = "0.41.0", features = ["serialize"] }
 rpm = "0.25.1"
 serde = { version = "1.0.229", features = ["derive"] }
+sha2 = "0.11.0"
 smartstring = { version = "1.0.1", features = ["serde"] }
 
 [lints]

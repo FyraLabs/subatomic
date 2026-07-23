@@ -1,4 +1,7 @@
-use crate::prelude::*;
+use crate::{
+    pkg::{Changelog, Version},
+    prelude::*,
+};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "otherdata")]
@@ -20,27 +23,7 @@ pub struct OtherPackage {
     pub name: String,
     #[serde(rename = "@arch")]
     pub arch: String,
-    pub version: OtherVersion,
+    pub version: Version,
     #[serde(rename = "changelog", default)]
     pub changelogs: Vec<Changelog>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct OtherVersion {
-    #[serde(rename = "@epoch")]
-    pub epoch: String,
-    #[serde(rename = "@ver")]
-    pub ver: String,
-    #[serde(rename = "@rel")]
-    pub rel: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Changelog {
-    #[serde(rename = "@author")]
-    pub author: String,
-    #[serde(rename = "@date")]
-    pub date: i64,
-    #[serde(rename = "$text")]
-    pub text: String,
 }

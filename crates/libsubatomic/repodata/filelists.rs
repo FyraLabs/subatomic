@@ -1,4 +1,7 @@
-use crate::prelude::*;
+use crate::{
+    pkg::{FileEntry, Version},
+    prelude::*,
+};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "filelists")]
@@ -20,25 +23,7 @@ pub struct FilelistsPackage {
     pub name: String,
     #[serde(rename = "@arch")]
     pub arch: String,
-    pub version: FilelistsVersion,
+    pub version: Version,
     #[serde(rename = "file")]
     pub files: Vec<FileEntry>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct FilelistsVersion {
-    #[serde(rename = "@epoch")]
-    pub epoch: String,
-    #[serde(rename = "@ver")]
-    pub ver: String,
-    #[serde(rename = "@rel")]
-    pub rel: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct FileEntry {
-    #[serde(rename = "@type", default, skip_serializing_if = "Option::is_none")]
-    pub file_type: Option<String>, // "dir" for directories, None for regular files
-    #[serde(rename = "$text")]
-    pub path: String,
 }
