@@ -31,6 +31,7 @@ pub struct Package {
     /// [`crate::repodata::primary::PrimaryMetadata`] they are stored only if
     /// [`FileEntry::is_primary()`].
     pub format: Format,
+    pub changelog: Vec<Changelog>,
 }
 impl TryFrom<&std::path::Path> for Package {
     type Error = rpm::Error;
@@ -86,6 +87,7 @@ impl TryFrom<&std::path::Path> for Package {
                 enhances: Dependencies::from(rpm.get_enhances()?),
                 files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
             },
+            changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
         })
     }
 }
@@ -223,7 +225,7 @@ fn is_zero(&n: &u64) -> bool {
     n == 0
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Entry {
     #[serde(rename = "@name")]
     pub name: String,
@@ -249,7 +251,7 @@ impl From<rpm::Dependency> for Entry {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct FileEntry {
     #[serde(rename = "@type", default, skip_serializing_if = "FileType::is_normal")]
     pub file_type: FileType = FileType::Normal,
@@ -315,7 +317,12 @@ pub struct Changelog {
     #[serde(rename = "@author")]
     pub author: String,
     #[serde(rename = "@date")]
-    pub date: i64,
+    pub date: u64,
     #[serde(rename = "$text")]
     pub text: String,
+}
+impl From<rpm::ChangelogEntry> for Changelog {
+    fn from(rpm::ChangelogEntry { name, timestamp, description }: rpm::ChangelogEntry) -> Self {
+        Self { author: name.into(), date: timestamp, text: description.into() }
+    }
 }

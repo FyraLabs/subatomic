@@ -20,9 +20,9 @@ pub struct FilelistsPackage<'a> {
     pub name: &'a str,
     #[serde(rename = "@arch")]
     pub arch: &'a str,
-    pub version: crate::pkg::Version,
+    pub version: &'a crate::pkg::Version,
     #[serde(rename = "file")]
-    pub files: Vec<crate::pkg::FileEntry>,
+    pub files: &'a [crate::pkg::FileEntry],
 }
 
 impl<'a> FilelistsPackage<'a> {
@@ -31,8 +31,8 @@ impl<'a> FilelistsPackage<'a> {
             pkgid: &p.checksum,
             name: &p.name,
             arch: &p.arch,
-            version: p.version.clone(),
-            files: p.format.files.clone(),
+            version: &p.version,
+            files: &p.format.files,
         }
     }
 }
