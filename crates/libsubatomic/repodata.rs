@@ -23,6 +23,7 @@ pub struct RepoCache {
 
 impl RepoCache {
     pub fn new(repo: &str, path: &Path) -> heed::Result<Self> {
+        // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
             .read_txn_without_tls()
@@ -54,7 +55,7 @@ impl RepoCache {
         frags: impl IntoIterator<Item = &'a RepoCacheFragment>,
     ) {
         self.write(move |db, txn| {
-            frags.into_iter().for_each(|frag| db.put(txn, key, frag).expect("can't put frag"))
+            frags.into_iter().for_each(|frag| db.put(txn, key, frag).expect("can't put frag"));
         });
     }
 
@@ -77,37 +78,66 @@ impl<'f> RepoWriteDispatcher<'f> {
         repocache: &RepoCache,
         [pri, fil, oth]: [&'f mut std::fs::File; 3],
     ) -> std::io::Result<()> {
-        [Self::Primary(pri), Self::Filelists(fil), Self::Other(oth)].into_par_iter().try_for_each(|disp| {
-            repocache.read(|db, txn| {
-                let l = db.len(txn).expect("can't get db len");
-                let frags = db.iter(txn).expect("can't iter frags");
-                let frags = frags.into_iter().map(|r| r.expect("can't get item in iter").1);
-                match disp {
-                    Self::Primary(file) => {
-                        write!(file, r#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{l}">"#)?;
-                        for frag in frags {
-                            write!(file, "{}", frag.primary)?;
-                        }
-                        write!(file, "</metadata>")?;
-                    },
-                    Self::Filelists(file) => {
-                        write!(file, r#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{l}">"#)?;
-                        for frag in frags {
-                            write!(file, "{}", frag.filelists)?;
-                        }
-                        write!(file, "</filelists>")?;
-                    },
-                    Self::Other(file) => {
-                        write!(file, r#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{l}">"#)?;
-                        for frag in frags {
-                            write!(file, "{}", frag.other)?;
-                        }
-                        write!(file, "</otherdata>")?;
-                    },
-                }
-                Ok(())
-            })
-        })
+        [Self::Primary(pri), Self::Filelists(fil), Self::Other(oth)]
+            .into_par_iter()
+            .try_for_each(|mut disp| repocache.read(|db, txn| disp.process(db, txn)))
+    }
+
+    fn process(&mut self, db: &RepoCacheDb, txn: &heed::RoTxn<'_>) -> Result<(), std::io::Error> {
+        let l = db.len(txn).expect("can't get db len");
+        let frags = db.iter(txn).expect("can't iter frags");
+        let frags = frags.into_iter().map(|r| r.expect("can't get item in iter").1);
+        match self {
+            Self::Primary(file) => Self::write_primary(l, frags, file),
+            Self::Filelists(file) => Self::write_filelists(l, frags, file),
+            Self::Other(file) => Self::write_other(l, frags, file),
+        }
+    }
+
+    fn write_primary(
+        l: u64,
+        frags: impl Iterator<Item = RepoCacheFragment>,
+        file: &mut std::fs::File,
+    ) -> Result<(), std::io::Error> {
+        write!(
+            file,
+            r#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{l}">"#
+        )?;
+        for frag in frags {
+            write!(file, "{}", frag.primary)?;
+        }
+        write!(file, "</metadata>")?;
+        Ok(())
+    }
+    fn write_filelists(
+        l: u64,
+        frags: impl Iterator<Item = RepoCacheFragment>,
+        file: &mut std::fs::File,
+    ) -> Result<(), std::io::Error> {
+        write!(
+            file,
+            r#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{l}">"#
+        )?;
+        for frag in frags {
+            write!(file, "{}", frag.filelists)?;
+        }
+        write!(file, "</filelists>")?;
+        Ok(())
+    }
+    fn write_other(
+        l: u64,
+        frags: impl Iterator<Item = RepoCacheFragment>,
+        file: &mut std::fs::File,
+    ) -> Result<(), std::io::Error> {
+        write!(
+            file,
+            r#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{l}">"#
+        )?;
+        for frag in frags {
+            write!(file, "{}", frag.other)?;
+        }
+        write!(file, "</otherdata>")?;
+        Ok(())
     }
 }
 
