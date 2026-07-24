@@ -52,6 +52,7 @@ pub struct PackageLocation<'a> {
 }
 
 impl<'a> Package<'a> {
+    #[must_use]
     pub fn from_pkg(
         crate::pkg::Package {
             name,
@@ -70,7 +71,8 @@ impl<'a> Package<'a> {
         path: &'a std::path::Path,
     ) -> Self {
         let mut format = format.clone();
-        format.files = format.files.into_iter().filter(|f| f.is_primary()).collect();
+        format.files =
+            format.files.into_iter().filter(super::super::pkg::FileEntry::is_primary).collect();
         Self {
             name,
             arch,

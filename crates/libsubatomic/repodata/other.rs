@@ -29,6 +29,7 @@ pub struct OtherPackage<'a> {
 }
 
 impl<'a> OtherPackage<'a> {
+    #[must_use]
     pub fn from_pkg(p: &'a crate::pkg::Package) -> Self {
         Self {
             pkgid: &p.checksum,

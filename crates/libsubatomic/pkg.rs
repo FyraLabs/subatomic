@@ -57,17 +57,17 @@ impl TryFrom<&std::path::Path> for Package {
             description: rpm.get_description()?.into(),
             packager: rpm.get_packager()?.into(),
             url: rpm.get_url()?.into(),
-            time: Time { file: btime, build: rpm.get_build_time()?.into() },
+            time: Time { file: btime, build: rpm.get_build_time()? },
             size: Size {
                 package: meta.size(),
-                installed: rpm.get_installed_size()?.into(),
+                installed: rpm.get_installed_size()?,
                 archive: rpm
                     .header
                     .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
                     .or_else(|_e| {
                         rpm.header
                             .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                            .map(|v| v as u64)
+                            .map(u64::from)
                     })?,
             },
             format: Format {
@@ -76,7 +76,7 @@ impl TryFrom<&std::path::Path> for Package {
                 group: rpm.get_group()?.into(),
                 buildhost: rpm.get_build_host()?.into(),
                 sourcerpm: rpm.get_source_rpm()?.into(),
-                header_range: Package::get_header_byte_range(&mut f)?,
+                header_range: Self::get_header_byte_range(&mut f)?,
                 requires: Dependencies::from(rpm.get_requires()?),
                 provides: Dependencies::from(rpm.get_provides()?),
                 conflicts: Dependencies::from(rpm.get_conflicts()?),
@@ -134,11 +134,12 @@ pub struct Version {
     pub rel: String,
 }
 impl Version {
+    #[must_use]
     pub fn parse(value: &str) -> Self {
         let (epoch, value) = (value.split_once(':'))
             .and_then(|(e, v)| Some((e.parse().ok()?, v)))
             .unwrap_or((0, value));
-        let (ver, rel) = value.split_once("-").unwrap_or((value, ""));
+        let (ver, rel) = value.split_once('-').unwrap_or((value, ""));
         let (ver, rel) = (ver.into(), rel.into());
         Self { epoch, ver, rel }
     }
@@ -221,7 +222,7 @@ impl From<Vec<rpm::Dependency>> for Dependencies {
     }
 }
 
-fn is_zero(&n: &u64) -> bool {
+const fn is_zero(&n: &u64) -> bool {
     n == 0
 }
 
@@ -243,11 +244,11 @@ impl From<rpm::Dependency> for Entry {
         let name = name.into();
         let flags = flags.comparator_str();
         if flags.is_empty() {
-            return Entry { name, .. };
-        };
+            return Self { name, .. };
+        }
         let Version { epoch, ver, rel } = Version::parse(&version);
         let (ver, rel) = (Some(ver), Some(rel));
-        Entry { name, flags, epoch, ver, rel }
+        Self { name, flags, epoch, ver, rel }
     }
 }
 
@@ -266,7 +267,7 @@ impl FileEntry {
     // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.h#L111
     #[must_use]
     pub fn is_primary(&self) -> bool {
-        const BIN: &'static [u8] = b"bin/";
+        const BIN: &[u8] = b"bin/";
 
         let p = self.path.as_os_str().as_encoded_bytes();
 

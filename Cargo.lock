@@ -1473,6 +1473,7 @@ dependencies = [
  "serde",
  "sha2 0.11.0",
  "smartstring",
+ "zstd",
 ]
 
 [[package]]

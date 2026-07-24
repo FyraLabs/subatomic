@@ -17,9 +17,9 @@ pub enum DataType {
     Primary,
     Filelists,
     Other,
-    PrimaryZck,
-    FilelistsZck,
-    OtherZck,
+    // PrimaryZck,
+    // FilelistsZck,
+    // OtherZck,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -50,4 +50,11 @@ pub struct Data {
 pub struct Location {
     #[serde(rename = "@href")]
     pub href: String,
+}
+
+impl Repomd {
+    #[must_use]
+    pub fn generate() {
+        todo!()
+    }
 }

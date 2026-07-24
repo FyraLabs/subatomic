@@ -26,6 +26,7 @@ pub struct FilelistsPackage<'a> {
 }
 
 impl<'a> FilelistsPackage<'a> {
+    #[must_use]
     pub fn from_pkg(p: &'a crate::pkg::Package) -> Self {
         Self {
             pkgid: &p.checksum,
