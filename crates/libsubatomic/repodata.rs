@@ -11,9 +11,10 @@ pub mod repomd;
 use sha2::Digest;
 
 use crate::prelude::*;
-use std::io::{Read, Seek, Write};
+use std::io::Write;
 use std::os::linux::fs::MetadataExt;
 use std::path::Path;
+use tracing::{debug, info, trace, warn};
 
 pub type RepoCacheDb =
     heed::Database<heed::types::Str, heed::types::SerdeBincode<RepoCacheFragment>>;
@@ -44,6 +45,7 @@ impl RepoCache {
     const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024;
 
     pub fn new(repo: &str, path: &Path) -> heed::Result<Self> {
+        debug!(repo, path = %path.display(), "opening cache");
         // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
@@ -52,18 +54,22 @@ impl RepoCache {
                 .map_size(Self::DEFAULT_MAP_SIZE)
                 .open(path)?
         };
+        trace!(repo, "cache opened");
         Ok(Self { repo: repo.into(), env, .. })
     }
 
     fn write<T>(&self, f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> heed::Result<T>) -> heed::Result<T> {
+        trace!(repo = %self.repo, "starting write txn");
         let mut txn = self.env.write_txn().expect("cannot create rw txn");
         let db = self.env.create_database(&mut txn, Some(&self.repo)).expect("cannot create db");
         match f(&db, &mut txn) {
             Ok(v) => {
                 txn.commit().expect("can't commit");
+                trace!(repo = %self.repo, "write txn committed");
                 Ok(v)
             }
             Err(e) => {
+                warn!(repo = %self.repo, error = %e, "write txn failed, aborting");
                 txn.abort();
                 Err(e)
             }
@@ -71,10 +77,13 @@ impl RepoCache {
     }
 
     fn read<T>(&self, f: impl FnOnce(&RepoCacheDb, &heed::RoTxn<'_>) -> T) -> T {
+        trace!(repo = %self.repo, "starting read txn");
         let txn = self.env.read_txn().expect("cannot create rw txn");
         let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))
             .expect("db doesn't exist?");
-        f(&db, &txn)
+        let res = f(&db, &txn);
+        trace!(repo = %self.repo, "read txn finished");
+        res
     }
 
     /// Insert packages into the cache.
@@ -92,9 +101,11 @@ impl RepoCache {
         pkgs: I,
     ) -> heed::Result<()> {
         let pkgs: Vec<_> = pkgs.into_iter().collect();
+        info!(count = pkgs.len(), "generating xml fragments in parallel");
         let fragments: Vec<(std::string::String, RepoCacheFragment)> = pkgs
             .into_par_iter()
             .map(|(pkg, path)| {
+                trace!(name = %pkg.name, "serializing package");
                 let key = format!(
                     "{}-{}:{}-{}.{}",
                     pkg.name, pkg.version.epoch, pkg.version.ver, pkg.version.rel, pkg.arch
@@ -102,6 +113,7 @@ impl RepoCache {
                 (key, RepoCacheFragment::new(pkg, path))
             })
             .collect();
+        trace!(count = fragments.len(), "writing fragments to cache");
         self.write(move |db, txn| {
             fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, &key, &frag))
         })
@@ -110,6 +122,7 @@ impl RepoCache {
     /// Check whether a key already exists in the cache.
     #[must_use]
     pub fn has(&self, key: &str) -> bool {
+        trace!(key, "checking cache key");
         self.read(|db, txn| db.get(txn, key).expect("cannot check key")).is_some()
     }
 
@@ -118,6 +131,7 @@ impl RepoCache {
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
     pub fn insert(&self, key: &str, pkg: &crate::pkg::Package, path: &Path) -> heed::Result<()> {
+        trace!(key, path = %path.display(), "inserting single package");
         self.write(|db, txn| db.put(txn, key, &RepoCacheFragment::new(pkg, path)))
     }
 
@@ -134,12 +148,14 @@ impl RepoCache {
 
     /// Collect every key currently stored in the cache.
     pub fn keys(&self) -> Vec<std::string::String> {
+        debug!(repo = %self.repo, "listing cache keys");
         self.read(|db, txn| {
             let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0) as usize);
             for item in db.iter(txn).expect("cannot iterate db") {
                 let (k, _v) = item.expect("cannot read db item");
                 out.push(k.into());
             }
+            trace!(count = out.len(), "collected cache keys");
             out
         })
     }
@@ -149,6 +165,7 @@ impl RepoCache {
     /// # Errors
     /// This propagates errors from [`heed::Database::delete`].
     pub fn remove(&self, key: &str) -> heed::Result<bool> {
+        trace!(key, "removing cache key");
         self.write(|db, txn| db.delete(txn, key))
     }
 
@@ -160,11 +177,16 @@ impl RepoCache {
     /// This propagates errors from LMDB write operations.
     pub fn prune(&self, expected: &std::collections::HashSet<&str>) -> heed::Result<u64> {
         let to_remove: Vec<_> = self.keys().into_iter().filter(|k| !expected.contains(k.as_str())).collect();
+        debug!(stale = to_remove.len(), "pruning cache");
         let mut count = 0u64;
         for key in to_remove {
+            trace!(key, "pruning stale key");
             if self.write(|db, txn| db.delete(txn, &key))? {
                 count += 1;
             }
+        }
+        if count > 0 {
+            info!(removed = count, "cache pruned");
         }
         Ok(count)
     }
@@ -175,6 +197,7 @@ impl RepoCache {
     }
 
     pub fn write_all(&self, dir: &Path, tempdir: &Path) -> std::io::Result<()> {
+        info!(dir = %dir.display(), tempdir = %tempdir.display(), "writing repodata");
         let filepaths = [
             tempdir.join("primary.xml.zst"),
             tempdir.join("filelists.xml.zst"),
@@ -213,11 +236,6 @@ impl RepoCache {
         let mut fd_repomd = std::fs::File::create(dir.join("repomd.xml"))?;
         repomd::Repomd::generate(&mut fd_repomd, data.into_iter().collect())
             .expect("cannot write to repomd");
-
-        let pos = fd_repomd.stream_position()?;
-        fd_repomd.seek(std::io::SeekFrom::Start(0))?;
-        let mut buf = Vec::with_capacity(pos as usize);
-        fd_repomd.read_to_end(&mut buf)?;
         // TODO: sign
 
         Ok(())
@@ -349,6 +367,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
         repocache: &RepoCache,
         [pri, fil, oth]: &'f mut [RepoWriter<'r>; 3],
     ) -> std::io::Result<()> {
+        debug!("dispatching parallel xml writes");
         [Self::Primary(pri), Self::Filelists(fil), Self::Other(oth)]
             .into_par_iter()
             .try_for_each(|mut disp| repocache.read(|db, txn| disp.process(db, txn)))
@@ -356,6 +375,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
 
     fn process(&mut self, db: &RepoCacheDb, txn: &heed::RoTxn<'_>) -> Result<(), std::io::Error> {
         let l = db.len(txn).expect("can't get db len");
+        trace!(count = l, "reading fragments from cache");
         let frags = db.iter(txn).expect("can't iter frags");
         let frags = frags.into_iter().map(|r| r.expect("can't get item in iter").1);
         match self {
@@ -422,23 +442,28 @@ pub struct RepoCacheFragment {
 impl RepoCacheFragment {
     #[must_use]
     fn new(pkg: &crate::pkg::Package, path: &Path) -> Self {
+        trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
         let mut frag = Self::default();
         frag.update_primary(pkg, path);
         frag.update_filelists(pkg);
         frag.update_other(pkg);
+        trace!(name = %pkg.name, "cache fragment complete");
         frag
     }
     fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &Path) {
+        trace!(name = %pkg.name, "serializing primary.xml");
         quick_xml::se::to_writer(&mut self.primary, &primary::Package::from_pkg(pkg, path))
             .expect("cannot serialize");
     }
 
     fn update_filelists(&mut self, pkg: &crate::pkg::Package) {
+        trace!(name = %pkg.name, "serializing filelists.xml");
         quick_xml::se::to_writer(&mut self.filelists, &filelists::FilelistsPackage::from_pkg(pkg))
             .expect("cannot serialize");
     }
 
     fn update_other(&mut self, pkg: &crate::pkg::Package) {
+        trace!(name = %pkg.name, "serializing other.xml");
         quick_xml::se::to_writer(&mut self.other, &other::OtherPackage::from_pkg(pkg))
             .expect("cannot serialize");
     }

@@ -1585,6 +1585,8 @@ dependencies = [
  "sha2 0.11.0",
  "smartstring",
  "tempfile",
+ "tracing",
+ "tracing-subscriber",
  "zstd",
 ]
 
