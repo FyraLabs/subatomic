@@ -1,6 +1,6 @@
 use rpm::signature::Signing;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mgr {
     private: pgp::composed::SignedSecretKey,
 }
@@ -15,14 +15,14 @@ impl Mgr {
     ///
     /// # Errors
     /// Header parsing errors and signing errors are returned.
-    pub fn sign_rpm(&self, rpm: &mut rpm::PackageMetadata) -> Result<(), rpm::Error> {
+    pub fn sign_rpm(&self, rpm: &rpm::PackageMetadata) -> Result<Vec<u8>, rpm::Error> {
         // TODO: we should send the signature to the cli for gh attest.
         let signer = rpm::signature::pgp::Signer::new(self.private.primary_key.clone())?;
         let sig = signer.sign(rpm.header_bytes()?.as_slice(), rpm::Timestamp::now())?;
-        rpm.signature = rpm::SignatureHeaderBuilder::from_existing(&rpm.signature)?
-            .add_openpgp_signature(sig)
-            .build()?;
-        Ok(())
+        // rpm.signature = rpm::SignatureHeaderBuilder::from_existing(&rpm.signature)?
+        //     .add_openpgp_signature(sig)
+        //     .build()?;
+        Ok(sig)
     }
 
     /// Sign some data.

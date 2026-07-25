@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
+use itertools::Itertools;
 use libsubatomic::pkg::Package;
 use libsubatomic::repodata::RepoCache;
 
@@ -39,8 +40,8 @@ struct Args {
 }
 
 fn parse_package(path: &Path) -> Option<Package> {
-    match Package::try_from(path) {
-        Ok(pkg) => Some(pkg),
+    match Package::open(path) {
+        Ok((pkg, _)) => Some(pkg),
         Err(e) => {
             eprintln!("warning: skipping {}: {e}", path.display());
             None
@@ -65,11 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut rpm_paths: Vec<PathBuf> = std::fs::read_dir(&args.input)?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| {
-            p.extension()
-                .map(|ext| ext.eq_ignore_ascii_case("rpm"))
-                .unwrap_or(false)
-        })
+        .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
         .collect();
     rpm_paths.sort();
     let total = rpm_paths.len();
@@ -79,7 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     eprintln!("found {total} rpm files");
 
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache)?;
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
     cache.zstd_level = args.zstd_level;
 
     let mut parsed = 0usize;
@@ -103,7 +100,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         eprint!("\rparsing [{:>w$}/{total}] {name}", i + 1, w = total.to_string().len());
         if let Some(pkg) = parse_package(path) {
-            cache.insert(&key, &pkg, path)?;
+            cache.insert(&key, &pkg, path.as_os_str())?;
             parsed += 1;
             if i + 1 < total {
                 eprint!("\r{name}\x1B[K\n");
@@ -132,8 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     eprintln!("writing repodata ...");
-    let temp_dir = tempfile::tempdir_in(&args.output)?;
-    cache.write_all(&args.output, temp_dir.path())?;
+    cache.write_all(&args.output)?;
 
     // Prune stale entries on incremental runs so the cache doesn't grow forever
     if args.incremental {

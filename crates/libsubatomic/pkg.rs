@@ -4,7 +4,6 @@
 use std::{
     io::{Read, Seek},
     os::unix::fs::MetadataExt,
-    path::PathBuf,
 };
 
 use sha2::Digest;
@@ -32,67 +31,67 @@ pub struct Package {
     pub format: Format,
     pub changelog: Vec<Changelog>,
 }
-impl TryFrom<&std::path::Path> for Package {
-    type Error = rpm::Error;
-
-    fn try_from(value: &std::path::Path) -> Result<Self, Self::Error> {
-        let rpm = rpm::PackageMetadata::open(value)?;
-        let mut f = std::fs::File::open(value)?;
+impl Package {
+    pub fn open(path: &Path) -> Result<(Self, rpm::PackageMetadata), rpm::Error> {
+        let rpm = rpm::PackageMetadata::open(path)?;
+        let mut f = std::fs::File::open(path)?;
         let mut buf = Vec::new();
         f.read_to_end(&mut buf)?;
         let csum = hex::encode(sha2::Sha256::digest(&buf));
         let meta = f.metadata()?;
 
         let btime = epoch!(meta.created()?);
-        Ok(Self {
-            name: rpm.get_name()?.into(),
-            arch: rpm.get_arch()?.into(),
-            version: Version {
-                epoch: rpm.get_epoch().unwrap_or(0).into(),
-                ver: rpm.get_version()?.into(),
-                rel: rpm.get_release()?.into(),
+        Ok((
+            Self {
+                name: rpm.get_name()?.into(),
+                arch: rpm.get_arch()?.into(),
+                version: Version {
+                    epoch: rpm.get_epoch().unwrap_or(0).into(),
+                    ver: rpm.get_version()?.into(),
+                    rel: rpm.get_release()?.into(),
+                },
+                checksum: csum.into(),
+                summary: rpm.get_summary().unwrap_or_default().into(),
+                description: rpm.get_description().unwrap_or_default().into(),
+                packager: rpm.get_packager().ok().map(Into::into),
+                url: rpm.get_url().ok().map(Into::into),
+                time: Time { file: btime, build: rpm.get_build_time()? },
+                size: Size {
+                    package: meta.size(),
+                    installed: rpm.get_installed_size()?,
+                    archive: rpm
+                        .header
+                        .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                        .or_else(|_e| {
+                            rpm.header
+                                .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                                .map(u64::from)
+                        })
+                        .ok(),
+                },
+                format: Format {
+                    license: rpm.get_license().unwrap_or_default().into(),
+                    vendor: rpm.get_vendor().ok().map(Into::into),
+                    group: rpm.get_group().ok().map(Into::into),
+                    buildhost: rpm.get_build_host().ok().map(Into::into),
+                    sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
+                    header_range: Self::get_header_byte_range(&mut f)?,
+                    requires: Dependencies::from(rpm.get_requires()?),
+                    provides: Dependencies::from(rpm.get_provides()?),
+                    conflicts: Dependencies::from(rpm.get_conflicts()?),
+                    obsoletes: Dependencies::from(rpm.get_obsoletes()?),
+                    recommends: Dependencies::from(rpm.get_recommends()?),
+                    suggests: Dependencies::from(rpm.get_suggests()?),
+                    supplements: Dependencies::from(rpm.get_supplements()?),
+                    enhances: Dependencies::from(rpm.get_enhances()?),
+                    files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
+                },
+                changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
             },
-            checksum: csum.into(),
-            summary: rpm.get_summary().unwrap_or_default().into(),
-            description: rpm.get_description().unwrap_or_default().into(),
-            packager: rpm.get_packager().ok().map(Into::into),
-            url: rpm.get_url().ok().map(Into::into),
-            time: Time { file: btime, build: rpm.get_build_time()? },
-            size: Size {
-                package: meta.size(),
-                installed: rpm.get_installed_size()?,
-                archive: rpm
-                    .header
-                    .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                    .or_else(|_e| {
-                        rpm.header
-                            .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                            .map(u64::from)
-                    })
-                    .ok(),
-            },
-            format: Format {
-                license: rpm.get_license().unwrap_or_default().into(),
-                vendor: rpm.get_vendor().ok().map(Into::into),
-                group: rpm.get_group().ok().map(Into::into),
-                buildhost: rpm.get_build_host().ok().map(Into::into),
-                sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
-                header_range: Self::get_header_byte_range(&mut f)?,
-                requires: Dependencies::from(rpm.get_requires()?),
-                provides: Dependencies::from(rpm.get_provides()?),
-                conflicts: Dependencies::from(rpm.get_conflicts()?),
-                obsoletes: Dependencies::from(rpm.get_obsoletes()?),
-                recommends: Dependencies::from(rpm.get_recommends()?),
-                suggests: Dependencies::from(rpm.get_suggests()?),
-                supplements: Dependencies::from(rpm.get_supplements()?),
-                enhances: Dependencies::from(rpm.get_enhances()?),
-                files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
-            },
-            changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
-        })
+            rpm,
+        ))
     }
-}
-impl Package {
+
     // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
     // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.c#L248
     fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> {
