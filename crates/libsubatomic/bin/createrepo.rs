@@ -1,6 +1,6 @@
 //! CLI tool for generating YUM/DNF repodata from a directory of RPM packages.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
 
@@ -33,6 +33,16 @@ struct Args {
     zstd_level: i32,
 }
 
+fn parse_package(path: &Path) -> Option<(Package, PathBuf)> {
+    match Package::try_from(path) {
+        Ok(pkg) => Some((pkg, path.into())),
+        Err(e) => {
+            eprintln!("warning: skipping {}: {e}", path.display());
+            None
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -43,31 +53,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&args.output)?;
     std::fs::create_dir_all(&args.cache)?;
 
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
-    cache.zstd_level = args.zstd_level;
-
-    let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&args.input)?
+    let mut rpm_paths: Vec<PathBuf> = std::fs::read_dir(&args.input)?
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
         .collect();
-
-    if rpm_paths.is_empty() {
+    rpm_paths.sort();
+    let total = rpm_paths.len();
+    if total == 0 {
         eprintln!("warning: no .rpm files found in {}", args.input.display());
+        return Ok(());
+    }
+    eprintln!("found {total} rpm files");
+
+    let mut packages = Vec::with_capacity(total);
+    for (i, path) in rpm_paths.iter().enumerate() {
+        let name = path.display().to_string();
+        eprint!("\rparsing [{:>w$}/{total}] {name}", i + 1, w = total.to_string().len());
+        if let Some(pair) = parse_package(path) {
+            packages.push(pair);
+        }
+        if i + 1 < total {
+            // overwrite the counter with just the path, then move to next line
+            eprint!("\r{name}\x1B[K\n");
+        }
+    }
+    eprintln!();
+    if packages.len() != total {
+        eprintln!("warning: {}/{total} packages could not be parsed", total - packages.len());
+    }
+    if packages.is_empty() {
+        eprintln!("warning: no packages could be parsed; repodata will be empty");
     }
 
-    let packages: Vec<(Package, PathBuf)> = rpm_paths
-        .into_iter()
-        .map(|path| {
-            let (pkg, _) =
-                Package::open(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
-            Ok((pkg, path))
-        })
-        .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
-
-    let refs = packages.iter().map(|(pkg, path)| (pkg, path.as_os_str())).collect_vec();
-
+    eprintln!("generating xml fragments ...");
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
+    cache.zstd_level = args.zstd_level;
+    let refs: Vec<(&Package, &Path)> =
+        packages.iter().map(|(pkg, path)| (pkg, path.as_path())).collect();
     cache.insert_pkgs(refs)?;
 
+    eprintln!("writing repodata ...");
+    let temp_dir = tempfile::tempdir()?;
     cache.write_all(&args.output)?;
 
     println!("repodata written to {}", args.output.display());
