@@ -71,7 +71,7 @@ impl RepoCache {
         let env = unsafe {
             heed::EnvOpenOptions::new()
                 .read_txn_without_tls()
-                .max_dbs(1)
+                .max_dbs(2)
                 .map_size(Self::DEFAULT_MAP_SIZE)
                 .open(path)?
         };
