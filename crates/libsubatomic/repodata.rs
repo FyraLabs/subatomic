@@ -49,11 +49,27 @@ impl RepoCache {
         let path = cachedir.join(repo);
         let cachedir = cachedir.to_owned();
         let dir = dir.to_owned();
+
+        // Remove any stale file sitting where LMDB wants a directory.
+        if path.is_file() {
+            warn!(path = %path.display(), "removing stale cache file");
+            std::fs::remove_file(&path)?;
+        }
+
+        // LMDB expects the parent dirs to exist. Create them upfront.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Ensure the LMDB directory exists (heed creates it, but only after a successful open).
+        // Pre-creating avoids races where the directory is briefly not there.
+        std::fs::create_dir_all(&path)?;
+
         // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
                 .read_txn_without_tls()
-                .max_dbs(1)
+                .max_dbs(2)
                 .map_size(Self::DEFAULT_MAP_SIZE)
                 .open(path)?
         };
@@ -234,6 +250,42 @@ impl RepoCache {
         Ok(count)
     }
 
+    /// Compact the underlying LMDB file by writing a fresh copy and swapping it in.
+    ///
+    /// This consumes `self` so the environment can be closed before the file is replaced.
+    ///
+    /// # Errors
+    /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
+    pub fn compact(self) -> heed::Result<Self> {
+        let repo = self.repo.clone();
+        let cachedir = self.cachedir.clone();
+        let dir = self.dir.clone();
+        let zstd = self.zstd_level;
+        let env_dir = self.env.path().to_path_buf();
+
+        let tmp_file = env_dir.join("data.compact");
+        let data_file = env_dir.join("data.mdb");
+        let old_file = env_dir.join("data.mdb.old");
+
+        info!(dir = %env_dir.display(), "compacting cache");
+        self.env.copy_to_path(&tmp_file, heed::CompactionOption::Enabled)?;
+
+        // Close the env so the mmap is released and we can rename the file
+        drop(self);
+
+        // Atomically replace data.mdb with the compacted copy
+        if data_file.exists() {
+            std::fs::rename(&data_file, &old_file)?;
+        }
+        std::fs::rename(&tmp_file, &data_file)?;
+        let _ = std::fs::remove_file(&old_file);
+
+        let mut new = Self::new(&repo, &cachedir, &dir)?;
+        new.zstd_level = zstd;
+        info!(dir = %env_dir.display(), "cache compacted");
+        Ok(new)
+    }
+
     #[inline]
     fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> std::io::Result<()> {
         RepoWriteDispatcher::dispatch(self, files)
@@ -287,7 +339,13 @@ impl RepoCache {
     }
 
     fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> std::io::Result<Vec<u8>> {
-        let mut fd_repomd = std::fs::File::create(dir.join("repomd.xml"))?;
+        let path = dir.join("repomd.xml");
+        let mut fd_repomd = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
         repomd::Repomd::generate(&mut fd_repomd, data).expect("cannot write to repomd");
 
         let pos = fd_repomd.stream_position()?;

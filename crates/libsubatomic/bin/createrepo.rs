@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use tracing::{debug, info, instrument, trace, warn};
 
-use itertools::Itertools;
 use libsubatomic::pkg::Package;
 use libsubatomic::repodata::RepoCache;
 
@@ -28,6 +27,9 @@ struct Args {
     zstd_level: i32,
     #[arg(long)]
     incremental: bool,
+    /// Compact the LMDB cache after writing repodata (default: true).
+    #[arg(long, default_value_t = true)]
+    compact: bool,
 }
 
 #[instrument(skip_all)]
@@ -132,6 +134,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if removed > 0 {
             info!(count = removed, "pruned stale cached packages");
         }
+    }
+
+    if args.compact {
+        drop(cache.compact()?);
     }
 
     info!(dir = %args.output.display(), "repodata written");
