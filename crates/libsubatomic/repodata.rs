@@ -11,7 +11,7 @@ pub mod repomd;
 use sha2::Digest;
 
 use crate::prelude::*;
-use std::io::Write;
+use std::io::{Read, Seek, Write};
 use std::os::linux::fs::MetadataExt;
 use std::path::Path;
 
@@ -119,11 +119,15 @@ impl RepoCache {
             std::fs::rename(path, dir.join(newname))?;
         }
 
-        repomd::Repomd::generate(
-            std::fs::File::create(dir.join("repomd.xml"))?,
-            data.into_iter().collect(),
-        )
-        .expect("cannot write to repomd");
+        let mut fd_repomd = std::fs::File::create(dir.join("repomd.xml"))?;
+        repomd::Repomd::generate(&mut fd_repomd, data.into_iter().collect())
+            .expect("cannot write to repomd");
+
+        let pos = fd_repomd.stream_position()?;
+        fd_repomd.seek(std::io::SeekFrom::Start(0))?;
+        let mut buf = Vec::with_capacity(pos as usize);
+        fd_repomd.read_to_end(&mut buf)?;
+        // TODO: sign
 
         Ok(())
     }
