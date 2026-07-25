@@ -12,6 +12,7 @@ use sha2::Digest;
 
 use crate::prelude::*;
 use std::io::Write;
+use std::os::linux::fs::MetadataExt;
 use std::path::Path;
 
 pub type RepoCacheDb =
@@ -89,7 +90,6 @@ impl RepoCache {
     }
 
     pub fn write_all(&self, dir: &Path, tempdir: &Path) -> std::io::Result<()> {
-        let filenames = ["primary.xml.zst", "filelists.xml.zst", "other.xml.zst"];
         let filepaths = [
             tempdir.join("primary.xml.zst"),
             tempdir.join("filelists.xml.zst"),
@@ -98,10 +98,15 @@ impl RepoCache {
         let make_writer = |p: &Path| {
             std::io::Result::Ok(RepoWriter {
                 comp: RepoWriterComp::Zstd(zstd::Encoder::new(
-                    std::fs::File::create(p)?,
+                    RepoWriterCompInner {
+                        fd: std::fs::File::create(p)?,
+                        csum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
+                        ..
+                    },
                     self.zstd_level,
                 )?),
-                csum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
+                osum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
+                ..
             })
         };
         // TODO: expand support for more compression & csum formats in [`RepoWriter`]
@@ -109,30 +114,39 @@ impl RepoCache {
             [make_writer(&filepaths[0])?, make_writer(&filepaths[1])?, make_writer(&filepaths[2])?];
         self.write_stage1(&mut files)?;
         let [pri, fil, oth] = files;
-        let csums = [pri.into_csum()?, fil.into_csum()?, oth.into_csum()?];
-        for ((path, csum), name) in filepaths.iter().zip_eq(&csums).zip_eq(&filenames) {
-            let mut new_name = std::ffi::OsString::from(csum.as_str());
-            new_name.push("-");
-            new_name.push(name);
-            std::fs::rename(path, dir.join(new_name))?;
+        let data = [
+            pri.into_data(repomd::DataType::Primary)?,
+            fil.into_data(repomd::DataType::Filelists)?,
+            oth.into_data(repomd::DataType::Other)?,
+        ];
+        // can safely rename since fds are dropped via into_data()
+        for (path, dat) in filepaths.iter().zip_eq(&data) {
+            let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
+            std::fs::rename(path, dir.join(newname))?;
         }
-        let [psum, fsum, osum] = csums;
-        // TODO: how do we get the normal checksum? we only have the open checksum
+
+        repomd::Repomd::generate(
+            std::fs::File::create(dir.join("repomd.xml"))?,
+            data.into_iter().collect(),
+        )
+        .expect("cannot write to repomd");
 
         Ok(())
     }
 }
 
 pub struct RepoWriter<'a> {
-    pub comp: RepoWriterComp<'a>,
-    pub csum: RepoWriterCsum,
+    comp: RepoWriterComp<'a>,
+    osum: RepoWriterCsum,
+    osize: u64 = 0,
 }
 impl Write for RepoWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let len = match &mut self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.write(buf)?,
         };
-        self.csum.write_all(&buf[..len])?;
+        self.osum.write_all(&buf[..len])?;
+        self.osize += len as u64;
         Ok(len)
     }
 
@@ -140,7 +154,7 @@ impl Write for RepoWriter<'_> {
         match &mut self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.flush()?,
         }
-        self.csum.flush()?;
+        self.osum.flush()?;
         Ok(())
     }
 
@@ -148,21 +162,63 @@ impl Write for RepoWriter<'_> {
         match &mut self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.write_all(buf)?,
         }
-        self.csum.write_all(&buf)?;
+        self.osum.write_all(buf)?;
+        self.osize += buf.len() as u64;
         Ok(())
     }
 }
 impl RepoWriter<'_> {
-    pub fn into_csum(self) -> std::io::Result<String> {
-        match self.comp {
+    /// Finalize, consume self and return [`repomd::Data`].
+    ///
+    /// # Errors
+    /// This propagates errors from the comp encoder finalizing their output.
+    pub fn into_data(self, r#type: repomd::DataType) -> std::io::Result<repomd::Data> {
+        let inner = match self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.finish()?,
         };
-        Ok(self.csum.csum())
+        let sha = inner.csum.csum();
+        // TODO: don't hardcode href (esp when comp may be diff)
+        Ok(repomd::Data {
+            location: repomd::Location { href: format!("repodata/{sha}-{type}.xml.zst").into() },
+            r#type,
+            checksum: repomd::Checksum { sha, .. },
+            open_checksum: repomd::Checksum { sha: self.osum.csum(), .. },
+            timestamp: inner.fd.metadata()?.st_atime(),
+            size: inner.size,
+            open_size: self.osize,
+        })
     }
 }
 
-pub enum RepoWriterComp<'a> {
-    Zstd(zstd::Encoder<'a, std::fs::File>),
+struct RepoWriterCompInner {
+    fd: std::fs::File,
+    csum: RepoWriterCsum,
+    size: u64 = 0,
+}
+impl Write for RepoWriterCompInner {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let len = self.fd.write(buf)?;
+        self.csum.write_all(&buf[..len])?;
+        self.size += len as u64;
+        Ok(len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.fd.flush()?;
+        self.csum.flush()?;
+        Ok(())
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.fd.write_all(buf)?;
+        self.csum.write_all(buf)?;
+        self.size += buf.len() as u64;
+        Ok(())
+    }
+}
+
+enum RepoWriterComp<'a> {
+    Zstd(zstd::Encoder<'a, RepoWriterCompInner>),
 }
 
 pub enum RepoWriterCsum {
@@ -171,7 +227,7 @@ pub enum RepoWriterCsum {
 impl Write for RepoWriterCsum {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
-            RepoWriterCsum::Sha256(sha256) => sha256.update(buf),
+            Self::Sha256(sha256) => sha256.update(buf),
         }
         Ok(buf.len())
     }
