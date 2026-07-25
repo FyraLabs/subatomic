@@ -43,7 +43,7 @@ impl RepoCache {
         Ok(Self { repo: repo.into(), env, .. })
     }
 
-    pub fn write<T>(&self, f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> T) -> T {
+    fn write<T>(&self, f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> T) -> T {
         let mut txn = self.env.write_txn().expect("cannot create rw txn");
         let db = self.env.create_database(&mut txn, Some(&self.repo)).expect("cannot create db");
         let res = f(&db, &mut txn);
@@ -51,33 +51,26 @@ impl RepoCache {
         res
     }
 
-    pub fn read<T>(&self, f: impl FnOnce(&RepoCacheDb, &heed::RoTxn<'_>) -> T) -> T {
+    fn read<T>(&self, f: impl FnOnce(&RepoCacheDb, &heed::RoTxn<'_>) -> T) -> T {
         let txn = self.env.read_txn().expect("cannot create rw txn");
         let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))
             .expect("db doesn't exist?");
         f(&db, &txn)
     }
 
-    pub fn insert_fragments<'a, 'b>(
+    /// Insert packages (not in parallel!) into the cache.
+    ///
+    /// # Errors
+    /// This propagates errors from [`heed::Database::put`].
+    pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b Path)>>(
         &self,
-        frags: impl IntoIterator<Item = (&'a str, &'b RepoCacheFragment)>,
-    ) {
+        pkgs: I,
+    ) -> heed::Result<()> {
         self.write(move |db, txn| {
-            frags
-                .into_iter()
-                .for_each(|(key, frag)| db.put(txn, key, frag).expect("can't put frag"));
-        });
-    }
-
-    pub fn insert_pkgs<'a, 'b>(
-        &self,
-        pkgs: impl IntoIterator<Item = (&'a crate::pkg::Package, &'b Path)>,
-    ) {
-        self.write(move |db, txn| {
-            pkgs.into_iter().for_each(|(pkg, path)| {
-                db.put(txn, &pkg.name, &RepoCacheFragment::new(pkg, path)).expect("can't put frag");
-            });
-        });
+            pkgs.into_iter().try_for_each(|(pkg, path)| {
+                db.put(txn, &pkg.name, &RepoCacheFragment::new(pkg, path))
+            })
+        })
     }
 
     #[must_use]
@@ -85,7 +78,8 @@ impl RepoCache {
         self.read(|db, txn| db.get(txn, key).expect("cannot get frag"))
     }
 
-    pub fn write_stage1<'a, 'b>(&self, files: &'a mut [RepoWriter<'b>; 3]) -> std::io::Result<()> {
+    #[inline]
+    fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> std::io::Result<()> {
         RepoWriteDispatcher::dispatch(self, files)
     }
 
@@ -250,7 +244,7 @@ impl RepoWriterCsum {
     }
 }
 
-pub enum RepoWriteDispatcher<'f, 'r> {
+enum RepoWriteDispatcher<'f, 'r> {
     Primary(&'f mut RepoWriter<'r>),
     Filelists(&'f mut RepoWriter<'r>),
     Other(&'f mut RepoWriter<'r>),
@@ -331,24 +325,25 @@ pub struct RepoCacheFragment {
 }
 
 impl RepoCacheFragment {
-    pub fn new(pkg: &crate::pkg::Package, path: &Path) -> Self {
+    #[must_use]
+    fn new(pkg: &crate::pkg::Package, path: &Path) -> Self {
         let mut frag = Self::default();
         frag.update_primary(pkg, path);
         frag.update_filelists(pkg);
         frag.update_other(pkg);
         frag
     }
-    pub fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &Path) {
+    fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &Path) {
         quick_xml::se::to_writer(&mut self.primary, &primary::Package::from_pkg(pkg, path))
             .expect("cannot serialize");
     }
 
-    pub fn update_filelists(&mut self, pkg: &crate::pkg::Package) {
+    fn update_filelists(&mut self, pkg: &crate::pkg::Package) {
         quick_xml::se::to_writer(&mut self.filelists, &filelists::FilelistsPackage::from_pkg(pkg))
             .expect("cannot serialize");
     }
 
-    pub fn update_other(&mut self, pkg: &crate::pkg::Package) {
+    fn update_other(&mut self, pkg: &crate::pkg::Package) {
         quick_xml::se::to_writer(&mut self.other, &other::OtherPackage::from_pkg(pkg))
             .expect("cannot serialize");
     }

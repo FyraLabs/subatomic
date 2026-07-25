@@ -24,9 +24,9 @@ pub enum DataType {
 impl std::fmt::Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            DataType::Primary => "primary",
-            DataType::Filelists => "filelists",
-            DataType::Other => "other",
+            Self::Primary => "primary",
+            Self::Filelists => "filelists",
+            Self::Other => "other",
         })
     }
 }

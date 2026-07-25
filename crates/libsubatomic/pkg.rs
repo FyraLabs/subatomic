@@ -5,7 +5,6 @@ use std::{
     io::{Read, Seek},
     os::unix::fs::MetadataExt,
     path::PathBuf,
-    time::UNIX_EPOCH,
 };
 
 use sha2::Digest;
@@ -43,7 +42,8 @@ impl TryFrom<&std::path::Path> for Package {
         f.read_to_end(&mut buf)?;
         let csum = hex::encode(sha2::Sha256::digest(&buf));
         let meta = f.metadata()?;
-        let btime = meta.created()?.duration_since(UNIX_EPOCH).expect("time overflow").as_secs();
+
+        let btime = epoch!(meta.created()?);
         Ok(Self {
             name: rpm.get_name()?.into(),
             arch: rpm.get_arch()?.into(),
@@ -116,9 +116,9 @@ impl Package {
         let hdrsize = hdrdata + hdrindexsize + 16;
         let hdrend = hdrstart + hdrsize;
         if hdrend < hdrstart {
-            return Err(std::io::Error::other(
-                "sanity check fail on {path} (hdrend {hdrend} < hdrstart {hdrstart})",
-            ));
+            return Err(std::io::Error::other(format!(
+                "sanity check fail (hdrend {hdrend} < hdrstart {hdrstart})"
+            )));
         }
         Ok(HeaderRange { start: hdrstart, end: hdrend })
     }
@@ -222,6 +222,7 @@ impl From<Vec<rpm::Dependency>> for Dependencies {
     }
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 const fn is_zero(&n: &u64) -> bool {
     n == 0
 }
@@ -261,7 +262,7 @@ pub struct FileEntry {
 }
 impl FileEntry {
     #[must_use]
-    pub fn new(path: impl Into<PathBuf>) -> Self {
+    pub fn new<I: Into<PathBuf>>(path: I) -> Self {
         Self { path: path.into(), .. }
     }
     // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.h#L111
