@@ -132,6 +132,43 @@ impl RepoCache {
         self.read(|db, txn| db.get(txn, key).expect("cannot get frag"))
     }
 
+    /// Collect every key currently stored in the cache.
+    pub fn keys(&self) -> Vec<std::string::String> {
+        self.read(|db, txn| {
+            let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0) as usize);
+            for item in db.iter(txn).expect("cannot iterate db") {
+                let (k, _v) = item.expect("cannot read db item");
+                out.push(k.into());
+            }
+            out
+        })
+    }
+
+    /// Remove a single key from the cache.
+    ///
+    /// # Errors
+    /// This propagates errors from [`heed::Database::delete`].
+    pub fn remove(&self, key: &str) -> heed::Result<bool> {
+        self.write(|db, txn| db.delete(txn, key))
+    }
+
+    /// Delete every key not present in `expected`.
+    ///
+    /// Returns the number of removed entries.
+    ///
+    /// # Errors
+    /// This propagates errors from LMDB write operations.
+    pub fn prune(&self, expected: &std::collections::HashSet<&str>) -> heed::Result<u64> {
+        let to_remove: Vec<_> = self.keys().into_iter().filter(|k| !expected.contains(k.as_str())).collect();
+        let mut count = 0u64;
+        for key in to_remove {
+            if self.write(|db, txn| db.delete(txn, &key))? {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
     #[inline]
     fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> std::io::Result<()> {
         RepoWriteDispatcher::dispatch(self, files)

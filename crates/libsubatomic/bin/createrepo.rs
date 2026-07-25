@@ -1,5 +1,6 @@
 //! CLI tool for generating YUM/DNF repodata from a directory of RPM packages.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
@@ -84,6 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parsed = 0usize;
     let mut skipped = 0usize;
     let mut cached = 0usize;
+    let mut expected_keys: HashSet<String> = HashSet::with_capacity(total);
 
     for (i, path) in rpm_paths.iter().enumerate() {
         let name = path.display().to_string();
@@ -91,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(p) => p.to_string_lossy().into_owned(),
             Err(_) => name.clone(),
         };
+        expected_keys.insert(key.clone());
 
         if args.incremental && cache.has(&key) {
             eprintln!("cached, skipping {name}");
@@ -131,6 +134,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("writing repodata ...");
     let temp_dir = tempfile::tempdir_in(&args.output)?;
     cache.write_all(&args.output, temp_dir.path())?;
+
+    // Prune stale entries on incremental runs so the cache doesn't grow forever
+    if args.incremental {
+        let expected_refs: HashSet<&str> = expected_keys.iter().map(String::as_str).collect();
+        let removed = cache.prune(&expected_refs)?;
+        if removed > 0 {
+            eprintln!("pruned {removed} stale cached packages");
+        }
+    }
 
     println!("repodata written to {}", args.output.display());
     Ok(())
