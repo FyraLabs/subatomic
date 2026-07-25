@@ -20,8 +20,8 @@ pub struct Package {
     pub checksum: String,
     pub summary: String,
     pub description: String,
-    pub packager: String,
-    pub url: String,
+    pub packager: Option<String>,
+    pub url: Option<String>,
     pub time: Time,
     pub size: Size,
     /// Other metadata
@@ -53,10 +53,10 @@ impl TryFrom<&std::path::Path> for Package {
                 rel: rpm.get_release()?.into(),
             },
             checksum: csum.into(),
-            summary: rpm.get_summary()?.into(),
-            description: rpm.get_description()?.into(),
-            packager: rpm.get_packager()?.into(),
-            url: rpm.get_url()?.into(),
+            summary: rpm.get_summary().unwrap_or_default().into(),
+            description: rpm.get_description().unwrap_or_default().into(),
+            packager: rpm.get_packager().ok().map(Into::into),
+            url: rpm.get_url().ok().map(Into::into),
             time: Time { file: btime, build: rpm.get_build_time()? },
             size: Size {
                 package: meta.size(),
@@ -68,14 +68,15 @@ impl TryFrom<&std::path::Path> for Package {
                         rpm.header
                             .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
                             .map(u64::from)
-                    })?,
+                    })
+                    .ok(),
             },
             format: Format {
-                license: rpm.get_license()?.into(),
-                vendor: rpm.get_vendor()?.into(),
-                group: rpm.get_group()?.into(),
-                buildhost: rpm.get_build_host()?.into(),
-                sourcerpm: rpm.get_source_rpm()?.into(),
+                license: rpm.get_license().unwrap_or_default().into(),
+                vendor: rpm.get_vendor().ok().map(Into::into),
+                group: rpm.get_group().ok().map(Into::into),
+                buildhost: rpm.get_build_host().ok().map(Into::into),
+                sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
                 header_range: Self::get_header_byte_range(&mut f)?,
                 requires: Dependencies::from(rpm.get_requires()?),
                 provides: Dependencies::from(rpm.get_provides()?),
@@ -159,22 +160,24 @@ pub struct Size {
     pub package: u64,
     #[serde(rename = "@installed")]
     pub installed: u64,
-    #[serde(rename = "@archive")]
-    pub archive: u64,
+    // archive size seems to be optional on some packages when testing with terra44 dataset,
+    // so we can avoid serializing it if it's not present
+    #[serde(rename = "@archive", skip_serializing_if = "Option::is_none")]
+    pub archive: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Format {
     #[serde(rename = "rpm:license")]
     pub license: String,
-    #[serde(rename = "rpm:vendor")]
-    pub vendor: String,
-    #[serde(rename = "rpm:group")]
-    pub group: String,
-    #[serde(rename = "rpm:buildhost")]
-    pub buildhost: String,
-    #[serde(rename = "rpm:sourcerpm")]
-    pub sourcerpm: String,
+    #[serde(rename = "rpm:vendor", skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(rename = "rpm:group", skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    #[serde(rename = "rpm:buildhost", skip_serializing_if = "Option::is_none")]
+    pub buildhost: Option<String>,
+    #[serde(rename = "rpm:sourcerpm", skip_serializing_if = "Option::is_none")]
+    pub sourcerpm: Option<String>,
     #[serde(rename = "rpm:header-range")]
     pub header_range: HeaderRange,
     #[serde(rename = "rpm:requires", default, skip_serializing_if = "Dependencies::is_empty")]

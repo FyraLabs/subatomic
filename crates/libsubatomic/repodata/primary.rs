@@ -27,8 +27,10 @@ pub struct Package<'a> {
     pub checksum: PackageChecksum<'a>,
     pub summary: &'a str,
     pub description: &'a str,
-    pub packager: &'a str,
-    pub url: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub packager: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<&'a str>,
     pub time: &'a Time,
     pub size: &'a Size,
     pub location: PackageLocation<'a>,
@@ -45,14 +47,14 @@ pub struct Package<'a> {
 pub struct PrimaryFormat<'a> {
     #[serde(rename = "rpm:license")]
     pub license: &'a str,
-    #[serde(rename = "rpm:vendor")]
-    pub vendor: &'a str,
-    #[serde(rename = "rpm:group")]
-    pub group: &'a str,
-    #[serde(rename = "rpm:buildhost")]
-    pub buildhost: &'a str,
-    #[serde(rename = "rpm:sourcerpm")]
-    pub sourcerpm: &'a str,
+    #[serde(rename = "rpm:vendor", skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<&'a str>,
+    #[serde(rename = "rpm:group", skip_serializing_if = "Option::is_none")]
+    pub group: Option<&'a str>,
+    #[serde(rename = "rpm:buildhost", skip_serializing_if = "Option::is_none")]
+    pub buildhost: Option<&'a str>,
+    #[serde(rename = "rpm:sourcerpm", skip_serializing_if = "Option::is_none")]
+    pub sourcerpm: Option<&'a str>,
     #[serde(rename = "rpm:header-range")]
     pub header_range: HeaderRange,
     #[serde(rename = "rpm:requires", default, skip_serializing_if = "deps_is_empty")]
@@ -123,17 +125,17 @@ impl<'a> Package<'a> {
             checksum: PackageChecksum { value: checksum, .. },
             summary,
             description,
-            packager,
-            url,
+            packager: packager.as_deref(),
+            url: url.as_deref(),
             time,
             size,
             location: PackageLocation { href: path },
             format: PrimaryFormat {
                 license: &format.license,
-                vendor: &format.vendor,
-                group: &format.group,
-                buildhost: &format.buildhost,
-                sourcerpm: &format.sourcerpm,
+                vendor: format.vendor.as_deref(),
+                group: format.group.as_deref(),
+                buildhost: format.buildhost.as_deref(),
+                sourcerpm: format.sourcerpm.as_deref(),
                 header_range: format.header_range.clone(),
                 requires: &format.requires,
                 provides: &format.provides,
