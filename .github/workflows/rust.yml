@@ -1,9 +1,88 @@
-name: Rust
+# FyraLabs/actions/main/.github/workflows/rust.yml but nightly
 
+name: Rust
+permissions:
+  contents: read
 on:
   push:
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TERM_VERBOSE: true
+
 jobs:
-  rust:
-    uses: FyraLabs/actions/.github/workflows/rust.yml@main
+  rustfmt:
+    if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # v1.94.1
+        with:
+          toolchain: nightly
+          components: rustfmt
+
+      - name: Run rustfmt
+        run: cargo fmt -- --check
+
+  clippy:
+    permissions:
+      security-events: write
+    if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # v1.94.1
+        with:
+          toolchain: nightly
+          components: clippy
+
+      - name: Install required cargo
+        run: cargo install clippy-sarif sarif-fmt
+
+      - name: Run rust-clippy
+        run: cargo clippy
+          --all-features
+          --message-format=json | clippy-sarif | tee rust-clippy-results.sarif | sarif-fmt
+        continue-on-error: true
+        env:
+          CARGO_TERM_VERBOSE: false
+
+      - name: Upload analysis results to GitHub
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          sarif_file: rust-clippy-results.sarif
+          wait-for-processing: true
+
+  test:
+    if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # v1.94.1
+        with:
+          toolchain: nightly
+
+      - name: Fetch
+        run: cargo fetch --locked
+
+      - name: Build
+        run: cargo build --frozen
+
+      - name: Run tests
+        run: cargo test
