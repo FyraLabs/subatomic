@@ -48,7 +48,7 @@ pub struct PackageChecksum<'a> {
 #[derive(Clone, Debug, Serialize)]
 pub struct PackageLocation<'a> {
     #[serde(rename = "@href")]
-    pub href: &'a std::path::Path,
+    pub href: &'a OsStr,
 }
 
 impl<'a> Package<'a> {
@@ -68,7 +68,7 @@ impl<'a> Package<'a> {
             format,
             ..
         }: &'a crate::pkg::Package,
-        path: &'a std::path::Path,
+        path: &'a OsStr,
     ) -> Self {
         let mut format = format.clone();
         format.files =

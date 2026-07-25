@@ -11,7 +11,7 @@ pub struct Repomd {
     pub data: Vec<Data>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataType {
     Primary,
@@ -33,14 +33,20 @@ impl std::fmt::Display for DataType {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct Checksum {
     #[serde(rename = "@type")]
-    pub r#type: &'static str = "sha256",
+    pub r#type: CsumType = CsumType::Sha256,
     pub sha: String, // NOTE: or [u8; 32] with hex-serde?
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CsumType {
+    Sha256,
+}
+
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Data {
     #[serde(rename = "@type")]
@@ -57,7 +63,7 @@ pub struct Data {
     // pub header_size: Option<u64>, // Only for ZCK types
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize)]
 pub struct Location {
     #[serde(rename = "@href")]
     pub href: String,

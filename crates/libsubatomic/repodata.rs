@@ -13,7 +13,6 @@ use sha2::Digest;
 use crate::prelude::*;
 use std::io::{Read, Seek, Write};
 use std::os::linux::fs::MetadataExt;
-use std::path::Path;
 
 pub type RepoCacheDb =
     heed::Database<heed::types::Str, heed::types::SerdeBincode<RepoCacheFragment>>;
@@ -21,6 +20,8 @@ pub type RepoCacheDb =
 #[derive(Clone, Debug)]
 pub struct RepoCache {
     pub repo: String,
+    pub cachedir: std::path::PathBuf,
+    pub dir: std::path::PathBuf,
     pub env: heed::Env<heed::WithoutTls>,
     pub zstd_level: i32 = 0,
 }
@@ -36,11 +37,15 @@ impl RepoCache {
     ///
     /// # Errors
     /// An error is returned when `heed` fails to open the cache file.
-    pub fn new(repo: &str, path: &Path) -> heed::Result<Self> {
+    pub fn new(repo: &str, cachedir: &Path, dir: &Path) -> heed::Result<Self> {
+        let path = cachedir.join(repo);
+        let cachedir = cachedir.to_owned();
+        let dir = dir.to_owned();
+
         // SAFETY: assume this file is not modified concurrently
         let env =
             unsafe { heed::EnvOpenOptions::new().read_txn_without_tls().max_dbs(1).open(path) }?;
-        Ok(Self { repo: repo.into(), env, .. })
+        Ok(Self { repo: repo.into(), env, cachedir, dir, .. })
     }
 
     fn write<T>(&self, f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> T) -> T {
@@ -58,11 +63,38 @@ impl RepoCache {
         f(&db, &txn)
     }
 
+    pub fn write_comps(&self, data: &repomd::Data) -> heed::Result<()> {
+        let mut txn = self.env.write_txn()?;
+        let db: heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>> =
+            self.env.create_database(&mut txn, Some("comps"))?;
+        db.put(&mut txn, "compsdata", data)?;
+        txn.commit()?;
+        Ok(())
+    }
+    pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
+        let txn = self.env.read_txn()?;
+        let Some(db): Option<
+            heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>,
+        > = self.env.open_database(&txn, Some("comps"))?
+        else {
+            return Ok(None);
+        };
+        db.get(&txn, "compsdata")
+    }
+    pub fn del_comps(&self) -> heed::Result<bool> {
+        let mut txn = self.env.write_txn()?;
+        let db: heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>> =
+            self.env.create_database(&mut txn, Some("comps"))?;
+        let existed = db.delete(&mut txn, "compsdata")?;
+        txn.commit()?;
+        Ok(existed)
+    }
+
     /// Insert packages (not in parallel!) into the cache.
     ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
-    pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b Path)>>(
+    pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b OsStr)>>(
         &self,
         pkgs: I,
     ) -> heed::Result<()> {
@@ -70,6 +102,15 @@ impl RepoCache {
             pkgs.into_iter().try_for_each(|(pkg, path)| {
                 db.put(txn, &pkg.name, &RepoCacheFragment::new(pkg, path))
             })
+        })
+    }
+
+    pub fn delete_pkgs<'a>(&self, pkgs: &'a [&'a str]) -> heed::Result<Vec<&'a &'a str>> {
+        self.write(move |db, txn| {
+            pkgs.into_iter()
+                .map(|key| Ok((!db.delete(txn, key)?).then_some(key)))
+                .filter_map_ok(|f| f)
+                .try_collect()
         })
     }
 
@@ -83,7 +124,10 @@ impl RepoCache {
         RepoWriteDispatcher::dispatch(self, files)
     }
 
-    pub fn write_all(&self, dir: &Path, tempdir: &Path) -> std::io::Result<()> {
+    /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
+    ///
+    /// The caller should handling signing of the `repomd.xml` file.
+    pub fn write_all(&self, tempdir: &Path) -> std::io::Result<Vec<u8>> {
         let filepaths = [
             tempdir.join("primary.xml.zst"),
             tempdir.join("filelists.xml.zst"),
@@ -107,39 +151,43 @@ impl RepoCache {
         let mut files =
             [make_writer(&filepaths[0])?, make_writer(&filepaths[1])?, make_writer(&filepaths[2])?];
         self.write_stage1(&mut files)?;
-        let [pri, fil, oth] = files;
-        let data = [
-            pri.into_data(repomd::DataType::Primary)?,
-            fil.into_data(repomd::DataType::Filelists)?,
-            oth.into_data(repomd::DataType::Other)?,
-        ];
+        let mut data: Vec<_> = files
+            .into_iter()
+            .zip_eq([
+                repomd::DataType::Primary,
+                repomd::DataType::Filelists,
+                repomd::DataType::Other,
+            ])
+            .map(|(f, dt)| f.into_data(dt).map(|x| x.0))
+            .try_collect()?;
+        data.extend(self.read_comps().expect("cannot read comps db"));
         // can safely rename since fds are dropped via into_data()
         for (path, dat) in filepaths.iter().zip_eq(&data) {
             let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
-            std::fs::rename(path, dir.join(newname))?;
+            std::fs::rename(path, self.dir.join(newname))?;
         }
 
-        Self::write_repomd(dir, data.to_vec())
+        Self::write_repomd(&self.dir, data.to_vec())
     }
 
-    fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> std::io::Result<()> {
+    fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> std::io::Result<Vec<u8>> {
         let mut fd_repomd = std::fs::File::create(dir.join("repomd.xml"))?;
         repomd::Repomd::generate(&mut fd_repomd, data).expect("cannot write to repomd");
 
         let pos = fd_repomd.stream_position()?;
         fd_repomd.seek(std::io::SeekFrom::Start(0))?;
+        #[allow(clippy::cast_possible_truncation)] // same behaviour even on 32-bit platforms
         let mut buf = Vec::with_capacity(pos as usize);
         fd_repomd.read_to_end(&mut buf)?;
-        // TODO: sign
 
-        Ok(())
+        Ok(buf)
     }
 }
 
 pub struct RepoWriter<'a> {
-    comp: RepoWriterComp<'a>,
-    osum: RepoWriterCsum,
-    osize: u64 = 0,
+    pub comp: RepoWriterComp<'a>,
+    pub osum: RepoWriterCsum,
+    pub osize: u64 = 0,
 }
 impl Write for RepoWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -169,32 +217,40 @@ impl Write for RepoWriter<'_> {
     }
 }
 impl RepoWriter<'_> {
-    /// Finalize, consume self and return [`repomd::Data`].
+    /// Finalize, consume self and return [`repomd::Data`] and the inner file.
     ///
     /// # Errors
     /// This propagates errors from the comp encoder finalizing their output.
-    pub fn into_data(self, r#type: repomd::DataType) -> std::io::Result<repomd::Data> {
+    pub fn into_data(
+        self,
+        r#type: repomd::DataType,
+    ) -> std::io::Result<(repomd::Data, std::fs::File)> {
         let inner = match self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.finish()?,
         };
         let sha = inner.csum.csum();
         // TODO: don't hardcode href (esp when comp may be diff)
-        Ok(repomd::Data {
-            location: repomd::Location { href: format!("repodata/{sha}-{type}.xml.zst").into() },
-            r#type,
-            checksum: repomd::Checksum { sha, .. },
-            open_checksum: repomd::Checksum { sha: self.osum.csum(), .. },
-            timestamp: inner.fd.metadata()?.st_atime(),
-            size: inner.size,
-            open_size: self.osize,
-        })
+        Ok((
+            repomd::Data {
+                location: repomd::Location {
+                    href: format!("repodata/{sha}-{type}.xml.zst").into(),
+                },
+                r#type,
+                checksum: repomd::Checksum { sha, .. },
+                open_checksum: repomd::Checksum { sha: self.osum.csum(), .. },
+                timestamp: inner.fd.metadata()?.st_atime(),
+                size: inner.size,
+                open_size: self.osize,
+            },
+            inner.fd,
+        ))
     }
 }
 
-struct RepoWriterCompInner {
-    fd: std::fs::File,
-    csum: RepoWriterCsum,
-    size: u64 = 0,
+pub struct RepoWriterCompInner {
+    pub fd: std::fs::File,
+    pub csum: RepoWriterCsum,
+    pub size: u64 = 0,
 }
 impl Write for RepoWriterCompInner {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -218,7 +274,7 @@ impl Write for RepoWriterCompInner {
     }
 }
 
-enum RepoWriterComp<'a> {
+pub enum RepoWriterComp<'a> {
     Zstd(zstd::Encoder<'a, RepoWriterCompInner>),
 }
 
@@ -324,7 +380,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
     }
 }
 
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct RepoCacheFragment {
     pub primary: String,
     pub filelists: String,
@@ -333,14 +389,14 @@ pub struct RepoCacheFragment {
 
 impl RepoCacheFragment {
     #[must_use]
-    fn new(pkg: &crate::pkg::Package, path: &Path) -> Self {
+    pub fn new(pkg: &crate::pkg::Package, path: &OsStr) -> Self {
         let mut frag = Self::default();
         frag.update_primary(pkg, path);
         frag.update_filelists(pkg);
         frag.update_other(pkg);
         frag
     }
-    fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &Path) {
+    fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &OsStr) {
         quick_xml::se::to_writer(&mut self.primary, &primary::Package::from_pkg(pkg, path))
             .expect("cannot serialize");
     }
