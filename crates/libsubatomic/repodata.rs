@@ -58,7 +58,10 @@ impl RepoCache {
         f(&db, &txn)
     }
 
-    /// Insert packages (not in parallel!) into the cache.
+    /// Insert packages into the cache.
+    ///
+    /// Fragments are generated in parallel via rayon, then written serially
+    /// to LMDB in a single write transaction.
     ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
@@ -66,10 +69,14 @@ impl RepoCache {
         &self,
         pkgs: I,
     ) -> heed::Result<()> {
+        let pkgs: Vec<_> = pkgs.into_iter().collect();
+        // generate fragments in parallel via rayon
+        let fragments: Vec<(&str, RepoCacheFragment)> = pkgs
+            .into_par_iter()
+            .map(|(pkg, path)| (pkg.name.as_str(), RepoCacheFragment::new(pkg, path)))
+            .collect();
         self.write(move |db, txn| {
-            pkgs.into_iter().try_for_each(|(pkg, path)| {
-                db.put(txn, &pkg.name, &RepoCacheFragment::new(pkg, path))
-            })
+            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, key, &frag))
         })
     }
 
@@ -284,7 +291,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
             r#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{l}">"#
         )?;
         for frag in frags {
-            write!(file, "{}", frag.primary)?;
+            file.write_all(frag.primary.as_bytes())?;
         }
         write!(file, "</metadata>")?;
         Ok(())
@@ -299,7 +306,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
             r#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{l}">"#
         )?;
         for frag in frags {
-            write!(file, "{}", frag.filelists)?;
+            file.write_all(frag.filelists.as_bytes())?;
         }
         write!(file, "</filelists>")?;
         Ok(())
@@ -314,7 +321,7 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
             r#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{l}">"#
         )?;
         for frag in frags {
-            write!(file, "{}", frag.other)?;
+            file.write_all(frag.other.as_bytes())?;
         }
         write!(file, "</otherdata>")?;
         Ok(())
