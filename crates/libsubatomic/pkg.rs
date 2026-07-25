@@ -51,10 +51,10 @@ impl Package {
                     rel: rpm.get_release()?.into(),
                 },
                 checksum: csum.into(),
-                summary: rpm.get_summary()?.into(),
-                description: rpm.get_description()?.into(),
-                packager: rpm.get_packager()?.into(),
-                url: rpm.get_url()?.into(),
+                summary: rpm.get_summary().unwrap_or_default().into(),
+                description: rpm.get_description().unwrap_or_default().into(),
+                packager: rpm.get_packager().ok().map(Into::into),
+                url: rpm.get_url().ok().map(Into::into),
                 time: Time { file: btime, build: rpm.get_build_time()? },
                 size: Size {
                     package: meta.size(),
@@ -66,14 +66,15 @@ impl Package {
                             rpm.header
                                 .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
                                 .map(u64::from)
-                        })?,
+                        })
+                        .ok(),
                 },
                 format: Format {
-                    license: rpm.get_license()?.into(),
-                    vendor: rpm.get_vendor()?.into(),
-                    group: rpm.get_group()?.into(),
-                    buildhost: rpm.get_build_host()?.into(),
-                    sourcerpm: rpm.get_source_rpm()?.into(),
+                    license: rpm.get_license().unwrap_or_default().into(),
+                    vendor: rpm.get_vendor().ok().map(Into::into),
+                    group: rpm.get_group().ok().map(Into::into),
+                    buildhost: rpm.get_build_host().ok().map(Into::into),
+                    sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
                     header_range: Self::get_header_byte_range(&mut f)?,
                     requires: Dependencies::from(rpm.get_requires()?),
                     provides: Dependencies::from(rpm.get_provides()?),
@@ -87,49 +88,8 @@ impl Package {
                 },
                 changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
             },
-<<<<<<< HEAD
             rpm,
         ))
-=======
-            checksum: csum.into(),
-            summary: rpm.get_summary().unwrap_or_default().into(),
-            description: rpm.get_description().unwrap_or_default().into(),
-            packager: rpm.get_packager().ok().map(Into::into),
-            url: rpm.get_url().ok().map(Into::into),
-            time: Time { file: btime, build: rpm.get_build_time()? },
-            size: Size {
-                package: meta.size(),
-                installed: rpm.get_installed_size()?,
-                archive: rpm
-                    .header
-                    .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                    .or_else(|_e| {
-                        rpm.header
-                            .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                            .map(u64::from)
-                    })
-                    .ok(),
-            },
-            format: Format {
-                license: rpm.get_license().unwrap_or_default().into(),
-                vendor: rpm.get_vendor().ok().map(Into::into),
-                group: rpm.get_group().ok().map(Into::into),
-                buildhost: rpm.get_build_host().ok().map(Into::into),
-                sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
-                header_range: Self::get_header_byte_range(&mut f)?,
-                requires: Dependencies::from(rpm.get_requires()?),
-                provides: Dependencies::from(rpm.get_provides()?),
-                conflicts: Dependencies::from(rpm.get_conflicts()?),
-                obsoletes: Dependencies::from(rpm.get_obsoletes()?),
-                recommends: Dependencies::from(rpm.get_recommends()?),
-                suggests: Dependencies::from(rpm.get_suggests()?),
-                supplements: Dependencies::from(rpm.get_supplements()?),
-                enhances: Dependencies::from(rpm.get_enhances()?),
-                files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
-            },
-            changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
-        })
->>>>>>> 0be6b75388124139dd9f39c3704027315ad77469
     }
 
     // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
