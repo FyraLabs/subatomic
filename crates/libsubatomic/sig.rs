@@ -1,8 +1,14 @@
 use rpm::signature::Signing;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Mgr {
     private: pgp::composed::SignedSecretKey,
+}
+
+impl std::fmt::Debug for Mgr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mgr").field("private", &"<private key redacted>").finish()
+    }
 }
 
 impl Mgr {

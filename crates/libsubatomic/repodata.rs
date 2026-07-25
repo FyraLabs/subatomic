@@ -11,9 +11,7 @@ pub mod repomd;
 use sha2::Digest;
 
 use crate::prelude::*;
-use std::io::{Read, Seek, Write};
 use std::os::linux::fs::MetadataExt;
-use std::path::Path;
 use tracing::{debug, info, trace, warn};
 
 pub type RepoCacheDb =

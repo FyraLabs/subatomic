@@ -1,10 +1,7 @@
 //! Module that contains shared struct implementations used in [`crate::repodata`] and a minimal
 //! [`Package`] struct.
 
-use std::{
-    io::{Read, Seek},
-    os::unix::fs::MetadataExt,
-};
+use std::os::unix::fs::MetadataExt;
 
 use sha2::Digest;
 
@@ -32,6 +29,10 @@ pub struct Package {
     pub changelog: Vec<Changelog>,
 }
 impl Package {
+    /// Open an `.rpm` package.
+    ///
+    /// # Errors
+    /// IO errors and RPM errors may be returned.
     pub fn open(path: &Path) -> Result<(Self, rpm::PackageMetadata), rpm::Error> {
         let rpm = rpm::PackageMetadata::open(path)?;
         let mut f = std::fs::File::open(path)?;

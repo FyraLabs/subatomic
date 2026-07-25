@@ -3,6 +3,7 @@ pub use rayon::prelude::*;
 pub use serde::{Deserialize, Serialize};
 pub use smartstring::alias::String;
 pub use std::ffi::{OsStr, OsString};
+pub use std::io::prelude::*;
 pub use std::path::{Path, PathBuf};
 
 #[macro_export]
@@ -13,3 +14,4 @@ macro_rules! epoch {
     }};
 }
 pub use crate::epoch;
+pub use crate::err::Res;
