@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use itertools::Itertools;
 use libsubatomic::pkg::Package;
 use libsubatomic::repodata::RepoCache;
 
@@ -42,16 +43,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&args.output)?;
     std::fs::create_dir_all(&args.cache)?;
 
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache)?;
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
     cache.zstd_level = args.zstd_level;
 
     let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&args.input)?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| {
-            p.extension()
-                .map(|ext| ext.eq_ignore_ascii_case("rpm"))
-                .unwrap_or(false)
-        })
+        .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
         .collect();
 
     if rpm_paths.is_empty() {
@@ -61,21 +58,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let packages: Vec<(Package, PathBuf)> = rpm_paths
         .into_iter()
         .map(|path| {
-            let pkg = Package::try_from(path.as_path())
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+            let (pkg, _) =
+                Package::open(path.as_path()).map_err(|e| format!("{}: {e}", path.display()))?;
             Ok((pkg, path))
         })
         .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
 
-    let refs: Vec<(&Package, &std::path::Path)> = packages
-        .iter()
-        .map(|(pkg, path)| (pkg, path.as_path()))
-        .collect();
+    let refs = packages.iter().map(|(pkg, path)| (pkg, path.as_os_str())).collect_vec();
 
     cache.insert_pkgs(refs)?;
 
-    let temp_dir = tempfile::tempdir()?;
-    cache.write_all(&args.output, temp_dir.path())?;
+    cache.write_all(&args.output)?;
 
     println!("repodata written to {}", args.output.display());
     Ok(())
