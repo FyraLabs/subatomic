@@ -236,6 +236,40 @@ impl RepoCache {
         Ok(count)
     }
 
+    /// Compact the underlying LMDB file by writing a fresh copy and swapping it in.
+    ///
+    /// This consumes `self` so the environment can be closed before the file is replaced.
+    ///
+    /// # Errors
+    /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
+    pub fn compact(self) -> heed::Result<Self> {
+        let env_dir = self.env.path().to_path_buf();
+        let repo = self.repo.clone();
+        let zstd = self.zstd_level;
+
+        let tmp_file = env_dir.join("data.compact");
+        let data_file = env_dir.join("data.mdb");
+        let old_file = env_dir.join("data.mdb.old");
+
+        info!(dir = %env_dir.display(), "compacting cache");
+        self.env.copy_to_path(&tmp_file, heed::CompactionOption::Enabled)?;
+
+        // Close the env so the mmap is released and we can rename the file
+        drop(self);
+
+        // Atomically replace data.mdb with the compacted copy
+        if data_file.exists() {
+            std::fs::rename(&data_file, &old_file)?;
+        }
+        std::fs::rename(&tmp_file, &data_file)?;
+        let _ = std::fs::remove_file(&old_file);
+
+        let mut new = Self::new(&repo, &env_dir)?;
+        new.zstd_level = zstd;
+        info!(dir = %env_dir.display(), "cache compacted");
+        Ok(new)
+    }
+
     #[inline]
     fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> std::io::Result<()> {
         RepoWriteDispatcher::dispatch(self, files)
