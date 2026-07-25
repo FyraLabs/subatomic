@@ -1,5 +1,5 @@
 use crate::{
-    pkg::{Format, Size, Time, Version},
+    pkg::{Dependencies, FileEntry, HeaderRange, Size, Time, Version},
     prelude::*,
 };
 
@@ -32,7 +32,52 @@ pub struct Package<'a> {
     pub time: &'a Time,
     pub size: &'a Size,
     pub location: PackageLocation<'a>,
-    pub format: Format,
+    pub format: PrimaryFormat<'a>,
+}
+
+/// Zero-copy view of [`crate::pkg::Format`] for primary.xml serialization.
+///
+/// `primary.xml` only includes a subset of files (see [`FileEntry::is_primary`]). The original
+/// code cloned the entire `Format` (including all dependency vectors and the full file list) just
+/// to filter the files. This struct borrows everything from the source `Format` to avoid that
+/// clone, while still presenting the same serialized shape to `quick_xml`.
+#[derive(Clone, Debug, Serialize)]
+pub struct PrimaryFormat<'a> {
+    #[serde(rename = "rpm:license")]
+    pub license: &'a str,
+    #[serde(rename = "rpm:vendor")]
+    pub vendor: &'a str,
+    #[serde(rename = "rpm:group")]
+    pub group: &'a str,
+    #[serde(rename = "rpm:buildhost")]
+    pub buildhost: &'a str,
+    #[serde(rename = "rpm:sourcerpm")]
+    pub sourcerpm: &'a str,
+    #[serde(rename = "rpm:header-range")]
+    pub header_range: HeaderRange,
+    #[serde(rename = "rpm:requires", default, skip_serializing_if = "deps_is_empty")]
+    pub requires: &'a Dependencies,
+    #[serde(rename = "rpm:provides", default, skip_serializing_if = "deps_is_empty")]
+    pub provides: &'a Dependencies,
+    #[serde(rename = "rpm:conflicts", default, skip_serializing_if = "deps_is_empty")]
+    pub conflicts: &'a Dependencies,
+    #[serde(rename = "rpm:obsoletes", default, skip_serializing_if = "deps_is_empty")]
+    pub obsoletes: &'a Dependencies,
+    #[serde(rename = "rpm:recommends", default, skip_serializing_if = "deps_is_empty")]
+    pub recommends: &'a Dependencies,
+    #[serde(rename = "rpm:suggests", default, skip_serializing_if = "deps_is_empty")]
+    pub suggests: &'a Dependencies,
+    #[serde(rename = "rpm:supplements", default, skip_serializing_if = "deps_is_empty")]
+    pub supplements: &'a Dependencies,
+    #[serde(rename = "rpm:enhances", default, skip_serializing_if = "deps_is_empty")]
+    pub enhances: &'a Dependencies,
+    #[serde(rename = "file", default)]
+    pub files: Vec<&'a FileEntry>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn deps_is_empty(d: &&Dependencies) -> bool {
+    d.is_empty()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -70,9 +115,7 @@ impl<'a> Package<'a> {
         }: &'a crate::pkg::Package,
         path: &'a OsStr,
     ) -> Self {
-        let mut format = format.clone();
-        format.files =
-            format.files.into_iter().filter(super::super::pkg::FileEntry::is_primary).collect();
+        let files = format.files.iter().filter(|f| f.is_primary()).collect();
         Self {
             name,
             arch,
@@ -85,7 +128,23 @@ impl<'a> Package<'a> {
             time,
             size,
             location: PackageLocation { href: path },
-            format,
+            format: PrimaryFormat {
+                license: &format.license,
+                vendor: &format.vendor,
+                group: &format.group,
+                buildhost: &format.buildhost,
+                sourcerpm: &format.sourcerpm,
+                header_range: format.header_range.clone(),
+                requires: &format.requires,
+                provides: &format.provides,
+                conflicts: &format.conflicts,
+                obsoletes: &format.obsoletes,
+                recommends: &format.recommends,
+                suggests: &format.suggests,
+                supplements: &format.supplements,
+                enhances: &format.enhances,
+                files,
+            },
             ..
         }
     }

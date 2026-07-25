@@ -23,7 +23,7 @@ pub struct OtherPackage<'a> {
     pub name: &'a str,
     #[serde(rename = "@arch")]
     pub arch: &'a str,
-    pub version: Version,
+    pub version: &'a Version,
     #[serde(rename = "changelog", default)]
     pub changelogs: &'a [Changelog],
 }
@@ -35,7 +35,7 @@ impl<'a> OtherPackage<'a> {
             pkgid: &p.checksum,
             name: &p.name,
             arch: &p.arch,
-            version: p.version.clone(),
+            version: &p.version,
             changelogs: &p.changelog,
         }
     }
