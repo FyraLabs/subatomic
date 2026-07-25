@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use tracing::{debug, info, instrument, trace, warn};
 
-use itertools::Itertools;
 use libsubatomic::pkg::Package;
 use libsubatomic::repodata::RepoCache;
 

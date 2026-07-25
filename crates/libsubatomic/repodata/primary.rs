@@ -95,7 +95,7 @@ pub struct PackageChecksum<'a> {
 #[derive(Clone, Debug, Serialize)]
 pub struct PackageLocation<'a> {
     #[serde(rename = "@href")]
-    pub href: &'a OsStr,
+    pub href: &'a str,
 }
 
 impl<'a> Package<'a> {
@@ -129,7 +129,7 @@ impl<'a> Package<'a> {
             url: url.as_deref(),
             time,
             size,
-            location: PackageLocation { href: path },
+            location: PackageLocation { href: path.to_str().expect("rpm path is not valid utf-8") },
             format: PrimaryFormat {
                 license: &format.license,
                 vendor: format.vendor.as_deref(),

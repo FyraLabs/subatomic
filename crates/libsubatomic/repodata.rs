@@ -51,6 +51,22 @@ impl RepoCache {
         let path = cachedir.join(repo);
         let cachedir = cachedir.to_owned();
         let dir = dir.to_owned();
+
+        // Remove any stale file sitting where LMDB wants a directory.
+        if path.is_file() {
+            warn!(path = %path.display(), "removing stale cache file");
+            std::fs::remove_file(&path)?;
+        }
+
+        // LMDB expects the parent dirs to exist. Create them upfront.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Ensure the LMDB directory exists (heed creates it, but only after a successful open).
+        // Pre-creating avoids races where the directory is briefly not there.
+        std::fs::create_dir_all(&path)?;
+
         // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
