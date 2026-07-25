@@ -36,10 +36,22 @@ impl RepoCache {
     ///
     /// # Errors
     /// An error is returned when `heed` fails to open the cache file.
+    /// Default LMDB virtual address-space reservation for the cache file.
+    ///
+    /// 10 GiB is chosen because the actual memory usage remains proportional
+    /// to the working set; this only reserves address space. Repos with
+    /// 10k+ packages can still fit easily, and the file grows sparsely.
+    const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024;
+
     pub fn new(repo: &str, path: &Path) -> heed::Result<Self> {
         // SAFETY: assume this file is not modified concurrently
-        let env =
-            unsafe { heed::EnvOpenOptions::new().read_txn_without_tls().max_dbs(1).open(path) }?;
+        let env = unsafe {
+            heed::EnvOpenOptions::new()
+                .read_txn_without_tls()
+                .max_dbs(1)
+                .map_size(Self::DEFAULT_MAP_SIZE)
+                .open(path)?
+        };
         Ok(Self { repo: repo.into(), env, .. })
     }
 
@@ -70,6 +82,9 @@ impl RepoCache {
     /// Fragments are generated in parallel via rayon, then written serially
     /// to LMDB in a single write transaction.
     ///
+    /// Keys are derived from the full NEVRA so multiple versions of the same
+    /// package name can coexist in the cache.
+    ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
     pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b Path)>>(
@@ -77,14 +92,39 @@ impl RepoCache {
         pkgs: I,
     ) -> heed::Result<()> {
         let pkgs: Vec<_> = pkgs.into_iter().collect();
-        // generate fragments in parallel via rayon
-        let fragments: Vec<(&str, RepoCacheFragment)> = pkgs
+        let fragments: Vec<(std::string::String, RepoCacheFragment)> = pkgs
             .into_par_iter()
-            .map(|(pkg, path)| (pkg.name.as_str(), RepoCacheFragment::new(pkg, path)))
+            .map(|(pkg, path)| {
+                let key = format!(
+                    "{}-{}:{}-{}.{}",
+                    pkg.name, pkg.version.epoch, pkg.version.ver, pkg.version.rel, pkg.arch
+                );
+                (key, RepoCacheFragment::new(pkg, path))
+            })
             .collect();
         self.write(move |db, txn| {
-            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, key, &frag))
+            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, &key, &frag))
         })
+    }
+
+    /// Check whether a key already exists in the cache.
+    #[must_use]
+    pub fn has(&self, key: &str) -> bool {
+        self.read(|db, txn| db.get(txn, key).expect("cannot check key")).is_some()
+    }
+
+    /// Insert a single package fragment under an explicit key.
+    ///
+    /// # Errors
+    /// This propagates errors from [`heed::Database::put`].
+    pub fn insert(&self, key: &str, pkg: &crate::pkg::Package, path: &Path) -> heed::Result<()> {
+        self.write(|db, txn| db.put(txn, key, &RepoCacheFragment::new(pkg, path)))
+    }
+
+    /// Return the number of cached fragments.
+    #[must_use]
+    pub fn len(&self) -> u64 {
+        self.read(|db, txn| db.len(txn).expect("cannot get db len"))
     }
 
     #[must_use]
