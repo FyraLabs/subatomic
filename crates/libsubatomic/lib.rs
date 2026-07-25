@@ -3,5 +3,6 @@
 
 pub mod pkg;
 pub mod prelude;
+pub mod repo;
 pub mod repodata;
 pub mod sig;
