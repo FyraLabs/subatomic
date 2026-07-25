@@ -243,9 +243,11 @@ impl RepoCache {
     /// # Errors
     /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
     pub fn compact(self) -> heed::Result<Self> {
-        let env_dir = self.env.path().to_path_buf();
         let repo = self.repo.clone();
+        let cachedir = self.cachedir.clone();
+        let dir = self.dir.clone();
         let zstd = self.zstd_level;
+        let env_dir = self.env.path().to_path_buf();
 
         let tmp_file = env_dir.join("data.compact");
         let data_file = env_dir.join("data.mdb");
@@ -264,7 +266,7 @@ impl RepoCache {
         std::fs::rename(&tmp_file, &data_file)?;
         let _ = std::fs::remove_file(&old_file);
 
-        let mut new = Self::new(&repo, &env_dir)?;
+        let mut new = Self::new(&repo, &cachedir, &dir)?;
         new.zstd_level = zstd;
         info!(dir = %env_dir.display(), "cache compacted");
         Ok(new)
