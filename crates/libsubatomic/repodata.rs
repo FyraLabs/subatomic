@@ -341,7 +341,13 @@ impl RepoCache {
     }
 
     fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> std::io::Result<Vec<u8>> {
-        let mut fd_repomd = std::fs::File::create(dir.join("repomd.xml"))?;
+        let path = dir.join("repomd.xml");
+        let mut fd_repomd = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
         repomd::Repomd::generate(&mut fd_repomd, data).expect("cannot write to repomd");
 
         let pos = fd_repomd.stream_position()?;
