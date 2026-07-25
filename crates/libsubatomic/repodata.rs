@@ -48,7 +48,10 @@ impl RepoCache {
         Ok(Self { repo: repo.into(), env, cachedir, dir, .. })
     }
 
-    fn write<T>(&self, f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> heed::Result<T>) -> heed::Result<T> {
+    fn write<T>(
+        &self,
+        f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> heed::Result<T>,
+    ) -> heed::Result<T> {
         let mut txn = self.env.write_txn().expect("cannot create rw txn");
         let db = self.env.create_database(&mut txn, Some(&self.repo)).expect("cannot create db");
         match f(&db, &mut txn) {
