@@ -20,6 +20,7 @@ pub enum DataType {
     // PrimaryZck,
     // FilelistsZck,
     // OtherZck,
+    Group,
 }
 impl std::fmt::Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -27,6 +28,7 @@ impl std::fmt::Display for DataType {
             Self::Primary => "primary",
             Self::Filelists => "filelists",
             Self::Other => "other",
+            Self::Group => "comps",
         })
     }
 }
