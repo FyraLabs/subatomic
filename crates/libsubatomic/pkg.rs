@@ -1,8 +1,6 @@
 //! Module that contains shared struct implementations used in [`crate::repodata`] and a minimal
 //! [`Package`] struct.
 
-use std::os::unix::fs::MetadataExt;
-
 use sha2::Digest;
 
 use crate::prelude::*;
@@ -273,7 +271,7 @@ impl FileEntry {
     pub fn is_primary(&self) -> bool {
         const BIN: &[u8] = b"bin/";
 
-        let p = self.path.as_os_str().as_encoded_bytes();
+        let p = self.path.as_os_str().as_bytes();
 
         p.starts_with(b"/etc/")
             || p == b"/usr/lib/sendmail"

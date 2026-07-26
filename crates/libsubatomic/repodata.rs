@@ -15,8 +15,15 @@ use std::os::linux::fs::MetadataExt;
 use tracing::{debug, info, trace, warn};
 
 pub type RepoCacheDb =
-    heed::Database<heed::types::Str, heed::types::SerdeBincode<RepoCacheFragment>>;
+    heed::Database<heed::types::Bytes, heed::types::SerdeBincode<RepoCacheFragment>>;
 
+/// Cache for repository packages.
+///
+/// Handle for managing XML fragments [`RepoCacheFragment`] of package metadata. These fragments are
+/// directly concatenated to form the final XMLs.
+///
+/// This internally uses a [`heed::Database`], which is an efficient KV database (not relational!).
+/// The keys are the filenames of the RPM packages, while the values are [`RepoCacheFragment`].
 #[derive(Clone, Debug)]
 pub struct RepoCache {
     pub repo: String,
@@ -140,9 +147,6 @@ impl RepoCache {
     /// Fragments are generated in parallel via rayon, then written serially
     /// to LMDB in a single write transaction.
     ///
-    /// Keys are derived from the full NEVRA so multiple versions of the same
-    /// package name can coexist in the cache.
-    ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
     pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b OsStr)>>(
@@ -151,15 +155,11 @@ impl RepoCache {
     ) -> heed::Result<()> {
         let pkgs: Vec<_> = pkgs.into_iter().collect();
         info!(count = pkgs.len(), "generating xml fragments in parallel");
-        let fragments: Vec<(std::string::String, RepoCacheFragment)> = pkgs
+        let fragments: Vec<_> = pkgs
             .into_par_iter()
             .map(|(pkg, path)| {
                 trace!(name = %pkg.name, "serializing package");
-                let key = format!(
-                    "{}-{}:{}-{}.{}",
-                    pkg.name, pkg.version.epoch, pkg.version.ver, pkg.version.rel, pkg.arch
-                );
-                (key, RepoCacheFragment::new(pkg, path))
+                (path.as_bytes(), RepoCacheFragment::new(pkg, path))
             })
             .collect();
         trace!(count = fragments.len(), "writing fragments to cache");
@@ -170,7 +170,7 @@ impl RepoCache {
 
     /// Check whether a key already exists in the cache.
     #[must_use]
-    pub fn has(&self, key: &str) -> bool {
+    pub fn has(&self, key: &[u8]) -> bool {
         trace!(key, "checking cache key");
         self.read(|db, txn| db.get(txn, key).expect("cannot check key")).is_some()
     }
@@ -179,7 +179,7 @@ impl RepoCache {
     ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
-    pub fn insert(&self, key: &str, pkg: &crate::pkg::Package, path: &OsStr) -> heed::Result<()> {
+    pub fn insert(&self, key: &[u8], pkg: &crate::pkg::Package, path: &OsStr) -> heed::Result<()> {
         trace!(key, path = %path.display(), "inserting single package");
         self.write(|db, txn| db.put(txn, key, &RepoCacheFragment::new(pkg, path)))
     }
@@ -190,7 +190,7 @@ impl RepoCache {
         self.read(|db, txn| db.len(txn).expect("cannot get db len"))
     }
 
-    pub fn delete_pkgs<'a>(&self, pkgs: &'a [&'a str]) -> heed::Result<Vec<&'a &'a str>> {
+    pub fn delete_pkgs<'a>(&self, pkgs: &'a [&'a [u8]]) -> heed::Result<Vec<&'a &'a [u8]>> {
         self.write(move |db, txn| {
             pkgs.into_iter()
                 .map(|key| Ok((!db.delete(txn, key)?).then_some(key)))
@@ -200,18 +200,18 @@ impl RepoCache {
     }
 
     #[must_use]
-    pub fn get_fragment(&self, key: &str) -> Option<RepoCacheFragment> {
+    pub fn get_fragment(&self, key: &[u8]) -> Option<RepoCacheFragment> {
         self.read(|db, txn| db.get(txn, key).expect("cannot get frag"))
     }
 
     /// Collect every key currently stored in the cache.
-    pub fn keys(&self) -> Vec<std::string::String> {
+    pub fn keys(&self) -> Vec<Vec<u8>> {
         debug!(repo = %self.repo, "listing cache keys");
         self.read(|db, txn| {
             let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0) as usize);
             for item in db.iter(txn).expect("cannot iterate db") {
-                let (k, _v) = item.expect("cannot read db item");
-                out.push(k.into());
+                let (k, _) = item.expect("cannot read db item");
+                out.push(k.to_owned());
             }
             trace!(count = out.len(), "collected cache keys");
             out
@@ -222,7 +222,7 @@ impl RepoCache {
     ///
     /// # Errors
     /// This propagates errors from [`heed::Database::delete`].
-    pub fn remove(&self, key: &str) -> heed::Result<bool> {
+    pub fn remove(&self, key: &[u8]) -> heed::Result<bool> {
         trace!(key, "removing cache key");
         self.write(|db, txn| db.delete(txn, key))
     }
@@ -233,13 +233,13 @@ impl RepoCache {
     ///
     /// # Errors
     /// This propagates errors from LMDB write operations.
-    pub fn prune(&self, expected: &std::collections::HashSet<&str>) -> heed::Result<u64> {
+    pub fn prune(&self, expected: &std::collections::HashSet<&[u8]>) -> heed::Result<u64> {
         let to_remove: Vec<_> =
-            self.keys().into_iter().filter(|k| !expected.contains(k.as_str())).collect();
+            self.keys().into_iter().filter(|k| !expected.contains(&**k)).collect();
         debug!(stale = to_remove.len(), "pruning cache");
         let mut count = 0u64;
         for key in to_remove {
-            trace!(key, "pruning stale key");
+            trace!(?key, "pruning stale key");
             if self.write(|db, txn| db.delete(txn, &key))? {
                 count += 1;
             }

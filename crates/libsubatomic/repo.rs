@@ -1,8 +1,10 @@
+use std::collections::HashSet;
+
 use crate::prelude::*;
 
 use sha2::Digest;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Repo {
     pub id: String,
     pub cache: crate::repodata::RepoCache,
@@ -58,11 +60,7 @@ impl Repo {
         }
         for f in std::fs::read_dir(self.dir.join("repodata"))? {
             let f = f?;
-            if f.file_name()
-                .as_encoded_bytes()
-                .windows(FILENAME_MATCH.len())
-                .contains(FILENAME_MATCH)
-            {
+            if f.file_name().as_bytes().windows(FILENAME_MATCH.len()).contains(FILENAME_MATCH) {
                 std::fs::remove_file(f.path())?;
                 break;
             }
@@ -95,7 +93,7 @@ impl Repo {
         Ok((ret, pkg, name))
     }
 
-    /// Add packages to the cache.
+    /// Upsert packages to the cache.
     ///
     /// `paths` should be a list of fs paths to the rpm packages in the correct directory. This
     /// function will not move or modify any of the package files.
@@ -116,6 +114,15 @@ impl Repo {
         Ok(pkgs.into_iter().map(|(ret, _, _)| ret))
     }
 
+    /// Upsert packages and remove their old versions.
+    ///
+    /// See [`Self::add`] for more info.
+    #[tracing::instrument]
+    pub fn add_replacement(&self, paths: &[&Path]) -> Res<impl Iterator<Item = AddPkgOutput>> {
+        // self.del(self.cache)
+        todo!()
+    }
+
     /// Trigger repository generation. Generate all XML files in `repodata/`.
     ///
     /// This is analogous to running the `createrepo` command. The repository metadata is generated
@@ -134,6 +141,57 @@ impl Repo {
         Ok(())
     }
 
+    /// Invalidate the cache and regenerate XML files in `repodata/`.
+    ///
+    /// In most cases you should try to use [`Self::generate`] instead. This operation is way more
+    /// expensive than the usual generate method which reads from the cache. However, this operation
+    /// should still be way faster than `createrepo_c`.
+    ///
+    /// Upsert all `.rpm` files in [`Self::dir`] into the cache in parallel, then remove ones that
+    /// do not exist, then run [`Self::generate`].
+    pub fn regenerate(&self, incremental: bool) -> Res<RegenerateOutput> {
+        let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&self.dir)?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
+            .collect();
+        let mut expected_keys: HashSet<Vec<u8>> = HashSet::with_capacity(rpm_paths.len());
+        let mut ret = RegenerateOutput { .. };
+        for path in rpm_paths {
+            let key = path.file_name().expect("bad filename").as_bytes();
+            expected_keys.insert(key.to_owned());
+
+            if incremental && self.cache.has(&key) {
+                ret.cached += 1;
+                continue;
+            }
+
+            match crate::pkg::Package::open(&path) {
+                Ok((pkg, _)) => {
+                    self.cache.insert(&key, &pkg, path.as_os_str())?;
+                    ret.parsed += 1;
+                }
+                Err(e) => {
+                    ret.skipped.push((path, e));
+                }
+            }
+        }
+        self.cache.write_all(&self.dir)?;
+        if incremental {
+            let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
+            ret.removed = self.cache.prune(&expected_refs)?;
+        }
+        Ok(ret)
+    }
+
+    /// Compacts the cache using [`crate::repodata::RepoCache::compact`].
+    ///
+    /// # Errors
+    /// Errors are propagated.
+    pub fn compact_cache(self) -> Res<Self> {
+        let Self { id, cache, dir, sig } = self;
+        Ok(Repo { id, cache: cache.compact()?, dir, sig })
+    }
+
     /// Delete a list of packages by their filenames.
     ///
     /// Package files (`.rpm`) and cache records are deleted.
@@ -143,12 +201,12 @@ impl Repo {
     ///
     /// # Errors
     /// Propagate [`heed`] and IO errors.
-    pub fn del<'a>(&self, ids: &'a [&'a str]) -> Res<Vec<&'a &'a str>> {
+    pub fn del<'a>(&self, ids: &'a [&'a [u8]]) -> Res<Vec<&'a &'a [u8]>> {
         let not_found = self.cache.delete_pkgs(ids)?;
         ids.iter()
             .filter(|f| !not_found.contains(f))
             .par_bridge()
-            .try_for_each(|p| std::fs::remove_file(self.dir.join(p)))?;
+            .try_for_each(|&p| std::fs::remove_file(self.dir.join(OsStr::from_bytes(p))))?;
         Ok(not_found)
     }
 }
@@ -156,4 +214,11 @@ impl Repo {
 #[derive(Clone, Debug, Default)]
 pub struct AddPkgOutput {
     pub sig: Option<Vec<u8>>,
+}
+#[derive(Debug, Default)]
+pub struct RegenerateOutput {
+    pub parsed: usize = 0,
+    pub skipped: Vec<(PathBuf, rpm::Error)> = Vec::new(),
+    pub cached: usize = 0,
+    pub removed: u64 = 0,
 }
