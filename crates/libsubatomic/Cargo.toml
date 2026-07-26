@@ -11,6 +11,7 @@ name = "createrepo_rs"
 path = "bin/createrepo.rs"
 
 [dependencies]
+atoi = "3.1.0"
 clap = { version = "4.5.37", features = ["derive"] }
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",

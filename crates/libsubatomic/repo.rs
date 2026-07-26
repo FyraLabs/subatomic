@@ -118,9 +118,33 @@ impl Repo {
     ///
     /// See [`Self::add`] for more info.
     #[tracing::instrument]
-    pub fn add_replacement(&self, paths: &[&Path]) -> Res<impl Iterator<Item = AddPkgOutput>> {
-        // self.del(self.cache)
-        todo!()
+    pub fn add_replace<'a>(
+        &self,
+        paths: &'a [&'a Path],
+    ) -> Res<AddReplaceOutput<'a, impl Iterator<Item = AddPkgOutput>>> {
+        let (mut bad_filenames, mut removed) = (Vec::new(), Vec::new());
+        let keys = self.cache.keys();
+        let parsed_keys = keys
+            .iter()
+            .map(|k| (k, crate::pkg::parse_filename(k).expect("can't parse cache keys")))
+            .collect_vec();
+        for path in paths {
+            let filename = path.file_name().expect("bad filename").as_bytes();
+            let Some(crate::pkg::ParsePathOutput { name, arch, .. }) =
+                crate::pkg::parse_filename(filename)
+            else {
+                bad_filenames.push(path);
+                continue;
+            };
+            let prev_versions =
+                parsed_keys.iter().filter(|(_, k)| k.name == name && k.arch == arch);
+            removed.extend(prev_versions.map(|(k, _)| k.to_vec()));
+        }
+        let to_remove = removed.iter().map(|k| &**k).collect_vec();
+        let not_found = self.del(&to_remove)?;
+        debug_assert!(not_found.is_empty());
+        let added = self.add(paths)?;
+        Ok(AddReplaceOutput { bad_filenames, removed, added })
     }
 
     /// Trigger repository generation. Generate all XML files in `repodata/`.
@@ -221,4 +245,11 @@ pub struct RegenerateOutput {
     pub skipped: Vec<(PathBuf, rpm::Error)> = Vec::new(),
     pub cached: usize = 0,
     pub removed: u64 = 0,
+}
+
+#[derive(Clone, Debug)]
+pub struct AddReplaceOutput<'a, I: Iterator<Item = AddPkgOutput>> {
+    pub bad_filenames: Vec<&'a &'a Path>,
+    pub removed: Vec<Vec<u8>>,
+    pub added: I,
 }
