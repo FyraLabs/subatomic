@@ -46,67 +46,116 @@ pub struct Package {
     /// [`FileEntry::is_primary()`].
     pub format: Format,
     pub changelog: Vec<Changelog>,
+    pub appstream_frag: Vec<u8> = Vec::new(),
 }
 impl Package {
+    #[must_use]
+    pub fn is_appstream_file(path: &Path) -> bool {
+        path.starts_with("/usr/share/metainfo/") && path.extension().is_some_and(|ext| ext == "xml")
+    }
+
+    /// Generate appstream fragment for this rpm package using [`crate::repodata::appstream::transform`].
+    ///
+    /// # Performance
+    /// This operation is slightly expensive and requires decompressing specific files in the archive.
+    /// This requires a linear search against the full list of files in the rpm. Documentation from
+    /// [`rpm::PackageReader::next_file`] suggests only wanted files are decompressed.
+    ///
+    /// # Errors
+    /// RPM errors are propagated. If parsing an appstream xml file failed, no errors will be
+    /// returned and a warning ([`tracing::warn!`]) will be issued instead.
+    pub fn appstream_frag(rpm: &mut rpm::PackageReader) -> Result<Vec<u8>, rpm::Error> {
+        // PERF: do we need this search beforehand?
+        if !rpm.metadata.get_file_entries()?.into_iter().any(|f| Self::is_appstream_file(&f.path()))
+        {
+            return Ok(Vec::new());
+        }
+        let mut appstream_frag = Vec::new();
+        let pkgname = rpm.metadata.get_name()?.to_owned();
+        while let Some(mut f) = rpm.next_file()? {
+            if Self::is_appstream_file(&f.metadata.path()) {
+                let size = f.metadata.size();
+                if let Err(e) = crate::repodata::appstream::transform(
+                    &pkgname,
+                    std::io::BufReader::new(&mut f),
+                    // TODO: what to do if size too large in mem?
+                    Some(size),
+                    &mut appstream_frag,
+                ) {
+                    tracing::warn!(
+                        pkgname,
+                        path = %f.metadata.path().display(),
+                        ?e,
+                        "cannot parse appstream xml"
+                    );
+                }
+            }
+            f.finish()?;
+        }
+        Ok(appstream_frag)
+    }
+
     /// Open an `.rpm` package.
     ///
     /// # Errors
     /// IO errors and RPM errors may be returned.
-    pub fn open(path: &Path) -> Result<(Self, rpm::PackageMetadata), rpm::Error> {
-        let rpm = rpm::PackageMetadata::open(path)?;
+    pub fn open(path: &Path) -> Result<(Self, rpm::PackageReader), rpm::Error> {
+        let rpm = rpm::PackageReader::open(path)?;
+        let m = &rpm.metadata;
         let mut f = std::fs::File::open(path)?;
         let mut buf = Vec::new();
         f.read_to_end(&mut buf)?;
         let csum = hex::encode(sha2::Sha256::digest(&buf));
         let meta = f.metadata()?;
-
         let btime = epoch!(meta.created()?);
+
         Ok((
             Self {
-                name: rpm.get_name()?.into(),
-                arch: rpm.get_arch()?.into(),
+                name: m.get_name()?.into(),
+                arch: m.get_arch()?.into(),
                 version: Version {
-                    epoch: rpm.get_epoch().unwrap_or(0).into(),
-                    ver: rpm.get_version()?.into(),
-                    rel: rpm.get_release()?.into(),
+                    epoch: m.get_epoch().unwrap_or(0).into(),
+                    ver: m.get_version()?.into(),
+                    rel: m.get_release()?.into(),
                 },
                 checksum: csum.into(),
-                summary: rpm.get_summary().unwrap_or_default().into(),
-                description: rpm.get_description().unwrap_or_default().into(),
-                packager: rpm.get_packager().ok().map(Into::into),
-                url: rpm.get_url().ok().map(Into::into),
-                time: Time { file: btime, build: rpm.get_build_time()? },
+                summary: m.get_summary().unwrap_or_default().into(),
+                description: m.get_description().unwrap_or_default().into(),
+                packager: m.get_packager().ok().map(Into::into),
+                url: m.get_url().ok().map(Into::into),
+                time: Time { file: btime, build: m.get_build_time()? },
                 size: Size {
                     package: meta.size(),
-                    installed: rpm.get_installed_size()?,
-                    archive: rpm
+                    installed: m.get_installed_size()?,
+                    archive: m
                         .header
                         .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
                         .or_else(|_e| {
-                            rpm.header
+                            m.header
                                 .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
                                 .map(u64::from)
                         })
                         .ok(),
                 },
                 format: Format {
-                    license: rpm.get_license().unwrap_or_default().into(),
-                    vendor: rpm.get_vendor().ok().map(Into::into),
-                    group: rpm.get_group().ok().map(Into::into),
-                    buildhost: rpm.get_build_host().ok().map(Into::into),
-                    sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
+                    license: m.get_license().unwrap_or_default().into(),
+                    vendor: m.get_vendor().ok().map(Into::into),
+                    group: m.get_group().ok().map(Into::into),
+                    buildhost: m.get_build_host().ok().map(Into::into),
+                    sourcerpm: m.get_source_rpm().ok().map(Into::into),
                     header_range: Self::get_header_byte_range(&mut f)?,
-                    requires: Dependencies::from(rpm.get_requires()?),
-                    provides: Dependencies::from(rpm.get_provides()?),
-                    conflicts: Dependencies::from(rpm.get_conflicts()?),
-                    obsoletes: Dependencies::from(rpm.get_obsoletes()?),
-                    recommends: Dependencies::from(rpm.get_recommends()?),
-                    suggests: Dependencies::from(rpm.get_suggests()?),
-                    supplements: Dependencies::from(rpm.get_supplements()?),
-                    enhances: Dependencies::from(rpm.get_enhances()?),
-                    files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
+                    requires: Dependencies::from(m.get_requires()?),
+                    provides: Dependencies::from(m.get_provides()?),
+                    conflicts: Dependencies::from(m.get_conflicts()?),
+                    obsoletes: Dependencies::from(m.get_obsoletes()?),
+                    recommends: Dependencies::from(m.get_recommends()?),
+                    suggests: Dependencies::from(m.get_suggests()?),
+                    supplements: Dependencies::from(m.get_supplements()?),
+                    enhances: Dependencies::from(m.get_enhances()?),
+                    files: m.get_file_entries()?.into_iter().map(Into::into).collect(),
                 },
-                changelog: rpm.get_changelog_entries()?.into_iter().map(Into::into).collect(),
+                changelog: m.get_changelog_entries()?.into_iter().map(Into::into).collect(),
+                appstream_frag: Vec::new(),
             },
             rpm,
         ))

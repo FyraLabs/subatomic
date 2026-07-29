@@ -3,6 +3,7 @@
 //! This module contains repodata XML type definitions and the helper functions required to generate
 //! those XML files.
 
+pub mod appstream;
 pub mod filelists;
 pub mod other;
 pub mod primary;

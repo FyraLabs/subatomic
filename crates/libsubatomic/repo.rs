@@ -10,6 +10,7 @@ pub struct Repo {
     pub cache: crate::repodata::RepoCache,
     pub dir: std::path::PathBuf,
     pub sig: Option<crate::sig::Mgr>,
+    pub use_appstream: bool = false,
 }
 
 impl Repo {
@@ -49,23 +50,28 @@ impl Repo {
     /// Otherwise, perform a linear search with [`std::fs::read_dir`] in `repodata/`, and delete the
     /// first file that contains `-comps.xml` in the name.
     ///
+    /// Return whether the comps file was deleted. In other words, return false if there was no comps
+    /// in the cache.
+    ///
     /// # Errors
-    /// `Ok(())` will be returned if there is no comps in cache; otherwise, `Ok(())` will be
-    /// returned if no comps file is found. Returns [`heed`] errors and IO errors if the file is
-    /// found but cannot be deleted.
-    pub fn del_comps(&self) -> Res<()> {
+    /// Returns [`heed`] errors and IO errors if the file was found but could not be deleted.
+    /// However, `Ok(true)` is returned if comps was in cache but the file does not exist.
+    pub fn del_comps(&self) -> Res<bool> {
         const FILENAME_MATCH: &[u8] = b"-comps.xml";
         if !self.cache.del_comps()? {
-            return Ok(());
+            return Ok(false);
         }
-        for f in std::fs::read_dir(self.dir.join("repodata"))? {
-            let f = f?;
-            if f.file_name().as_bytes().windows(FILENAME_MATCH.len()).contains(FILENAME_MATCH) {
-                std::fs::remove_file(f.path())?;
-                break;
-            }
+        if let Some(f) = std::fs::read_dir(self.dir.join("repodata"))?
+            .filter_ok(|f| {
+                f.file_name().as_bytes().windows(FILENAME_MATCH.len()).contains(FILENAME_MATCH)
+            })
+            .next()
+        {
+            std::fs::remove_file(f?.path())?;
+        } else {
+            tracing::warn!("no comps file found but comps was in cache");
         }
-        Ok(())
+        Ok(true)
     }
 
     #[tracing::instrument]
@@ -77,7 +83,7 @@ impl Repo {
         let (pkg, rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
             tracing::debug!("signing");
-            let sig = sig.sign_rpm(&rpmmeta)?;
+            let sig = sig.sign_rpm(&rpmmeta.metadata)?;
             if let Err(e) = rpm::Package::apply_signature_in_place(path, sig.clone()) {
                 let rpm::Error::InsufficientReservedSpace { .. } = e else {
                     return Err(e);
@@ -219,8 +225,8 @@ impl Repo {
     /// # Errors
     /// Errors are propagated.
     pub fn compact_cache(self) -> Res<Self> {
-        let Self { id, cache, dir, sig } = self;
-        Ok(Self { id, cache: cache.compact()?, dir, sig })
+        let Self { id, cache, dir, sig, use_appstream } = self;
+        Ok(Self { id, cache: cache.compact()?, dir, sig, use_appstream })
     }
 
     /// Delete a list of packages by their filenames.

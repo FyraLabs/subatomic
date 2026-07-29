@@ -21,6 +21,7 @@ pub enum DataType {
     // FilelistsZck,
     // OtherZck,
     Group,
+    Appstream,
 }
 impl std::fmt::Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,6 +30,7 @@ impl std::fmt::Display for DataType {
             Self::Filelists => "filelists",
             Self::Other => "other",
             Self::Group => "comps",
+            Self::Appstream => "appstream",
         })
     }
 }

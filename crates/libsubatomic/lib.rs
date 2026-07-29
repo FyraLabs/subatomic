@@ -34,8 +34,9 @@
 //! ```
 #![warn(rust_2018_idioms)]
 #![feature(default_field_values)]
-#![feature(slice_split_once)]
 #![feature(integer_casts)]
+#![feature(slice_split_once)]
+#![feature(try_blocks)]
 
 pub mod err;
 pub mod pkg;
