@@ -3,6 +3,7 @@
 //! implemented as a clone of `createrepo`
 
 use std::collections::HashSet;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
@@ -70,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut rpm_paths: Vec<PathBuf> = std::fs::read_dir(&args.input)?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
+        .filter(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")))
         .collect();
     rpm_paths.sort();
     let total = rpm_paths.len();
@@ -86,17 +87,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut parsed = 0usize;
     let mut skipped = 0usize;
     let mut cached = 0usize;
-    let mut expected_keys: HashSet<String> = HashSet::with_capacity(total);
+    let mut expected_keys = HashSet::with_capacity(total);
 
     for (i, path) in rpm_paths.iter().enumerate() {
         let name = path.display().to_string();
-        let key = match path.canonicalize() {
-            Ok(p) => p.to_string_lossy().into_owned(),
-            Err(_) => name.clone(),
-        };
-        expected_keys.insert(key.clone());
+        let key = path.file_name().expect("can't obtain filename").as_bytes();
+        expected_keys.insert(key);
 
-        if args.incremental && cache.has(&key) {
+        if args.incremental && cache.has(key)? {
             debug!(path = %name, "cached, skipping");
             cached += 1;
             continue;
@@ -104,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         info!(progress = format!("[{}/{}]", i + 1, total), path = %name, "parsing");
         if let Some(pkg) = parse_package(path) {
-            cache.insert(&key, &pkg, path.as_os_str())?;
+            cache.insert(key, &pkg, path.as_os_str())?;
             parsed += 1;
         } else {
             skipped += 1;
@@ -120,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cached > 0 {
         info!(count = cached, "skipped cached packages");
     }
-    if cache.len() == 0 {
+    if cache.is_empty()? {
         warn!("cache is empty; nothing to write");
         return Ok(());
     }
@@ -129,8 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     cache.write_all(&args.output)?;
 
     if args.incremental {
-        let expected_refs: HashSet<&str> = expected_keys.iter().map(String::as_str).collect();
-        let removed = cache.prune(&expected_refs)?;
+        let removed = cache.prune(&expected_keys)?;
         if removed > 0 {
             info!(count = removed, "pruned stale cached packages");
         }

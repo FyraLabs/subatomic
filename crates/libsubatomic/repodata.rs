@@ -12,10 +12,11 @@ use sha2::Digest;
 
 use crate::prelude::*;
 use std::os::linux::fs::MetadataExt;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
-pub type RepoCacheDb =
-    heed::Database<heed::types::Bytes, heed::types::SerdeBincode<RepoCacheFragment>>;
+pub type FragsDb = heed::Database<heed::types::Bytes, heed::types::SerdeBincode<RepoCacheFragment>>;
+
+pub type CompsDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
 
 /// Cache for repository packages.
 ///
@@ -86,26 +87,26 @@ impl RepoCache {
 
     fn write<T>(
         &self,
-        f: impl FnOnce(&RepoCacheDb, &mut heed::RwTxn<'_>) -> heed::Result<T>,
+        f: impl FnOnce(&FragsDb, &mut heed::RwTxn<'_>) -> heed::Result<T>,
     ) -> heed::Result<T> {
         trace!(repo = %self.repo, "starting write txn");
-        let mut txn = self.env.write_txn().expect("cannot create rw txn");
-        let db = self.env.create_database(&mut txn, Some(&self.repo)).expect("cannot create db");
+        let mut txn = self.env.write_txn()?;
+        let db = self.env.create_database(&mut txn, Some(&self.repo))?;
         match f(&db, &mut txn) {
             Ok(v) => {
-                txn.commit().expect("can't commit");
+                txn.commit()?;
                 trace!(repo = %self.repo, "write txn committed");
                 Ok(v)
             }
             Err(e) => {
-                warn!(repo = %self.repo, error = %e, "write txn failed, aborting");
+                error!(repo = %self.repo, error = %e, "write txn failed, aborting");
                 txn.abort();
                 Err(e)
             }
         }
     }
 
-    fn read<T>(&self, f: impl FnOnce(&RepoCacheDb, &heed::RoTxn<'_>) -> T) -> T {
+    fn read<T>(&self, f: impl FnOnce(&FragsDb, &heed::RoTxn<'_>) -> T) -> T {
         trace!(repo = %self.repo, "starting read txn");
         let txn = self.env.read_txn().expect("cannot create rw txn");
         let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))
@@ -117,26 +118,21 @@ impl RepoCache {
 
     pub fn write_comps(&self, data: &repomd::Data) -> heed::Result<()> {
         let mut txn = self.env.write_txn()?;
-        let db: heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>> =
-            self.env.create_database(&mut txn, Some("comps"))?;
+        let db: CompsDb = self.env.create_database(&mut txn, Some("comps"))?;
         db.put(&mut txn, "compsdata", data)?;
         txn.commit()?;
         Ok(())
     }
     pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
         let txn = self.env.read_txn()?;
-        let Some(db): Option<
-            heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>,
-        > = self.env.open_database(&txn, Some("comps"))?
-        else {
-            return Ok(None);
-        };
-        db.get(&txn, "compsdata")
+        self.env
+            .open_database(&txn, Some("comps"))?
+            .and_then(|db: CompsDb| db.get(&txn, "compsdata").transpose())
+            .transpose()
     }
     pub fn del_comps(&self) -> heed::Result<bool> {
         let mut txn = self.env.write_txn()?;
-        let db: heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>> =
-            self.env.create_database(&mut txn, Some("comps"))?;
+        let db: CompsDb = self.env.create_database(&mut txn, Some("comps"))?;
         let existed = db.delete(&mut txn, "compsdata")?;
         txn.commit()?;
         Ok(existed)
@@ -164,15 +160,14 @@ impl RepoCache {
             .collect();
         trace!(count = fragments.len(), "writing fragments to cache");
         self.write(move |db, txn| {
-            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, &key, &frag))
+            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, key, &frag))
         })
     }
 
     /// Check whether a key already exists in the cache.
-    #[must_use]
-    pub fn has(&self, key: &[u8]) -> bool {
+    pub fn has(&self, key: &[u8]) -> Res<bool> {
         trace!(key, "checking cache key");
-        self.read(|db, txn| db.get(txn, key).expect("cannot check key")).is_some()
+        Ok(self.read(|db, txn| db.get(txn, key))?.is_some())
     }
 
     /// Insert a single package fragment under an explicit key.
@@ -185,36 +180,43 @@ impl RepoCache {
     }
 
     /// Return the number of cached fragments.
-    #[must_use]
-    pub fn len(&self) -> u64 {
-        self.read(|db, txn| db.len(txn).expect("cannot get db len"))
+    pub fn len(&self) -> heed::Result<u64> {
+        self.read(heed::Database::len)
     }
 
+    pub fn is_empty(&self) -> heed::Result<bool> {
+        Ok(self.len()? == 0)
+    }
+
+    /// Delete a list of packages (by key), returning a list of packages not found in the database.
+    ///
+    /// # Errors
+    /// An error is returned if deleting a package failed. Note that an invalid key (the package
+    /// doesn't exist) would not result in an error.
     pub fn delete_pkgs<'a>(&self, pkgs: &'a [&'a [u8]]) -> heed::Result<Vec<&'a &'a [u8]>> {
         self.write(move |db, txn| {
-            pkgs.into_iter()
+            pkgs.iter()
                 .map(|key| Ok((!db.delete(txn, key)?).then_some(key)))
                 .filter_map_ok(|f| f)
                 .try_collect()
         })
     }
 
-    #[must_use]
-    pub fn get_fragment(&self, key: &[u8]) -> Option<RepoCacheFragment> {
-        self.read(|db, txn| db.get(txn, key).expect("cannot get frag"))
+    pub fn get_fragment(&self, key: &[u8]) -> heed::Result<Option<RepoCacheFragment>> {
+        self.read(|db, txn| db.get(txn, key))
     }
 
     /// Collect every key currently stored in the cache.
-    pub fn keys(&self) -> Vec<Vec<u8>> {
+    pub fn keys(&self) -> heed::Result<Vec<Vec<u8>>> {
         debug!(repo = %self.repo, "listing cache keys");
         self.read(|db, txn| {
-            let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0) as usize);
-            for item in db.iter(txn).expect("cannot iterate db") {
-                let (k, _) = item.expect("cannot read db item");
+            let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0).saturating_cast());
+            for item in db.iter(txn)? {
+                let (k, _) = item?;
                 out.push(k.to_owned());
             }
             trace!(count = out.len(), "collected cache keys");
-            out
+            Ok(out)
         })
     }
 
@@ -235,7 +237,7 @@ impl RepoCache {
     /// This propagates errors from LMDB write operations.
     pub fn prune(&self, expected: &std::collections::HashSet<&[u8]>) -> heed::Result<u64> {
         let to_remove: Vec<_> =
-            self.keys().into_iter().filter(|k| !expected.contains(&**k)).collect();
+            self.keys()?.into_iter().filter(|k| !expected.contains(&**k)).collect();
         debug!(stale = to_remove.len(), "pruning cache");
         let mut count = 0u64;
         for key in to_remove {
@@ -278,7 +280,7 @@ impl RepoCache {
             std::fs::rename(&data_file, &old_file)?;
         }
         std::fs::rename(&tmp_file, &data_file)?;
-        let _ = std::fs::remove_file(&old_file);
+        _ = std::fs::remove_file(&old_file);
 
         let mut new = Self::new(&repo, &cachedir, &dir)?;
         new.zstd_level = zstd;
@@ -287,14 +289,14 @@ impl RepoCache {
     }
 
     #[inline]
-    fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> std::io::Result<()> {
+    fn write_stage1(&self, files: &mut [RepoWriter<'_>; 3]) -> Res<()> {
         RepoWriteDispatcher::dispatch(self, files)
     }
 
     /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
     ///
     /// The caller should handling signing of the `repomd.xml` file.
-    pub fn write_all(&self, tempdir: &Path) -> std::io::Result<Vec<u8>> {
+    pub fn write_all(&self, tempdir: &Path) -> Res<Vec<u8>> {
         info!(dir = %self.dir.display(), tempdir = %tempdir.display(), "writing repodata");
         let filepaths = [
             tempdir.join("primary.xml.zst"),
@@ -328,17 +330,17 @@ impl RepoCache {
             ])
             .map(|(f, dt)| f.into_data(dt).map(|x| x.0))
             .try_collect()?;
-        data.extend(self.read_comps().expect("cannot read comps db"));
+        data.extend(self.read_comps()?);
         // can safely rename since fds are dropped via into_data()
         for (path, dat) in filepaths.iter().zip_eq(&data) {
             let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
             std::fs::rename(path, self.dir.join(newname))?;
         }
 
-        Self::write_repomd(&self.dir, data.to_vec())
+        Self::write_repomd(&self.dir, data)
     }
 
-    fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> std::io::Result<Vec<u8>> {
+    fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
         let path = dir.join("repomd.xml");
         let mut fd_repomd = std::fs::OpenOptions::new()
             .read(true)
@@ -346,7 +348,7 @@ impl RepoCache {
             .create(true)
             .truncate(true)
             .open(&path)?;
-        repomd::Repomd::generate(&mut fd_repomd, data).expect("cannot write to repomd");
+        repomd::Repomd::generate(&mut fd_repomd, data)?;
 
         let pos = fd_repomd.stream_position()?;
         fd_repomd.seek(std::io::SeekFrom::Start(0))?;
@@ -487,21 +489,17 @@ enum RepoWriteDispatcher<'f, 'r> {
     Other(&'f mut RepoWriter<'r>),
 }
 impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
-    fn dispatch(
-        repocache: &RepoCache,
-        [pri, fil, oth]: &'f mut [RepoWriter<'r>; 3],
-    ) -> std::io::Result<()> {
+    fn dispatch(repocache: &RepoCache, [pri, fil, oth]: &'f mut [RepoWriter<'r>; 3]) -> Res<()> {
         debug!("dispatching parallel xml writes");
         [Self::Primary(pri), Self::Filelists(fil), Self::Other(oth)]
             .into_par_iter()
             .try_for_each(|mut disp| repocache.read(|db, txn| disp.process(db, txn)))
     }
 
-    fn process(&mut self, db: &RepoCacheDb, txn: &heed::RoTxn<'_>) -> Result<(), std::io::Error> {
-        let l = db.len(txn).expect("can't get db len");
+    fn process(&mut self, db: &FragsDb, txn: &heed::RoTxn<'_>) -> Res<()> {
+        let l = db.len(txn)?;
         trace!(count = l, "reading fragments from cache");
-        let frags = db.iter(txn).expect("can't iter frags");
-        let frags = frags.into_iter().map(|r| r.expect("can't get item in iter").1);
+        let frags = db.iter(txn)?.map(|r| r.map(|(_, v)| v));
         match self {
             Self::Primary(file) => Self::write_primary(l, frags, file),
             Self::Filelists(file) => Self::write_filelists(l, frags, file),
@@ -511,45 +509,45 @@ impl<'f, 'r> RepoWriteDispatcher<'f, 'r> {
 
     fn write_primary(
         l: u64,
-        frags: impl Iterator<Item = RepoCacheFragment>,
+        frags: impl Iterator<Item = heed::Result<RepoCacheFragment>>,
         file: &mut RepoWriter<'_>,
-    ) -> Result<(), std::io::Error> {
+    ) -> Res<()> {
         write!(
             file,
             r#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{l}">"#
         )?;
         for frag in frags {
-            file.write_all(frag.primary.as_bytes())?;
+            file.write_all(frag?.primary.as_bytes())?;
         }
         write!(file, "</metadata>")?;
         Ok(())
     }
     fn write_filelists(
         l: u64,
-        frags: impl Iterator<Item = RepoCacheFragment>,
+        frags: impl Iterator<Item = heed::Result<RepoCacheFragment>>,
         file: &mut RepoWriter<'_>,
-    ) -> Result<(), std::io::Error> {
+    ) -> Res<()> {
         write!(
             file,
             r#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{l}">"#
         )?;
         for frag in frags {
-            file.write_all(frag.filelists.as_bytes())?;
+            file.write_all(frag?.filelists.as_bytes())?;
         }
         write!(file, "</filelists>")?;
         Ok(())
     }
     fn write_other(
         l: u64,
-        frags: impl Iterator<Item = RepoCacheFragment>,
+        frags: impl Iterator<Item = heed::Result<RepoCacheFragment>>,
         file: &mut RepoWriter<'_>,
-    ) -> Result<(), std::io::Error> {
+    ) -> Res<()> {
         write!(
             file,
             r#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{l}">"#
         )?;
         for frag in frags {
-            file.write_all(frag.other.as_bytes())?;
+            file.write_all(frag?.other.as_bytes())?;
         }
         write!(file, "</otherdata>")?;
         Ok(())

@@ -14,6 +14,7 @@ pub struct ParsePathOutput<'a> {
     pub arch: &'a [u8],
 }
 
+#[must_use]
 pub fn parse_filename(filename: &[u8]) -> Option<ParsePathOutput<'_>> {
     let (nevr, arch) = filename.strip_suffix(b".rpm")?.rsplit_once(|&b| b == b'.')?;
     let (nev, rel) = nevr.rsplit_once(|&b| b == b'-')?;

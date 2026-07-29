@@ -117,13 +117,17 @@ impl Repo {
     /// Upsert packages and remove their old versions.
     ///
     /// See [`Self::add`] for more info.
+    ///
+    /// # Panics
+    /// Panics if any cache keys are invalid (cannot be parsed by [`crate::pkg::parse_filename`]),
+    /// or a file with the name `..` is encountered.
     #[tracing::instrument]
     pub fn add_replace<'a>(
         &self,
         paths: &'a [&'a Path],
     ) -> Res<AddReplaceOutput<'a, impl Iterator<Item = AddPkgOutput>>> {
         let (mut bad_filenames, mut removed) = (Vec::new(), Vec::new());
-        let keys = self.cache.keys();
+        let keys = self.cache.keys()?;
         let parsed_keys = keys
             .iter()
             .map(|k| (k, crate::pkg::parse_filename(k).expect("can't parse cache keys")))
@@ -138,7 +142,7 @@ impl Repo {
             };
             let prev_versions =
                 parsed_keys.iter().filter(|(_, k)| k.name == name && k.arch == arch);
-            removed.extend(prev_versions.map(|(k, _)| k.to_vec()));
+            removed.extend(prev_versions.map(|(k, _)| (*k).clone()));
         }
         let to_remove = removed.iter().map(|k| &**k).collect_vec();
         let not_found = self.del(&to_remove)?;
@@ -173,10 +177,13 @@ impl Repo {
     ///
     /// Upsert all `.rpm` files in [`Self::dir`] into the cache in parallel, then remove ones that
     /// do not exist, then run [`Self::generate`].
+    ///
+    /// # Panics
+    /// The function panics if it encounters `..` as a file name.
     pub fn regenerate(&self, incremental: bool) -> Res<RegenerateOutput> {
         let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&self.dir)?
             .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.extension().map(|ext| ext.eq_ignore_ascii_case("rpm")).unwrap_or(false))
+            .filter(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")))
             .collect();
         let mut expected_keys: HashSet<Vec<u8>> = HashSet::with_capacity(rpm_paths.len());
         let mut ret = RegenerateOutput { .. };
@@ -184,14 +191,14 @@ impl Repo {
             let key = path.file_name().expect("bad filename").as_bytes();
             expected_keys.insert(key.to_owned());
 
-            if incremental && self.cache.has(&key) {
+            if incremental && self.cache.has(key)? {
                 ret.cached += 1;
                 continue;
             }
 
             match crate::pkg::Package::open(&path) {
                 Ok((pkg, _)) => {
-                    self.cache.insert(&key, &pkg, path.as_os_str())?;
+                    self.cache.insert(key, &pkg, path.as_os_str())?;
                     ret.parsed += 1;
                 }
                 Err(e) => {
@@ -213,7 +220,7 @@ impl Repo {
     /// Errors are propagated.
     pub fn compact_cache(self) -> Res<Self> {
         let Self { id, cache, dir, sig } = self;
-        Ok(Repo { id, cache: cache.compact()?, dir, sig })
+        Ok(Self { id, cache: cache.compact()?, dir, sig })
     }
 
     /// Delete a list of packages by their filenames.
