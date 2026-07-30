@@ -26,17 +26,17 @@ pub struct AppState {
 }
 impl FromRef<AppState> for Arc<Config> {
     fn from_ref(input: &AppState) -> Self {
-        Arc::clone(&input.config)
+        Self::clone(&input.config)
     }
 }
 impl FromRef<AppState> for Arc<sqlx::Pool<sqlx::Postgres>> {
     fn from_ref(input: &AppState) -> Self {
-        Arc::clone(&input.pool)
+        Self::clone(&input.pool)
     }
 }
 impl FromRef<AppState> for Arc<crate::repohdl::Locker> {
     fn from_ref(input: &AppState) -> Self {
-        Arc::clone(&input.locker)
+        Self::clone(&input.locker)
     }
 }
 
@@ -74,7 +74,7 @@ async fn main() {
         .route("/v1/repos/:name/rpms", get(api::repos::list_rpms))
         .route("/v1/repos/:name/rpms", post(api::repos::del_rpms))
         .route("/v1/repos/:name/refresh", post(api::repos::refresh_repo))
-        .route_layer(axum::middleware::from_fn_with_state(config.clone(), auth::jwt_auth))
+        .route_layer(axum::middleware::from_fn_with_state(Arc::clone(&config), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(&config), pool, locker });
 
     let addr = format!("{}:{}", config.server_host, config.server_port);

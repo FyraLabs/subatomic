@@ -109,7 +109,7 @@ impl Repo {
     /// # Panics
     /// Invalid filename (path terminates in `/..`) will cause a panic. See [`Path::file_name`].
     #[tracing::instrument]
-    pub fn add<'a, 'b, 'c>(&'a self, paths: &'b [&'c Path]) -> Res<Vec<AddPkgOutput>> {
+    pub fn add(&self, paths: &[&Path]) -> Res<Vec<AddPkgOutput>> {
         let pkgs = paths
             .par_iter()
             .map(|rpm_path| self.add_one(rpm_path))

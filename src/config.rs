@@ -15,6 +15,6 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> envy::Result<Self> {
         dotenvy::dotenv().ok();
-        envy::from_env::<Config>()
+        envy::from_env::<Self>()
     }
 }

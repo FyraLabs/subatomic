@@ -19,6 +19,11 @@ impl std::fmt::Debug for Mgr {
 }
 
 impl Mgr {
+    /// Create a new private key.
+    ///
+    /// # Panics
+    /// We expect this function to always work. [`pgp`] did not exactly document when this will fail.
+    #[must_use]
     pub fn new(userid: std::string::String) -> Self {
         Self {
             private: pgp::composed::SecretKeyParamsBuilder::default()

@@ -24,7 +24,7 @@ pub async fn upload_pkgs(
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
-    let Some(dir) = locker.read(&*repo, async |repohdl| repohdl.repo.cache.dir.clone()).await?
+    let Some(dir) = locker.read(&repo, async |repohdl| repohdl.repo.cache.dir.clone()).await?
     else {
         return Ok(StatusCode::NOT_FOUND);
     };
@@ -39,9 +39,9 @@ pub async fn upload_pkgs(
         tokio::fs::write(&path, data).await?;
         pkgs.push(path);
     }
-    let pkgs2 = pkgs.iter().map(|p| p.as_path()).collect_vec();
+    let pkgs2 = pkgs.iter().map(std::path::PathBuf::as_path).collect_vec();
     let pkgs2 = pkgs2.as_slice();
-    let Some(out) = locker.write(&*repo, async |hdl| hdl.repo.add_replace(pkgs2)).await? else {
+    let Some(out) = locker.write(&repo, async |hdl| hdl.repo.add_replace(pkgs2)).await? else {
         // something happened during last processing…!?
         return Ok(StatusCode::NOT_FOUND);
     };
@@ -63,13 +63,13 @@ pub async fn push_comps(
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
     let field = (multipart.next_field().await.expect("multipart err"))
-        .ok_or_else(|| ApiError::BadRequest(format!("expect multipart (file upload)")))?;
+        .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
     let comps = (field.bytes().await)
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
     if locker
-        .write(&*repo, async |hdl| try bikeshed Res<()> {
-            hdl.repo.add_comps(&*comps)?;
+        .write(&repo, async |hdl| try bikeshed Res<()> {
+            hdl.repo.add_comps(&comps)?;
             // TODO: only generate repomd
             hdl.repo.generate()?;
         })
@@ -85,7 +85,7 @@ pub async fn push_comps(
 
 pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
     if locker
-        .write(&*repo, async |hdl| try bikeshed Res<()> {
+        .write(&repo, async |hdl| try bikeshed Res<()> {
             hdl.repo.del_comps()?;
             // TODO: only generate repomd
             hdl.repo.generate()?;
@@ -101,19 +101,15 @@ pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> 
 }
 
 pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Result<String> {
-    if let Some(res) = locker
-        .read(&*repo, async |hdl| {
+    locker
+        .read(&repo, async |hdl| {
             let Some(mgr) = &hdl.repo.sig else {
                 return Err(ApiError::Internal("no key for this repo".into()));
             };
             mgr.public_armor().map_err(|e| ApiError::Internal(format!("pgp error: {e}")))
         })
         .await?
-    {
-        res
-    } else {
-        Err(ApiError::NotFound)
-    }
+        .map_or_else(|| Err(ApiError::NotFound), |res| res)
 }
 
 #[derive(serde::Deserialize)]
@@ -133,7 +129,7 @@ pub async fn set_key(
     let mgr = libsubatomic::sig::Mgr::parse(&key.pri).map_err(libsubatomic::err::Error::from)?;
 
     let Some(true) = locker
-        .write(&*repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
+        .write(&repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
             let q = sqlx::query!("UPDATE repos SET key_id = $1 WHERE name = $2", key.id, &repo);
             let ra = q.execute(&*db).await?.rows_affected();
             if ra == 0 {
@@ -156,7 +152,7 @@ pub async fn del_key(
     Path(repo): Path<String>,
 ) -> Result<StatusCode> {
     let Some(true) = locker
-        .write(&*repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
+        .write(&repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
             let q = sqlx::query!("UPDATE repos SET key_id = NULL WHERE name = $1", &repo);
             let ra = q.execute(&*db).await?.rows_affected();
             if ra == 0 {
@@ -183,7 +179,7 @@ pub async fn refresh_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
-    let q = locker.read(&*name, async |repohdl| repohdl.repo.regenerate(true)).await?;
+    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(true)).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -191,7 +187,7 @@ pub async fn rebuild_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
-    let q = locker.read(&*name, async |repohdl| repohdl.repo.regenerate(false)).await?;
+    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false)).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -200,7 +196,7 @@ pub async fn list_rpms(
     Path(repo): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
     let Some(keys) = locker
-        .read(&*repo, async |repohdl| try bikeshed Res<_> { repohdl.repo.cache.keys()? })
+        .read(&repo, async |repohdl| try bikeshed Res<_> { repohdl.repo.cache.keys()? })
         .await?
         .transpose()?
     else {
@@ -223,10 +219,10 @@ pub async fn del_rpms(
     Json(DelRpmsReq { rpms }): Json<DelRpmsReq>,
 ) -> Result<Json<serde_json::Value>> {
     let Some(not_found) = locker
-        .write(&*repo, async |repohdl| {
-            repohdl.repo.del(&rpms.iter().map(|s| s.as_bytes()).collect_vec()).map(|v| {
-                v.into_iter().map(|s| String::from_utf8_lossy(s).to_string()).collect_vec()
-            })
+        .write(&repo, async |repohdl| {
+            repohdl.repo.del(&rpms.iter().map(std::string::String::as_bytes).collect_vec()).map(
+                |v| v.into_iter().map(|s| String::from_utf8_lossy(s).to_string()).collect_vec(),
+            )
         })
         .await?
         .transpose()?

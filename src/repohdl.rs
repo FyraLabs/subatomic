@@ -13,6 +13,7 @@ pub struct Locker {
 }
 
 impl Locker {
+    #[must_use]
     pub fn new(db: Arc<sqlx::Pool<sqlx::Postgres>>, cfg: Arc<Config>) -> Self {
         Self { repolocks: RwLock::new(HashMap::new()), db, cfg }
     }
@@ -98,7 +99,7 @@ impl RepoHdl {
     pub async fn delete_physical(&self, config: Arc<Config>) -> Result<()> {
         let path = std::path::Path::new(&config.storage_dir).join(&*self.repo.cache.repo);
         if path.exists() {
-            std::fs::remove_dir_all(path)?;
+            tokio::fs::remove_dir_all(path).await?;
         }
         Ok(())
     }
