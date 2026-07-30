@@ -7,7 +7,7 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
-axum = { version = "0.8.9", features = ["macros", "multipart"] }
+axum = { version = "0.8.9", features = ["http2", "macros", "multipart"] }
 dotenvy = "0.15.7"
 envy = "0.4.2"
 jsonwebtoken = "11.0.0"

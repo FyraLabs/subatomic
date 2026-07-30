@@ -61,15 +61,24 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 
     let app = Router::new()
-        .route("/api/repos", get(api::repos::list_repos))
-        .route("/api/repos", post(api::repos::create_repo))
-        .route("/api/repos/:name/refresh", post(api::repos::refresh_repo))
-        .route("/api/repos/:name", delete(api::repos::delete_repo))
+        .route("/v1/repos", get(api::repos::list_repos))
+        .route("/v1/repos", post(api::repos::create_repo))
+        .route("/v1/repos/:name", put(api::repos::upload_pkgs))
+        .route("/v1/repos/:name", delete(api::repos::delete_repo))
+        .route("/v1/repos/:name/comps", put(api::repos::push_comps))
+        .route("/v1/repos/:name/comps", delete(api::repos::del_comps))
+        .route("/v1/repos/:name/key", get(api::repos::get_key))
+        .route("/v1/repos/:name/key", put(api::repos::set_key))
+        .route("/v1/repos/:name/key", delete(api::repos::del_key))
+        // .route("/v1/repos/:name/resign", post(api::repos::resign))
+        .route("/v1/repos/:name/rpms", get(api::repos::list_rpms))
+        .route("/v1/repos/:name/rpms", post(api::repos::del_rpms))
+        .route("/v1/repos/:name/refresh", post(api::repos::refresh_repo))
         .route_layer(axum::middleware::from_fn_with_state(config.clone(), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(&config), pool, locker });
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     tracing::info!(addr, "Starting server");
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

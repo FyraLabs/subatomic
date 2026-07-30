@@ -17,6 +17,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("Conflict: {0}")]
     Conflict(String),
+    #[error("internal server error: {0}")]
+    Internal(String),
 }
 
 impl IntoResponse for ApiError {
@@ -32,6 +34,7 @@ impl IntoResponse for ApiError {
                 tracing::error!(error = %e, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_owned())
             }
+            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
         (status, axum::Json(serde_json::json!({ "error": message }))).into_response()
     }

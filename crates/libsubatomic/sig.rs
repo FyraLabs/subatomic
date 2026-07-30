@@ -19,7 +19,7 @@ impl std::fmt::Debug for Mgr {
 }
 
 impl Mgr {
-    pub fn new(userid: String) -> Self {
+    pub fn new(userid: std::string::String) -> Self {
         Self {
             private: pgp::composed::SecretKeyParamsBuilder::default()
                 .key_type(pgp::composed::KeyType::Rsa(4096))
@@ -48,6 +48,10 @@ impl Mgr {
 
     pub fn public(&self) -> pgp::composed::SignedPublicKey {
         self.private.to_public_key()
+    }
+
+    pub fn public_armor(&self) -> pgp::errors::Result<std::string::String> {
+        self.public().to_armored_string(pgp::composed::ArmorOptions::default())
     }
 
     /// Sign an rpm header. This is equivalent to [`rpm::Package::sign`], except that only the inner

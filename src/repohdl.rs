@@ -17,9 +17,9 @@ impl Locker {
         Self { repolocks: RwLock::new(HashMap::new()), db, cfg }
     }
     #[tracing::instrument(skip(self, f))]
-    pub async fn read<T, F>(&self, repo: &str, mut f: F) -> Result<Option<T>>
+    pub async fn read<T, F>(&self, repo: &str, f: F) -> Result<Option<T>>
     where
-        F: AsyncFnMut(RwLockReadGuard<'_, RepoHdl>) -> T,
+        F: AsyncFnOnce(RwLockReadGuard<'_, RepoHdl>) -> T,
     {
         if let Some(lock) = self.repolocks.read().await.get(repo) {
             return Ok(Some(f(lock.read().await).await));
@@ -30,9 +30,9 @@ impl Locker {
         Ok(Some(f(self.repolocks.read().await.get(repo).unwrap().read().await).await))
     }
     #[tracing::instrument(skip(self, f))]
-    pub async fn write<T, F>(&self, repo: &str, mut f: F) -> Result<Option<T>>
+    pub async fn write<T, F>(&self, repo: &str, f: F) -> Result<Option<T>>
     where
-        F: AsyncFnMut(RwLockWriteGuard<'_, RepoHdl>) -> T,
+        F: AsyncFnOnce(RwLockWriteGuard<'_, RepoHdl>) -> T,
     {
         if let Some(lock) = self.repolocks.read().await.get(repo) {
             return Ok(Some(f(lock.write().await).await));

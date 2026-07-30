@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS keys (
     id      SERIAL PRIMARY KEY,
     name    TEXT UNIQUE NOT NULL,
+    userid  TEXT NOT NULL,
     pri     BYTEA NOT NULL
 );
 
