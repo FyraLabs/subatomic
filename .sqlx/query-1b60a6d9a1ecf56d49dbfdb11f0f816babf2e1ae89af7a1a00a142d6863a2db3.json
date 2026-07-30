@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM keys WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "keys",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "keys",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "userid",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "keys",
+            "name": "userid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pri",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "keys",
+            "name": "pri"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1b60a6d9a1ecf56d49dbfdb11f0f816babf2e1ae89af7a1a00a142d6863a2db3"
+}

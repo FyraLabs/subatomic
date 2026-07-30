@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE repos SET key_id = NULL WHERE name = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c2cea177f70e46f1cc4f98ae8fbd859be3a683844f7c27254dc4023bfd4be2c6"
+}
