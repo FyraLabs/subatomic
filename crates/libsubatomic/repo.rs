@@ -76,7 +76,7 @@ impl Repo {
     fn add_one<'a>(
         &self,
         path: &&'a Path,
-    ) -> Result<(AddPkgOutput, crate::pkg::Package, &'a OsStr), rpm::Error> {
+    ) -> Result<(AddPkgOutput, (crate::pkg::Package, &'a OsStr)), rpm::Error> {
         let mut ret = AddPkgOutput::default();
         let (pkg, rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
@@ -94,7 +94,7 @@ impl Repo {
             ret.sig = Some(sig);
         }
         let name = path.file_name().expect("rpm no filename");
-        Ok((ret, pkg, name))
+        Ok((ret, (pkg, name)))
     }
 
     /// Upsert packages to the cache.
@@ -109,13 +109,14 @@ impl Repo {
     /// # Panics
     /// Invalid filename (path terminates in `/..`) will cause a panic. See [`Path::file_name`].
     #[tracing::instrument]
-    pub fn add(&self, paths: &[&Path]) -> Res<impl Iterator<Item = AddPkgOutput>> {
+    pub fn add<'a, 'b, 'c>(&'a self, paths: &'b [&'c Path]) -> Res<Vec<AddPkgOutput>> {
         let pkgs = paths
             .par_iter()
             .map(|rpm_path| self.add_one(rpm_path))
             .collect::<Result<Vec<_>, rpm::Error>>()?;
-        self.cache.insert_pkgs(pkgs.iter().map(|(_, pkg, name)| (pkg, *name)))?;
-        Ok(pkgs.into_iter().map(|(ret, _, _)| ret))
+        let (rets, pkgs): (Vec<_>, Vec<_>) = pkgs.into_iter().unzip();
+        self.cache.insert_pkgs(pkgs.iter().map(|(pkg, name)| (pkg, *name)))?;
+        Ok(rets)
     }
 
     /// Upsert packages and remove their old versions.
@@ -126,11 +127,12 @@ impl Repo {
     /// Panics if any cache keys are invalid (cannot be parsed by [`crate::pkg::parse_filename`]),
     /// or a file with the name `..` is encountered.
     #[tracing::instrument]
-    pub fn add_replace<'a>(
-        &self,
-        paths: &'a [&'a Path],
-    ) -> Res<AddReplaceOutput<'a, impl Iterator<Item = AddPkgOutput>>> {
-        let (mut bad_filenames, mut removed) = (Vec::new(), Vec::new());
+    pub fn add_replace<'a, 'b, 'c>(
+        &'a self,
+        paths: &'b [&'c Path],
+    ) -> Res<AddReplaceOutput<'b, 'c>> {
+        let mut bad_filenames: Vec<&'b &'c Path> = Vec::new();
+        let mut removed = Vec::new();
         let keys = self.cache.keys()?;
         let parsed_keys = keys
             .iter()
@@ -171,14 +173,14 @@ impl Repo {
     /// # Errors
     /// IO errors and possibly [`pgp`] errors.
     #[doc(alias = "createrepo")]
-    pub fn generate(&self) -> Res<()> {
+    pub fn generate(&self) -> Res<Vec<u8>> {
         let repomd = self.cache.write_all(&self.datatypes())?; // for now use self.cache.dir as tempdir
         if let Some(sig) = &self.sig {
             let mut asc_fd = std::fs::File::create(self.cache.dir.join("repomd.xml.asc"))?;
             sig.sign(&repomd)?
                 .to_armored_writer(&mut asc_fd, pgp::composed::ArmorOptions::default())?;
         }
-        Ok(())
+        Ok(repomd)
     }
 
     /// Invalidate the cache and regenerate XML files in `repodata/`.
@@ -218,7 +220,7 @@ impl Repo {
                 }
             }
         }
-        self.cache.write_all(&self.datatypes())?;
+        ret.repomd = self.cache.write_all(&self.datatypes())?;
         if incremental {
             let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
             ret.removed = self.cache.prune(&expected_refs)?;
@@ -264,11 +266,12 @@ pub struct RegenerateOutput {
     pub skipped: Vec<(PathBuf, rpm::Error)> = Vec::new(),
     pub cached: usize = 0,
     pub removed: u64 = 0,
+    pub repomd: Vec<u8> = Vec::new(),
 }
 
 #[derive(Clone, Debug)]
-pub struct AddReplaceOutput<'a, I: Iterator<Item = AddPkgOutput>> {
-    pub bad_filenames: Vec<&'a &'a Path>,
+pub struct AddReplaceOutput<'a, 'b> {
+    pub bad_filenames: Vec<&'a &'b Path>,
     pub removed: Vec<Vec<u8>>,
-    pub added: I,
+    pub added: Vec<AddPkgOutput>,
 }

@@ -1,4 +1,11 @@
+use pgp::{
+    composed::Deserializable,
+    crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+    ser::Serialize,
+    types::CompressionAlgorithm,
+};
 use rpm::signature::Signing;
+use smallvec::smallvec;
 
 #[derive(Clone)]
 pub struct Mgr {
@@ -12,6 +19,33 @@ impl std::fmt::Debug for Mgr {
 }
 
 impl Mgr {
+    pub fn new(userid: String) -> Self {
+        Self {
+            private: pgp::composed::SecretKeyParamsBuilder::default()
+                .key_type(pgp::composed::KeyType::Rsa(4096))
+                .can_certify(false)
+                .can_sign(true)
+                .primary_user_id(userid)
+                .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+                .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha256])
+                .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+                .build()
+                .expect("cannot build prikey params")
+                .generate(rand::thread_rng())
+                .expect("cannot generate prikey"),
+        }
+    }
+
+    pub fn parse(bytes: &[u8]) -> pgp::errors::Result<Self> {
+        Ok(Self {
+            private: pgp::composed::SignedSecretKey::from_bytes(std::io::BufReader::new(bytes))?,
+        })
+    }
+
+    pub fn write(&self) -> Vec<u8> {
+        self.private.to_bytes().expect("cannot convert to bytes")
+    }
+
     pub fn public(&self) -> pgp::composed::SignedPublicKey {
         self.private.to_public_key()
     }
