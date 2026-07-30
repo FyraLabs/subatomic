@@ -157,6 +157,14 @@ impl Repo {
         Ok(AddReplaceOutput { bad_filenames, removed, added })
     }
 
+    /// A list of datatypes representing what XML files should be generated in `repodata/`.
+    pub fn datatypes(&self) -> Vec<crate::repodata::repomd::DataType> {
+        use crate::repodata::repomd::DataType;
+        let mut dts = vec![DataType::Primary, DataType::Filelists, DataType::Other];
+        dts.extend(self.use_appstream.then_some(DataType::Appstream));
+        dts
+    }
+
     /// Trigger repository generation. Generate all XML files in `repodata/`.
     ///
     /// This is analogous to running the `createrepo` command. The repository metadata is generated
@@ -166,7 +174,7 @@ impl Repo {
     /// IO errors and possibly [`pgp`] errors.
     #[doc(alias = "createrepo")]
     pub fn generate(&self) -> Res<()> {
-        let repomd = self.cache.write_all(&self.dir)?; // for now use self.dir as tempdir
+        let repomd = self.cache.write_all(&self.datatypes())?; // for now use self.dir as tempdir
         if let Some(sig) = &self.sig {
             let mut asc_fd = std::fs::File::create(self.dir.join("repomd.xml.asc"))?;
             sig.sign(&repomd)?
@@ -212,7 +220,7 @@ impl Repo {
                 }
             }
         }
-        self.cache.write_all(&self.dir)?;
+        self.cache.write_all(&self.datatypes())?;
         if incremental {
             let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
             ret.removed = self.cache.prune(&expected_refs)?;

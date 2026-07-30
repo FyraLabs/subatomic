@@ -7,6 +7,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
+use libsubatomic::repodata::repomd::DataType;
 use tracing::{debug, info, instrument, trace, warn};
 
 use libsubatomic::pkg::Package;
@@ -124,7 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("writing repodata");
-    cache.write_all(&args.output)?;
+    cache.write_all(&[DataType::Primary, DataType::Filelists, DataType::Other])?;
 
     if args.incremental {
         let removed = cache.prune(&expected_keys)?;
