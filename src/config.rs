@@ -8,13 +8,11 @@ pub struct Config {
     pub jwt_secret: String,
     pub storage_dir: PathBuf,
     pub cache_dir: PathBuf,
-    // NOTE: what is this for??
-    pub subatomic_appstream_dir: String,
 }
 
 impl Config {
     pub fn from_env() -> envy::Result<Self> {
-        dotenvy::dotenv().ok();
+        _ = dotenvy::dotenv();
         envy::from_env::<Self>()
     }
 }

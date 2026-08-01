@@ -17,13 +17,10 @@ pub async fn jwt_auth(
     req: Request,
     next: Next,
 ) -> Result<Response, (StatusCode, String)> {
-    let auth_header = req
-        .headers()
-        .get("Authorization")
+    let auth_header = (req.headers().get("Authorization"))
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Missing Authorization header".to_owned()))?;
 
-    let token_str = auth_header
-        .to_str()
+    let token_str = (auth_header.to_str())
         .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid header".to_owned()))?;
 
     let Some(token) = token_str.strip_prefix("Bearer ") else {

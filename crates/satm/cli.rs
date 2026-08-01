@@ -14,8 +14,11 @@ pub enum Command {
     /// Generate repodata locally (like createrepo)
     Createrepo(CreaterepoArgs),
 
-    /// Interact with the Subatomic API server
+    /// Interact with the repos endpoint on subatomic server
     Repo(RepoArgs),
+
+    /// Interact with the keys endpoint on subatomic server
+    Key(KeyArgs),
 }
 
 #[derive(Parser)]
@@ -91,7 +94,6 @@ pub enum RepoSubcommand {
     },
     Upload {
         name: String,
-        #[arg(short, long)]
         paths: Vec<PathBuf>,
     },
     Delete {
@@ -112,22 +114,12 @@ pub enum RepoSubcommand {
     Refresh {
         name: String,
     },
-    Key {
-        #[command(subcommand)]
-        action: KeyAction,
-    },
 }
 
 #[derive(Subcommand)]
 pub enum CompsAction {
-    Upload {
-        name: String,
-        #[arg(short, long)]
-        file: PathBuf,
-    },
-    Delete {
-        name: String,
-    },
+    Upload { name: String, file: PathBuf },
+    Delete { name: String },
 }
 
 #[derive(Subcommand)]
@@ -138,21 +130,39 @@ pub enum RepoKeyAction {
 }
 
 #[derive(Subcommand)]
-pub enum KeyAction {
-    List,
-    Get { id: i32 },
-    Create { name: String, userid: String },
-    Delete { id: i32 },
+pub enum PkgAction {
+    List { name: String },
+    Delete { name: String, rpms: Vec<String> },
+}
+
+#[derive(Parser)]
+pub struct KeyArgs {
+    /// Base URL of the subatomic API server
+    #[arg(long, env = "SUBATOMIC_API_URL")]
+    pub url: Option<String>,
+
+    /// JWT token for authentication (also via `SUBATOMIC_API_TOKEN` env)
+    #[arg(long, env = "SUBATOMIC_API_TOKEN", hide_env_values = true)]
+    pub token: Option<String>,
+
+    #[command(subcommand)]
+    pub subcmd: KeySubcommand,
 }
 
 #[derive(Subcommand)]
-pub enum PkgAction {
-    List {
+pub enum KeySubcommand {
+    List,
+    Get {
+        id: i32,
+    },
+    /// Create a new signing key.
+    Create {
+        /// Key name.
         name: String,
+        /// User ID of the key, probably in the format `Repository Name <mail@example.com>`.
+        userid: String,
     },
     Delete {
-        name: String,
-        #[arg(short, long)]
-        rpms: Vec<String>,
+        id: i32,
     },
 }

@@ -2,6 +2,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
 pub async fn create_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
+    tracing::debug!(database_url, "connecting to db");
     PgPoolOptions::new().connect(database_url).await
 }
 

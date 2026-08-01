@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use libsubatomic::prelude::*;
 use libsubatomic::repodata::RepoCache;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 

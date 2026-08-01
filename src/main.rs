@@ -48,6 +48,8 @@ pub type LockerState = State<Arc<repohdl::Locker>>;
 async fn main() {
     Registry::default().with(EnvFilter::from_default_env()).with(tracing_logfmt::layer()).init();
 
+    tracing::info!("starting subatomic");
+
     let config = Config::from_env().expect("cannot obtain config from env");
     let config = Arc::new(config);
 
@@ -56,32 +58,28 @@ async fn main() {
 
     let locker = Arc::new(repohdl::Locker::new(Arc::clone(&pool), Arc::clone(&config)));
 
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
-
     let app = Router::new()
         .route("/v1/repos", get(api::repos::list_repos))
-        .route("/v1/repos", post(api::repos::create_repo))
-        .route("/v1/repos/:name", put(api::repos::upload_pkgs))
-        .route("/v1/repos/:name", delete(api::repos::delete_repo))
-        .route("/v1/repos/:name/comps", put(api::repos::push_comps))
-        .route("/v1/repos/:name/comps", delete(api::repos::del_comps))
-        .route("/v1/repos/:name/key", get(api::repos::get_key))
-        .route("/v1/repos/:name/key", put(api::repos::set_key))
-        .route("/v1/repos/:name/key", delete(api::repos::del_key))
-        .route("/v1/repos/:name/rpms", get(api::repos::list_rpms))
-        .route("/v1/repos/:name/rpms", post(api::repos::del_rpms))
-        .route("/v1/repos/:name/refresh", post(api::repos::refresh_repo))
+        .route("/v1/repos/{name}", put(api::repos::create_repo))
+        .route("/v1/repos/{name}", delete(api::repos::delete_repo))
+        .route("/v1/repos/{name}", post(api::repos::upload_pkgs))
+        .route("/v1/repos/{name}/comps", put(api::repos::push_comps))
+        .route("/v1/repos/{name}/comps", delete(api::repos::del_comps))
+        .route("/v1/repos/{name}/key", get(api::repos::get_key))
+        .route("/v1/repos/{name}/key", put(api::repos::set_key))
+        .route("/v1/repos/{name}/key", delete(api::repos::del_key))
+        .route("/v1/repos/{name}/rpms", get(api::repos::list_rpms))
+        .route("/v1/repos/{name}/rpms", post(api::repos::del_rpms))
+        .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
         .route("/v1/keys", post(api::keys::create_key))
         .route("/v1/keys", get(api::keys::list_keys))
-        .route("/v1/keys/:id", get(api::keys::get_key))
-        .route("/v1/keys/:id", delete(api::keys::del_key))
+        .route("/v1/keys/{id}", get(api::keys::get_key))
+        .route("/v1/keys/{id}", delete(api::keys::del_key))
         .route_layer(axum::middleware::from_fn_with_state(Arc::clone(&config), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(&config), pool, locker });
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
-    tracing::info!(addr, "Starting server");
+    tracing::info!(addr, "starting server");
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

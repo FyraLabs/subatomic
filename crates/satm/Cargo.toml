@@ -10,6 +10,7 @@ path = "./main.rs"
 [dependencies]
 clap = { version = "4.6.4", features = ["derive", "env"] }
 color-eyre = "0.6.5"
+dotenvy = { workspace = true }
 jwalk = "0.8.1"
 libsubatomic = { path = "../libsubatomic" }
 serde = { workspace = true }

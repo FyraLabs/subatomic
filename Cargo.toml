@@ -8,20 +8,23 @@ edition = "2024"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["http2", "macros", "multipart"] }
-dotenvy = "0.15.7"
+dotenvy = { workspace = true }
 envy = "0.4.2"
-jsonwebtoken = "11.0.0"
+futures-util = "0.3.33"
+jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 libsubatomic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.9.0", features = ["postgres", "runtime-tokio"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = "0.7.19"
 tracing = { workspace = true }
 tracing-logfmt = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [workspace.dependencies]
+dotenvy = "0.15.7"
 libsubatomic = { path = "./crates/libsubatomic/" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

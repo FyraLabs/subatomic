@@ -4,8 +4,10 @@ use crate::{DbState, LockerState};
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
 use axum::http::StatusCode;
+use futures_util::TryStreamExt;
 use libsubatomic::err::Res;
 use libsubatomic::prelude::Itertools;
+use tokio_util::io::StreamReader;
 
 pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<Repo>>> {
     Ok(Json(sqlx::query_as!(Repo, "SELECT * FROM repos ORDER BY name").fetch_all(&*pool).await?))
@@ -28,6 +30,7 @@ pub async fn upload_pkgs(
     else {
         return Ok(StatusCode::NOT_FOUND);
     };
+    tokio::fs::create_dir_all(&dir).await?;
     let mut pkgs = Vec::new();
     while let Some(field) =
         multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
@@ -35,10 +38,14 @@ pub async fn upload_pkgs(
         let name = (field.name())
             .ok_or_else(|| ApiError::BadRequest("filename should not be empty".into()))?;
         let path = dir.join(name);
-        let data = (field.bytes().await)
-            .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
+        let mut body_reader =
+            std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
+        try bikeshed std::io::Result<()> {
+            let mut file = tokio::io::BufWriter::new(tokio::fs::File::create(&path).await?);
+            tokio::io::copy(&mut body_reader, &mut file).await?;
+        }
+        .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
 
-        tokio::fs::write(&path, data).await?;
         pkgs.push(path);
     }
     let pkgs2 = pkgs.iter().map(std::path::PathBuf::as_path).collect_vec();

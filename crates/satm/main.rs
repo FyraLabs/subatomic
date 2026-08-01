@@ -11,6 +11,8 @@ mod createrepo;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    _ = dotenvy::dotenv();
+
     Registry::default().with(EnvFilter::from_default_env()).init();
     color_eyre::install().expect("cannot install color_eyre");
 
@@ -25,13 +27,24 @@ async fn main() -> color_eyre::Result<()> {
             };
 
             let client = api_client::ApiClient::new(&url, token);
-            handle_api_subcmd(cmd.subcmd, client).await?;
+            handle_api_repos(cmd.subcmd, client).await?;
+            Ok(())
+        }
+        cli::Command::Key(cmd) => {
+            let Some((url, token)) = (cmd.url.or_else(|| std::env::var("SUBATOMIC_API_URL").ok()))
+                .zip(cmd.token.or_else(|| std::env::var("SUBATOMIC_API_TOKEN").ok()))
+            else {
+                bail!("Supply SUBATOMIC_API_URL and one of SUBATOMIC_API_TOKEN or --token");
+            };
+
+            let client = api_client::ApiClient::new(&url, token);
+            handle_api_keys(cmd.subcmd, client).await?;
             Ok(())
         }
     }
 }
 
-async fn handle_api_subcmd(
+async fn handle_api_repos(
     subcmd: cli::RepoSubcommand,
     client: api_client::ApiClient,
 ) -> color_eyre::Result<()> {
@@ -45,7 +58,7 @@ async fn handle_api_subcmd(
             println!("{}", serde_json::to_string_pretty(&repo)?);
         }
         cli::RepoSubcommand::Upload { name, paths } => {
-            client.upload_packages(&name, &paths).await?;
+            client.upload_pkgs(&name, &paths).await?;
         }
         cli::RepoSubcommand::Delete { name } => client.delete_repo(&name).await?,
         cli::RepoSubcommand::Comps { action } => match action {
@@ -74,21 +87,28 @@ async fn handle_api_subcmd(
             }
         },
         cli::RepoSubcommand::Refresh { name } => client.refresh_repo(&name).await?,
-        cli::RepoSubcommand::Key { action } => match action {
-            cli::KeyAction::List => {
-                let keys = client.list_keys().await?;
-                println!("{}", serde_json::to_string_pretty(&keys)?);
-            }
-            cli::KeyAction::Get { id } => {
-                let public_key = client.get_key(id).await?;
-                println!("{public_key}");
-            }
-            cli::KeyAction::Create { name, userid } => {
-                let key = client.create_key(&name, &userid).await?;
-                println!("{}\n{}", key.id, key.public_armor);
-            }
-            cli::KeyAction::Delete { id } => client.del_key(id).await?,
-        },
+    }
+    Ok(())
+}
+
+async fn handle_api_keys(
+    subcmd: cli::KeySubcommand,
+    client: api_client::ApiClient,
+) -> color_eyre::Result<()> {
+    match subcmd {
+        cli::KeySubcommand::List => {
+            let keys = client.list_keys().await?;
+            println!("{}", serde_json::to_string_pretty(&keys)?);
+        }
+        cli::KeySubcommand::Get { id } => {
+            let public_key = client.get_key(id).await?;
+            println!("{public_key}");
+        }
+        cli::KeySubcommand::Create { name, userid } => {
+            let key = client.create_key(&name, &userid).await?;
+            println!("{}\n{}", key.id, key.public_armor);
+        }
+        cli::KeySubcommand::Delete { id } => client.del_key(id).await?,
     }
     Ok(())
 }
