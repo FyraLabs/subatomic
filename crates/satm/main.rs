@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use color_eyre::eyre::bail;
-use tracing_subscriber::{EnvFilter, Registry, prelude::*};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod api_client;
 mod cli;
@@ -13,7 +13,7 @@ mod createrepo;
 async fn main() -> color_eyre::Result<()> {
     _ = dotenvy::dotenv();
 
-    Registry::default().with(EnvFilter::from_default_env()).init();
+    tracing_subscriber::registry().with(fmt::layer()).with(EnvFilter::from_default_env()).init();
     color_eyre::install().expect("cannot install color_eyre");
 
     let cli = cli::Cli::parse();

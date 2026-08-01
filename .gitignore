@@ -2,3 +2,4 @@
 test
 .subatomic-cache
 .env
+test/

@@ -2,6 +2,7 @@
 //! [`Package`] struct.
 
 use sha2::Digest;
+use std::io::BufReader;
 
 use crate::prelude::*;
 
@@ -103,9 +104,8 @@ impl Package {
         let rpm = rpm::PackageReader::open(path)?;
         let m = &rpm.metadata;
         let mut f = std::fs::File::open(path)?;
-        let mut buf = Vec::new();
-        f.read_to_end(&mut buf)?;
-        let csum = hex::encode(sha2::Sha256::digest(&buf));
+        let reader = BufReader::new(&mut f);
+        let checksum = sha256_digest(reader)?;
         let meta = f.metadata()?;
         let btime = epoch!(meta.created()?);
 
@@ -118,7 +118,7 @@ impl Package {
                     ver: m.get_version()?.into(),
                     rel: m.get_release()?.into(),
                 },
-                checksum: csum.into(),
+                checksum,
                 summary: m.get_summary().unwrap_or_default().into(),
                 description: m.get_description().unwrap_or_default().into(),
                 packager: m.get_packager().ok().map(Into::into),
@@ -398,4 +398,19 @@ impl From<rpm::ChangelogEntry> for Changelog {
     fn from(rpm::ChangelogEntry { name, timestamp, description }: rpm::ChangelogEntry) -> Self {
         Self { author: name.into(), date: timestamp, text: description.into() }
     }
+}
+
+fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = [0; 10240];
+
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+
+    Ok(hex::encode(hasher.finalize()).into())
 }

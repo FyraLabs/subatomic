@@ -1,6 +1,7 @@
 use crate::cli::{CreaterepoArgs, CreaterepoMode};
 use color_eyre::Result;
 use color_eyre::eyre::{ContextCompat, bail};
+use jwalk::rayon::iter::{ParallelBridge, ParallelIterator};
 use libsubatomic::pkg::Package;
 use libsubatomic::repodata::{RepoCache, repomd::DataType};
 use std::collections::HashSet;
@@ -37,15 +38,8 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
     let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
     cache.zstd_level = args.zstd_level;
 
-    let mut parsed = 0;
-    let mut skipped = 0;
-    let mut cached = 0;
-    let mut expected_keys = HashSet::new();
-    let mut new = Vec::new();
-
-    for (i, path) in rpms_to_process.iter().enumerate() {
+    let results = rpms_to_process.iter().enumerate().par_bridge().map(|(i, path)| {
         let key = path.file_name().context("missing filename")?.as_bytes();
-        expected_keys.insert(key);
 
         let should_skip = if let CreaterepoMode::Auto { incremental } = &args.mode {
             *incremental && cache.has(key)?
@@ -55,8 +49,7 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
         };
 
         if should_skip {
-            cached += 1;
-            continue;
+            return Result::<_, color_eyre::Report>::Ok((key, 1, None, 0));
         }
 
         info!(progress = format!("[{}/{}]", i + 1, rpms_to_process.len()), path = %path.display(), "parsing");
@@ -67,15 +60,27 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
                 } else {
                     Vec::new()
                 };
-                new.push((pkg, path.file_name().context("missing filename")?, appstream_frag));
-                parsed += 1;
+                Ok((key, 0, Some((pkg, path.file_name().context("missing filename")?, appstream_frag)), 0))
             }
             Err(e) => {
                 error!(path = %path.display(), error = %e, "skipping");
-                skipped += 1;
+                Ok((key, 0, None, 1))
             }
         }
+    }).collect::<Result<Vec<_>, color_eyre::Report>>()?;
+
+    let mut skipped = 0;
+    let mut cached = 0;
+    let mut expected_keys = HashSet::with_capacity(results.len());
+    let mut new = Vec::with_capacity(results.len());
+
+    for (k, c, p, s) in results {
+        expected_keys.insert(k);
+        cached += c;
+        new.extend(p);
+        skipped += s;
     }
+    let parsed = new.len();
     cache.insert_pkgs(new)?;
 
     info!(parsed, skipped, cached, "processing complete");
