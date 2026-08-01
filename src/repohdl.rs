@@ -46,7 +46,9 @@ impl Locker {
         let (key, repohdl) = w.remove_entry(repo).unwrap();
         let mut repohdl = repohdl.into_inner();
         repohdl.repo = repohdl.repo.compact_cache().expect("cannot compact cache");
-        w.insert(key, RwLock::new(repohdl));
+        // NOTE: I feel like always keeping this in the cache makes chances for corruption higher…
+        // need second opinion
+        // w.insert(key, RwLock::new(repohdl));
         drop(w);
         Ok(Some(ret))
     }

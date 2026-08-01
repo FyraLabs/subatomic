@@ -399,7 +399,7 @@ impl RepoCache {
             .create(true)
             .truncate(true)
             .open(&path)?;
-        repomd::Repomd::generate(&mut fd_repomd, data)?;
+        repomd::repomd::generate(&mut fd_repomd, data)?;
 
         let pos = fd_repomd.stream_position()?;
         fd_repomd.seek(std::io::SeekFrom::Start(0))?;

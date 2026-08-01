@@ -85,7 +85,7 @@ const fn deps_is_empty(d: &&Dependencies) -> bool {
 #[derive(Clone, Debug, Serialize)]
 pub struct PackageChecksum<'a> {
     #[serde(rename = "@type")]
-    pub checksum_type: &'static str = "YES",
+    pub checksum_type: &'static str = "sha256", // FIXME: unhardcode
     #[serde(rename = "@pkgid")]
     pub pkgid: &'static str = "YES",
     #[serde(rename = "$text")]

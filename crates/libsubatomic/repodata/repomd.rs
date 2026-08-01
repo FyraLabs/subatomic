@@ -1,8 +1,7 @@
 use crate::prelude::*;
 
 #[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct Repomd {
+pub struct repomd { // FIXME: how to make roottag lowercase properly
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/repo",
     #[serde(rename = "@xmlns:rpm")]
@@ -40,6 +39,7 @@ impl std::fmt::Display for DataType {
 pub struct Checksum {
     #[serde(rename = "@type")]
     pub r#type: CsumType = CsumType::Sha256,
+    #[serde(rename = "$value")]
     pub sha: String, // NOTE: or [u8; 32] with hex-serde?
 }
 
@@ -72,7 +72,7 @@ pub struct Location {
     pub href: String,
 }
 
-impl Repomd {
+impl repomd {
     /// Generate and write the contents of `repomd.xml`.
     ///
     /// # Errors
