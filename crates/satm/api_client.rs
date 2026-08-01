@@ -30,6 +30,11 @@ pub struct CreateKeyResp {
     pub public_armor: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DelRpmsResp {
+    not_found: Vec<String>,
+}
+
 impl ApiClient {
     pub fn new(base_url: &str, token: String) -> Self {
         Self { client: Client::new(), base_url: base_url.trim_end_matches('/').to_owned(), token }
@@ -158,11 +163,15 @@ impl ApiClient {
     }
 
     pub async fn delete_rpms(&self, name: &str, rpms: &[String]) -> Result<Vec<String>> {
+        if rpms.is_empty() {
+            return Err(color_eyre::eyre::eyre!("you're deleting nothing smh"));
+        }
         let body = serde_json::json!({ "rpms": rpms });
         let req = self
             .request_builder(reqwest::Method::POST, &format!("/v1/repos/{name}/rpms"))
             .json(&body);
-        self.send_json(req).await
+        let resp: DelRpmsResp = self.send_json(req).await?;
+        Ok(resp.not_found)
     }
 
     pub async fn refresh_repo(&self, name: &str) -> Result<()> {

@@ -8,6 +8,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub storage_dir: PathBuf,
     pub cache_dir: PathBuf,
+    pub body_limit: usize,
 }
 
 impl Config {

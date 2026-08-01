@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct Repomd {
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/repo",

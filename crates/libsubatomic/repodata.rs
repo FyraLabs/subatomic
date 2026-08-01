@@ -107,14 +107,13 @@ impl RepoCache {
         }
     }
 
-    fn read<T>(&self, f: impl FnOnce(&FragsDb, &heed::RoTxn<'_>) -> T) -> T {
+    fn read<T>(&self, f: impl FnOnce(&FragsDb, &heed::RoTxn<'_>) -> T) -> Option<T> {
         trace!(repo = %self.repo, "starting read txn");
         let txn = self.env.read_txn().expect("cannot create rw txn");
-        let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))
-            .expect("db doesn't exist?");
+        let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))?;
         let res = f(&db, &txn);
         trace!(repo = %self.repo, "read txn finished");
-        res
+        Some(res)
     }
 
     pub fn write_comps(&self, data: &repomd::Data) -> heed::Result<()> {
@@ -146,7 +145,7 @@ impl RepoCache {
     ///
     /// # Errors
     /// This propagates errors from [`heed::Database::put`].
-    pub fn insert_pkgs<'a, 'b, I: IntoIterator<Item = (&'a crate::pkg::Package, &'b OsStr)>>(
+    pub fn insert_pkgs<'b, I: IntoIterator<Item = (crate::pkg::Package, &'b OsStr, Vec<u8>)>>(
         &self,
         pkgs: I,
     ) -> heed::Result<()> {
@@ -154,9 +153,9 @@ impl RepoCache {
         info!(count = pkgs.len(), "generating xml fragments in parallel");
         let fragments: Vec<_> = pkgs
             .into_par_iter()
-            .map(|(pkg, path)| {
+            .map(|(pkg, path, appstream_frag)| {
                 trace!(name = %pkg.name, "serializing package");
-                (path.as_bytes(), RepoCacheFragment::new(pkg, path))
+                (path.as_bytes(), RepoCacheFragment::new(&pkg, path, appstream_frag))
             })
             .collect();
         trace!(count = fragments.len(), "writing fragments to cache");
@@ -168,21 +167,12 @@ impl RepoCache {
     /// Check whether a key already exists in the cache.
     pub fn has(&self, key: &[u8]) -> Res<bool> {
         trace!(key, "checking cache key");
-        Ok(self.read(|db, txn| db.get(txn, key))?.is_some())
-    }
-
-    /// Insert a single package fragment under an explicit key.
-    ///
-    /// # Errors
-    /// This propagates errors from [`heed::Database::put`].
-    pub fn insert(&self, key: &[u8], pkg: &crate::pkg::Package, path: &OsStr) -> heed::Result<()> {
-        trace!(key, path = %path.display(), "inserting single package");
-        self.write(|db, txn| db.put(txn, key, &RepoCacheFragment::new(pkg, path)))
+        Ok(self.read(|db, txn| db.get(txn, key)).transpose()?.flatten().is_some())
     }
 
     /// Return the number of cached fragments.
     pub fn len(&self) -> heed::Result<u64> {
-        self.read(heed::Database::len)
+        self.read(heed::Database::len).unwrap_or(Ok(0))
     }
 
     pub fn is_empty(&self) -> heed::Result<bool> {
@@ -204,7 +194,7 @@ impl RepoCache {
     }
 
     pub fn get_fragment(&self, key: &[u8]) -> heed::Result<Option<RepoCacheFragment>> {
-        self.read(|db, txn| db.get(txn, key))
+        self.read(|db, txn| db.get(txn, key)).unwrap_or(Ok(None))
     }
 
     /// Collect every key currently stored in the cache.
@@ -219,6 +209,7 @@ impl RepoCache {
             trace!(count = out.len(), "collected cache keys");
             Ok(out)
         })
+        .unwrap_or_else(|| Ok(Vec::new()))
     }
 
     /// Remove a single key from the cache.
@@ -341,13 +332,15 @@ impl RepoCache {
     /// Currently, the function panics if `datatypes` contains [`repomd::DataType::Group`].
     pub fn write_all(&self, datatypes: &[repomd::DataType]) -> Res<Vec<u8>> {
         info!(dir = %self.dir.display(), "writing repodata");
+        std::fs::create_dir_all(self.dir.join("repodata"))?;
         let make_disps = |dt: repomd::DataType| {
+            let path = self.dir.join(format!("repodata/{dt}.xml.zst"));
             std::io::Result::Ok(RepoWriteDispatcher {
                 dt,
                 w: RepoWriter {
                     comp: RepoWriterComp::Zstd(zstd::Encoder::new(
                         RepoWriterCompInner {
-                            fd: std::fs::File::create(format!("{dt}.xml.zst"))?,
+                            fd: std::fs::File::create(path)?,
                             csum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
                             ..
                         },
@@ -369,26 +362,37 @@ impl RepoCache {
                 self.write_stage1_prexml(disp.dt, &mut disp.w, l)?;
 
                 for frag in frags {
-                    disp.w.write_all(frag?.primary.as_bytes())?;
+                    let frag = frag?;
+                    let bytes = match disp.dt {
+                        repomd::DataType::Primary => frag.primary.as_bytes(),
+                        repomd::DataType::Filelists => frag.filelists.as_bytes(),
+                        repomd::DataType::Other => frag.other.as_bytes(),
+                        repomd::DataType::Group => panic!("do not expect group frag"),
+                        repomd::DataType::Appstream => &frag.appstream,
+                    };
+                    disp.w.write_all(bytes)?;
                 }
                 self.write_stage1_postxml(disp.dt, &mut disp.w)?;
                 Res::Ok(())
             })
+            .unwrap_or(Ok(()))
         })?;
         let mut data: Vec<_> =
             disps.into_iter().map(|disp| disp.w.into_data(disp.dt).map(|x| x.0)).try_collect()?;
         data.extend(self.read_comps()?);
         // can safely rename since fds are dropped via into_data()
-        for (path, dat) in datatypes.iter().map(|dt| format!("{dt}.xml.zst")).zip_eq(&data) {
-            let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
+        for (path, dat) in
+            datatypes.iter().map(|dt| self.dir.join(format!("repodata/{dt}.xml.zst"))).zip_eq(&data)
+        {
+            let newname = format!("repodata/{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
             std::fs::rename(path, self.dir.join(newname))?;
         }
 
-        Self::write_repomd(&self.dir, data)
+        self.write_repomd(data)
     }
 
-    fn write_repomd(dir: &Path, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
-        let path = dir.join("repomd.xml");
+    fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
+        let path = self.dir.join("repodata/repomd.xml");
         let mut fd_repomd = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -540,16 +544,18 @@ pub struct RepoCacheFragment {
     pub primary: String,
     pub filelists: String,
     pub other: String,
+    pub appstream: Vec<u8>,
 }
 
 impl RepoCacheFragment {
     #[must_use]
-    pub fn new(pkg: &crate::pkg::Package, path: &OsStr) -> Self {
+    pub fn new(pkg: &crate::pkg::Package, path: &OsStr, appstream_frag: Vec<u8>) -> Self {
         trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
         let mut frag = Self::default();
         frag.update_primary(pkg, path);
         frag.update_filelists(pkg);
         frag.update_other(pkg);
+        frag.appstream = appstream_frag;
         trace!(name = %pkg.name, "cache fragment complete");
         frag
     }

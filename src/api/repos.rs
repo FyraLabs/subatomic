@@ -50,7 +50,14 @@ pub async fn upload_pkgs(
     }
     let pkgs2 = pkgs.iter().map(std::path::PathBuf::as_path).collect_vec();
     let pkgs2 = pkgs2.as_slice();
-    let Some(out) = locker.write(&repo, async |hdl| hdl.repo.add_replace(pkgs2)).await? else {
+    let Some(out) = locker
+        .write(&repo, async |hdl| try bikeshed Res<_> {
+            let out = hdl.repo.add_replace(pkgs2)?;
+            hdl.repo.generate()?;
+            out
+        })
+        .await?
+    else {
         // something happened during last processing…!?
         return Ok(StatusCode::NOT_FOUND);
     };
@@ -226,15 +233,16 @@ pub async fn del_rpms(
     Path(repo): Path<String>,
     Json(DelRpmsReq { rpms }): Json<DelRpmsReq>,
 ) -> Result<Json<serde_json::Value>> {
-    let Some(not_found) = locker
-        .write(&repo, async |repohdl| {
+    tracing::info!(?rpms, "deleting rpms");
+    let q = locker.write(&repo, async |repohdl| try bikeshed Result<_> {
+        let out =
             repohdl.repo.del(&rpms.iter().map(std::string::String::as_bytes).collect_vec()).map(
                 |v| v.into_iter().map(|s| String::from_utf8_lossy(s).to_string()).collect_vec(),
-            )
-        })
-        .await?
-        .transpose()?
-    else {
+            )?;
+        repohdl.repo.generate()?;
+        out
+    });
+    let Some(not_found) = q.await?.transpose()? else {
         return Err(ApiError::NotFound);
     };
     Ok(Json(serde_json::json!({ "not_found": not_found })))

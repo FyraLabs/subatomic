@@ -41,6 +41,7 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
     let mut skipped = 0;
     let mut cached = 0;
     let mut expected_keys = HashSet::new();
+    let mut new = Vec::new();
 
     for (i, path) in rpms_to_process.iter().enumerate() {
         let key = path.file_name().context("missing filename")?.as_bytes();
@@ -60,8 +61,13 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
 
         info!(progress = format!("[{}/{}]", i + 1, rpms_to_process.len()), path = %path.display(), "parsing");
         match Package::open(path) {
-            Ok((pkg, _)) => {
-                cache.insert(key, &pkg, path.as_os_str())?;
+            Ok((pkg, mut rpmreader)) => {
+                let appstream_frag = if args.appstream {
+                    Package::appstream_frag(&mut rpmreader)?
+                } else {
+                    Vec::new()
+                };
+                new.push((pkg, path.file_name().context("missing filename")?, appstream_frag));
                 parsed += 1;
             }
             Err(e) => {
@@ -70,6 +76,7 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
             }
         }
     }
+    cache.insert_pkgs(new)?;
 
     info!(parsed, skipped, cached, "processing complete");
 

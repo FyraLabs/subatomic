@@ -40,7 +40,15 @@ impl Locker {
         tracing::debug!(repo, "cache miss");
         let Some(repohdl) = RepoHdl::new(&self.db, &self.cfg, repo).await? else { return Ok(None) };
         self.repolocks.write().await.insert(repo.into(), RwLock::new(repohdl));
-        Ok(Some(f(self.repolocks.read().await.get(repo).unwrap().write().await).await))
+        let ret = f(self.repolocks.read().await.get(repo).unwrap().write().await).await;
+        // TODO: handle error properly
+        let mut w = self.repolocks.write().await;
+        let (key, repohdl) = w.remove_entry(repo).unwrap();
+        let mut repohdl = repohdl.into_inner();
+        repohdl.repo = repohdl.repo.compact_cache().expect("cannot compact cache");
+        w.insert(key, RwLock::new(repohdl));
+        drop(w);
+        Ok(Some(ret))
     }
     #[tracing::instrument(skip(self))]
     pub async fn del(&self, repo: &str) -> Result<bool> {
@@ -77,7 +85,8 @@ impl RepoHdl {
             return Ok(None);
         };
 
-        let cache = RepoCache::new(repo_name, &config.cache_dir, &config.storage_dir)
+        let repodir = config.storage_dir.join(repo_name);
+        let cache = RepoCache::new(repo_name, &config.cache_dir, &repodir)
             .map_err(libsubatomic::err::Error::from)?;
 
         let sig = if let Some(key_id) = repo.key_id {

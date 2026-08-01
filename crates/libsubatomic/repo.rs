@@ -76,9 +76,9 @@ impl Repo {
     fn add_one<'a>(
         &self,
         path: &&'a Path,
-    ) -> Result<(AddPkgOutput, (crate::pkg::Package, &'a OsStr)), rpm::Error> {
+    ) -> Result<(AddPkgOutput, (crate::pkg::Package, &'a OsStr, Vec<u8>)), rpm::Error> {
         let mut ret = AddPkgOutput::default();
-        let (pkg, rpmmeta) = crate::pkg::Package::open(path)?;
+        let (pkg, mut rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
             tracing::debug!("signing");
             let sig = sig.sign_rpm(&rpmmeta.metadata)?;
@@ -93,8 +93,13 @@ impl Repo {
             }
             ret.sig = Some(sig);
         }
+        let appstream_frag = if self.use_appstream {
+            crate::pkg::Package::appstream_frag(&mut rpmmeta)?
+        } else {
+            Vec::new()
+        };
         let name = path.file_name().expect("rpm no filename");
-        Ok((ret, (pkg, name)))
+        Ok((ret, (pkg, name, appstream_frag)))
     }
 
     /// Upsert packages to the cache.
@@ -115,7 +120,9 @@ impl Repo {
             .map(|rpm_path| self.add_one(rpm_path))
             .collect::<Result<Vec<_>, rpm::Error>>()?;
         let (rets, pkgs): (Vec<_>, Vec<_>) = pkgs.into_iter().unzip();
-        self.cache.insert_pkgs(pkgs.iter().map(|(pkg, name)| (pkg, *name)))?;
+        self.cache.insert_pkgs(
+            pkgs.into_iter().map(|(pkg, name, appstream_frag)| (pkg, name, appstream_frag)),
+        )?;
         Ok(rets)
     }
 
@@ -146,8 +153,9 @@ impl Repo {
                 bad_filenames.push(path);
                 continue;
             };
-            let prev_versions =
-                parsed_keys.iter().filter(|(_, k)| k.name == name && k.arch == arch);
+            let prev_versions = (parsed_keys.iter())
+                .filter(|(_, k)| k.name == name && k.arch == arch)
+                .filter(|(k, _)| *k != filename);
             removed.extend(prev_versions.map(|(k, _)| (*k).clone()));
         }
         let to_remove = removed.iter().map(|k| &**k).collect_vec();
@@ -199,9 +207,12 @@ impl Repo {
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")))
             .collect();
-        let mut expected_keys: HashSet<Vec<u8>> = HashSet::with_capacity(rpm_paths.len());
-        let mut ret = RegenerateOutput { .. };
-        for path in rpm_paths {
+
+        let mut expected_keys = HashSet::with_capacity(rpm_paths.len());
+        let mut paths_to_add = Vec::new();
+        let mut ret = RegenerateOutput::default();
+
+        for path in &rpm_paths {
             let key = path.file_name().expect("bad filename").as_bytes();
             expected_keys.insert(key.to_owned());
 
@@ -209,22 +220,22 @@ impl Repo {
                 ret.cached += 1;
                 continue;
             }
-
-            match crate::pkg::Package::open(&path) {
-                Ok((pkg, _)) => {
-                    self.cache.insert(key, &pkg, path.as_os_str())?;
-                    ret.parsed += 1;
-                }
-                Err(e) => {
-                    ret.skipped.push((path, e));
-                }
-            }
+            paths_to_add.push(path.as_path());
         }
+
+        if !paths_to_add.is_empty() {
+            let results = self.add_replace(&paths_to_add)?;
+            // TODO: save the result or something
+            ret.parsed = results.added.len();
+        }
+
         ret.repomd = self.cache.write_all(&self.datatypes())?;
+
         if incremental {
             let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
             ret.removed = self.cache.prune(&expected_refs)?;
         }
+
         Ok(ret)
     }
 
