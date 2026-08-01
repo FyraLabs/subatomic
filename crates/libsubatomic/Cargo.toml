@@ -6,13 +6,8 @@ edition = "2024"
 [lib]
 path = "./lib.rs"
 
-[[bin]]
-name = "createrepo_rs"
-path = "bin/createrepo.rs"
-
 [dependencies]
 atoi = "3.1.0"
-clap = { version = "4.5.37", features = ["derive"] }
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",
 ] }
@@ -30,7 +25,6 @@ smartstring = { version = "1.0.1", features = ["serde"] }
 tempfile = "3.27.0"
 thiserror = "2.0.19"
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 zstd = "0.13.3"
 
 [lints]

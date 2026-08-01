@@ -254,6 +254,14 @@ impl Repo {
             .try_for_each(|&p| std::fs::remove_file(self.cache.dir.join(OsStr::from_bytes(p))))?;
         Ok(not_found)
     }
+
+    // /// Resign all packages.
+    // ///
+    // /// # Errors
+    // /// Propagate [`pgp`] signing and IO errors.
+    // pub fn resign_all(&self) -> Res<()> {
+    //     todo!()
+    // }
 }
 
 #[derive(Clone, Debug, Default)]

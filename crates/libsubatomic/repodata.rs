@@ -335,6 +335,10 @@ impl RepoCache {
     /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
     ///
     /// The caller should handling signing of the `repomd.xml` file.
+    ///
+    /// # Panics
+    ///
+    /// Currently, the function panics if `datatypes` contains [`repomd::DataType::Group`].
     pub fn write_all(&self, datatypes: &[repomd::DataType]) -> Res<Vec<u8>> {
         info!(dir = %self.dir.display(), "writing repodata");
         let make_disps = |dt: repomd::DataType| {

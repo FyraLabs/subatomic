@@ -70,10 +70,13 @@ async fn main() {
         .route("/v1/repos/:name/key", get(api::repos::get_key))
         .route("/v1/repos/:name/key", put(api::repos::set_key))
         .route("/v1/repos/:name/key", delete(api::repos::del_key))
-        // .route("/v1/repos/:name/resign", post(api::repos::resign))
         .route("/v1/repos/:name/rpms", get(api::repos::list_rpms))
         .route("/v1/repos/:name/rpms", post(api::repos::del_rpms))
         .route("/v1/repos/:name/refresh", post(api::repos::refresh_repo))
+        .route("/v1/keys", post(api::keys::create_key))
+        .route("/v1/keys", get(api::keys::list_keys))
+        .route("/v1/keys/:id", get(api::keys::get_key))
+        .route("/v1/keys/:id", delete(api::keys::del_key))
         .route_layer(axum::middleware::from_fn_with_state(Arc::clone(&config), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(&config), pool, locker });
 

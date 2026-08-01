@@ -3,6 +3,7 @@ use crate::db::Key;
 use crate::error::{ApiError, Result};
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 
 #[derive(serde::Serialize)]
 pub struct KeySummary {
@@ -61,4 +62,14 @@ pub async fn get_key(State(pool): DbState, Path(id): Path<i32>) -> Result<String
         .map_err(|e| ApiError::Internal(format!("Failed to parse private key: {e}")))?;
 
     mgr.public_armor().map_err(|e| ApiError::Internal(format!("Failed to armor public key: {e}")))
+}
+
+pub async fn del_key(State(pool): DbState, Path(id): Path<i32>) -> Result<StatusCode> {
+    // db has fk check, we don't need to modify locker as we are certain nobody is using the key
+    let q = sqlx::query!("DELETE FROM keys WHERE id = $1", id);
+    if q.execute(&*pool).await?.rows_affected() == 0 {
+        Err(ApiError::NotFound)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
 }

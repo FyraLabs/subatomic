@@ -29,7 +29,9 @@ pub async fn upload_pkgs(
         return Ok(StatusCode::NOT_FOUND);
     };
     let mut pkgs = Vec::new();
-    while let Some(field) = multipart.next_field().await.expect("multipart err") {
+    while let Some(field) =
+        multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
+    {
         let name = (field.name())
             .ok_or_else(|| ApiError::BadRequest("filename should not be empty".into()))?;
         let path = dir.join(name);
@@ -109,7 +111,7 @@ pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Re
             mgr.public_armor().map_err(|e| ApiError::Internal(format!("pgp error: {e}")))
         })
         .await?
-        .map_or_else(|| Err(ApiError::NotFound), |res| res)
+        .unwrap_or_else(|| Err(ApiError::NotFound))
 }
 
 #[derive(serde::Deserialize)]
@@ -169,11 +171,10 @@ pub async fn del_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[deprecated = "todo"]
-pub async fn resign(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
-    drop((locker, repo));
-    todo!()
-}
+// pub async fn resign(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
+//     let q = locker.write(&repo, async |repohdl| repohdl.repo.resign_all()).await?;
+//     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
+// }
 
 pub async fn refresh_repo(
     State(locker): LockerState,

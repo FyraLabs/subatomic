@@ -1,0 +1,158 @@
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(name = "satm")]
+/// Tool for interactive with subatomic servers and an alternative to `createrepo_c`.
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand)]
+pub enum Command {
+    /// Generate repodata locally (like createrepo)
+    Createrepo(CreaterepoArgs),
+
+    /// Interact with the Subatomic API server
+    Repo(RepoArgs),
+}
+
+#[derive(Parser)]
+pub struct CreaterepoArgs {
+    /// Path to directory for a list of rpms, which will be searched recursively.
+    #[arg(short, long)]
+    pub input: PathBuf,
+    /// Path to the `repodata/` directory, where xml metadata will be written to.
+    #[arg(short, long)]
+    pub output: PathBuf,
+    /// Path to cache directory, initialized automatically if it doesn't exist yet.
+    #[arg(short, long, default_value = ".subatomic-cache")]
+    pub cache: PathBuf,
+    /// Preferred identifier of the repository.
+    #[arg(long, default_value = "repo")]
+    pub repo_name: String,
+    /// Compression level of `zstd`. A level of 0 fallbacks to the default value of the internal
+    /// rust zstd library (which should be 3).
+    #[arg(long, default_value_t = 0)]
+    pub zstd_level: i32,
+    /// Whether appstream support should be enabled.
+    #[arg(long)]
+    pub appstream: bool,
+    /// Whether the cache should be compacted after the run, otherwise outdated records will not be
+    /// removed. You should enable this to prevent the cache from growing indefinitely.
+    #[arg(long, default_value_t = true)]
+    pub compact: bool,
+    #[command(subcommand)]
+    pub mode: CreaterepoMode,
+}
+
+#[derive(Subcommand)]
+pub enum CreaterepoMode {
+    /// In auto mode, satm scans for changes in the target directory automatically.
+    Auto {
+        /// Lookup the file name in the cache.
+        #[arg(long)]
+        incremental: bool,
+    },
+    /// In manual mode, satm modifies the cache and repodata according to user input.
+    Manual {
+        /// Added / updated packages.
+        #[arg(long)]
+        add: Vec<PathBuf>,
+        /// Removed packages.
+        #[arg(long)]
+        remove: Vec<String>,
+        /// Path to comps.xml if added/updated.
+        #[arg(long)]
+        comps: Option<PathBuf>,
+    },
+}
+
+#[derive(Parser)]
+pub struct RepoArgs {
+    /// Base URL of the subatomic API server
+    #[arg(long, env = "SUBATOMIC_API_URL")]
+    pub url: Option<String>,
+
+    /// JWT token for authentication (also via `SUBATOMIC_API_TOKEN` env)
+    #[arg(long, env = "SUBATOMIC_API_TOKEN", hide_env_values = true)]
+    pub token: Option<String>,
+
+    #[command(subcommand)]
+    pub subcmd: RepoSubcommand,
+}
+
+#[derive(Subcommand)]
+pub enum RepoSubcommand {
+    List,
+    Create {
+        name: String,
+    },
+    Upload {
+        name: String,
+        #[arg(short, long)]
+        paths: Vec<PathBuf>,
+    },
+    Delete {
+        name: String,
+    },
+    Comps {
+        #[command(subcommand)]
+        action: CompsAction,
+    },
+    RepoKey {
+        #[command(subcommand)]
+        action: RepoKeyAction,
+    },
+    Pkg {
+        #[command(subcommand)]
+        action: PkgAction,
+    },
+    Refresh {
+        name: String,
+    },
+    Key {
+        #[command(subcommand)]
+        action: KeyAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CompsAction {
+    Upload {
+        name: String,
+        #[arg(short, long)]
+        file: PathBuf,
+    },
+    Delete {
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RepoKeyAction {
+    Get { name: String },
+    Set { name: String, id: i32 },
+    Delete { name: String },
+}
+
+#[derive(Subcommand)]
+pub enum KeyAction {
+    List,
+    Get { id: i32 },
+    Create { name: String, userid: String },
+    Delete { id: i32 },
+}
+
+#[derive(Subcommand)]
+pub enum PkgAction {
+    List {
+        name: String,
+    },
+    Delete {
+        name: String,
+        #[arg(short, long)]
+        rpms: Vec<String>,
+    },
+}
