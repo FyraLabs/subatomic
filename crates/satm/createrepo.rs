@@ -3,11 +3,11 @@ use color_eyre::Result;
 use color_eyre::eyre::{ContextCompat, bail};
 use jwalk::rayon::iter::{ParallelBridge, ParallelIterator};
 use libsubatomic::pkg::Package;
+use libsubatomic::repodata::RepoCacheFragment;
 use libsubatomic::repodata::{RepoCache, repomd::DataType};
-use std::collections::HashSet;
 use std::os::unix::ffi::OsStrExt;
-use std::path::PathBuf;
-use tracing::{debug, error, info};
+use std::sync::Arc;
+use tracing::{debug, error, info, trace};
 
 pub fn run(args: CreaterepoArgs) -> Result<()> {
     if !args.input.is_dir() {
@@ -24,35 +24,19 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
     }
     std::fs::create_dir_all(&args.cache)?;
 
-    let rpms_to_process = match &args.mode {
-        CreaterepoMode::Auto { .. } => {
-            super let paths: Vec<PathBuf> = (jwalk::WalkDir::new(&args.input).into_iter())
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")))
-                .collect();
-            &paths
+    let (add, remove, comps) = match args.mode {
+        CreaterepoMode::Auto { incremental } => {
+            process_rpms_auto(&args, incremental)?;
+            return Ok(());
         }
-        CreaterepoMode::Manual { add, .. } => add,
+        CreaterepoMode::Manual { add, remove, comps } => (add, remove, comps),
     };
 
     let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
     cache.zstd_level = args.zstd_level;
 
-    let results = rpms_to_process.iter().enumerate().par_bridge().map(|(i, path)| {
-        let key = path.file_name().context("missing filename")?.as_bytes();
-
-        let should_skip = if let CreaterepoMode::Auto { incremental } = &args.mode {
-            *incremental && cache.has(key)?
-        } else {
-            // In manual mode we always process the list
-            false
-        };
-
-        if should_skip {
-            return Result::<_, color_eyre::Report>::Ok((key, 1, None, 0));
-        }
-
-        info!(progress = format!("[{}/{}]", i + 1, rpms_to_process.len()), path = %path.display(), "parsing");
+    let results = add.iter().enumerate().par_bridge().map(|(i, path)| {
+        info!(progress = format!("[{}/{}]", i + 1, add.len()), path = %path.display(), "parsing");
         match Package::open(path) {
             Ok((pkg, mut rpmreader)) => {
                 let appstream_frag = if args.appstream {
@@ -60,22 +44,20 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
                 } else {
                     Vec::new()
                 };
-                Ok((key, 0, Some((pkg, path.file_name().context("missing filename")?, appstream_frag)), 0))
+                Ok((0, Some((pkg, path.file_name().context("missing filename")?, appstream_frag)), 0))
             }
             Err(e) => {
                 error!(path = %path.display(), error = %e, "skipping");
-                Ok((key, 0, None, 1))
+                Ok((0, None, 1))
             }
         }
     }).collect::<Result<Vec<_>, color_eyre::Report>>()?;
 
     let mut skipped = 0;
     let mut cached = 0;
-    let mut expected_keys = HashSet::with_capacity(results.len());
     let mut new = Vec::with_capacity(results.len());
 
-    for (k, c, p, s) in results {
-        expected_keys.insert(k);
+    for (c, p, s) in results {
         cached += c;
         new.extend(p);
         skipped += s;
@@ -85,9 +67,7 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
 
     info!(parsed, skipped, cached, "processing complete");
 
-    if let CreaterepoMode::Manual { remove, .. } = &args.mode
-        && !remove.is_empty()
-    {
+    if !remove.is_empty() {
         let to_remove: Vec<&[u8]> = remove.iter().map(String::as_bytes).collect();
         let not_found = cache.delete_pkgs(&to_remove)?;
         if !not_found.is_empty() {
@@ -95,7 +75,7 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
         }
     }
 
-    if let CreaterepoMode::Manual { comps: Some(comps_path), .. } = &args.mode {
+    if let Some(comps_path) = comps {
         let comps_bytes = std::fs::read(comps_path)?;
         let repo =
             libsubatomic::Repo { cache: cache.clone(), sig: None, use_appstream: args.appstream };
@@ -112,17 +92,65 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
     info!("writing repodata");
     let _repomd = cache.write_all(&datatypes)?;
 
-    if let CreaterepoMode::Auto { incremental: true } = &args.mode {
-        let removed = cache.prune(&expected_keys)?;
-        if removed > 0 {
-            info!(removed, "pruned stale packages");
-        }
-    }
-
     if args.compact {
         drop(cache.compact()?);
     }
 
     info!(dir = %args.output.display(), "repodata written");
+    Ok(())
+}
+
+fn process_rpms_auto(args: &CreaterepoArgs, incremental: bool) -> Result<()> {
+    let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
+    cache.zstd_level = args.zstd_level;
+    let cache = Arc::new(cache);
+    let cache2 = Arc::clone(&cache);
+    let joinhdl = std::thread::spawn(move || cache2.update_frags(&rx));
+    jwalk::WalkDir::new(&args.input).into_iter().par_bridge().try_for_each(|fd| {
+        let p = fd?.path();
+        if !p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")) {
+            return Ok::<_, color_eyre::Report>(());
+        }
+        let filename = p.file_name().expect("no filename");
+        let should_skip = incremental && cache.has(filename.as_bytes())?;
+        if should_skip {
+            tx.send((filename.as_bytes().to_owned(), None)).expect("channel should be open");
+            return Ok(());
+        }
+        debug!(filename = %filename.display(), "parsing");
+        match Package::open(&p) {
+            Ok((pkg, mut rpmreader)) => {
+                trace!(filename = %filename.display(), "process");
+                let appstream_frag = if args.appstream {
+                    Package::appstream_frag(&mut rpmreader)?
+                } else {
+                    Vec::new()
+                };
+                let frag = RepoCacheFragment::new(&pkg, p.as_os_str(), appstream_frag);
+                trace!(filename = %filename.display(), "sending");
+                tx.send((filename.as_bytes().to_owned(), Some(frag)))
+                    .expect("channel should be open");
+            }
+            Err(e) => error!(path = %p.display(), error = %e, "skipping"),
+        }
+        Ok(())
+    })?;
+    drop(tx); // close
+    debug!("joining");
+    let (n_new, n_cached) = joinhdl.join().expect("cannot join")?;
+    info!(?n_new, ?n_cached, "all rpms processed");
+
+    let mut datatypes = vec![DataType::Primary, DataType::Filelists, DataType::Other];
+    if args.appstream {
+        datatypes.push(DataType::Appstream);
+    }
+
+    info!("writing repodata");
+    let _repomd = cache.write_all(&datatypes)?;
+
+    if args.compact {
+        Arc::into_inner(cache).expect("cache arc should be single").compact_close()?;
+    }
     Ok(())
 }

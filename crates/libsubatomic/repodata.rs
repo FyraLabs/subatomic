@@ -251,10 +251,27 @@ impl RepoCache {
     /// # Errors
     /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
     pub fn compact(self) -> heed::Result<Self> {
+        let env_dir = self.env.path().to_path_buf();
         let repo = self.repo.clone();
         let cachedir = self.cachedir.clone();
         let dir = self.dir.clone();
         let zstd = self.zstd_level;
+
+        self.compact_close()?;
+
+        let mut new = Self::new(&repo, &cachedir, &dir)?;
+        new.zstd_level = zstd;
+        info!(dir = %env_dir.display(), "reopened cache");
+        Ok(new)
+    }
+
+    /// Compact the underlying LMDB file by writing a fresh copy.
+    ///
+    /// This consumes `self` so the environment can be closed before the file is replaced.
+    ///
+    /// # Errors
+    /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
+    pub fn compact_close(self) -> heed::Result<()> {
         let env_dir = self.env.path().to_path_buf();
 
         let tmp_file = env_dir.join("data.compact");
@@ -274,10 +291,8 @@ impl RepoCache {
         std::fs::rename(&tmp_file, &data_file)?;
         _ = std::fs::remove_file(&old_file);
 
-        let mut new = Self::new(&repo, &cachedir, &dir)?;
-        new.zstd_level = zstd;
         info!(dir = %env_dir.display(), "cache compacted");
-        Ok(new)
+        Ok(())
     }
 
     #[allow(clippy::unimplemented)]
@@ -408,6 +423,65 @@ impl RepoCache {
         fd_repomd.read_to_end(&mut buf)?;
 
         Ok(buf)
+    }
+
+    /// Upsert fragments, and remove ones that are not inserted.
+    ///
+    /// Return numbers of (new, cached) packages.
+    ///
+    /// # Panics
+    /// Panic on time underflow.
+    ///
+    /// # Errors
+    /// Mostly heed errors.
+    pub fn update_frags(
+        &self,
+        recv: &crossbeam_channel::Receiver<(Vec<u8>, Option<RepoCacheFragment>)>,
+    ) -> Res<(u64, u64)> {
+        #[allow(clippy::unwrap_in_result)]
+        let epoch = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .expect("time underflow")
+            .as_micros();
+        let mut wtxn = self.env.write_txn()?;
+        let mut rtxn = self.env.read_txn()?;
+        let mut new: u64 = 0;
+        let mut cached: u64 = 0;
+        let db: FragsDb = self.env.create_database(&mut wtxn, Some(&self.repo))?;
+        while let Ok((key, frag)) = recv.recv() {
+            trace!(filename = %OsStr::from_bytes(&key).display(), "receive");
+            let mut frag = if let Some(frag) = frag {
+                new += 1;
+                frag
+            } else {
+                cached += 1;
+                db.get(&rtxn, &key)?.expect("frag key not found")
+            };
+            frag.epoch = epoch;
+            db.put(&mut wtxn, &key, &frag)?;
+            if (new + cached).is_multiple_of(100) {
+                debug!("commit");
+                wtxn.commit()?;
+                wtxn = self.env.write_txn()?;
+                rtxn.commit()?;
+                rtxn = self.env.read_txn()?;
+            }
+        } // until recv is closed
+        wtxn.commit()?;
+        rtxn.commit()?;
+        info!("purging old fragments");
+        wtxn = self.env.write_txn()?;
+        let mut it = db.iter_mut(&mut wtxn)?;
+        while let Some(res) = it.next() {
+            let (k, v) = res?;
+            if v.epoch != epoch {
+                debug!(old_key = %OsStr::from_bytes(k).display());
+                // SAFETY: we do not keep any references to any values from this db
+                assert!(unsafe { it.del_current()? }, "cannot delete item");
+            }
+        }
+        drop(it);
+        Ok((new, cached))
     }
 }
 
@@ -545,6 +619,7 @@ pub struct RepoCacheFragment {
     pub filelists: String,
     pub other: String,
     pub appstream: Vec<u8>,
+    pub epoch: u128,
 }
 
 impl RepoCacheFragment {
@@ -552,14 +627,14 @@ impl RepoCacheFragment {
     pub fn new(pkg: &crate::pkg::Package, path: &OsStr, appstream_frag: Vec<u8>) -> Self {
         trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
         let mut frag = Self::default();
-        frag.update_primary(pkg, path);
+        frag.update_primary(pkg, path.as_bytes());
         frag.update_filelists(pkg);
         frag.update_other(pkg);
         frag.appstream = appstream_frag;
         trace!(name = %pkg.name, "cache fragment complete");
         frag
     }
-    fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &OsStr) {
+    fn update_primary(&mut self, pkg: &crate::pkg::Package, path: &[u8]) {
         trace!(name = %pkg.name, "serializing primary.xml");
         quick_xml::se::to_writer(&mut self.primary, &primary::Package::from_pkg(pkg, path))
             .expect("cannot serialize");

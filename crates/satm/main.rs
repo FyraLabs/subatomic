@@ -1,5 +1,4 @@
 #![warn(rust_2018_idioms)]
-#![feature(super_let)]
 
 use clap::Parser;
 use color_eyre::eyre::bail;

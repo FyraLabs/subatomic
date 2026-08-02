@@ -8,6 +8,7 @@ path = "./lib.rs"
 
 [dependencies]
 atoi = "3.1.0"
+crossbeam-channel = { workspace = true }
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",
 ] }

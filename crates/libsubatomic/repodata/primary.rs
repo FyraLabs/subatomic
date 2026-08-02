@@ -115,7 +115,7 @@ impl<'a> Package<'a> {
             format,
             ..
         }: &'a crate::pkg::Package,
-        path: &'a OsStr,
+        path: &'a [u8],
     ) -> Self {
         let files = format.files.iter().filter(|f| f.is_primary()).collect();
         Self {
@@ -129,7 +129,7 @@ impl<'a> Package<'a> {
             url: url.as_deref(),
             time,
             size,
-            location: PackageLocation { href: path.as_bytes() },
+            location: PackageLocation { href: path },
             format: PrimaryFormat {
                 license: &format.license,
                 vendor: format.vendor.as_deref(),
