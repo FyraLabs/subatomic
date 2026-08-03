@@ -109,7 +109,7 @@ impl RepoCache {
 
     fn read<T>(&self, f: impl FnOnce(&FragsDb, &heed::RoTxn<'_>) -> T) -> Option<T> {
         trace!(repo = %self.repo, "starting read txn");
-        let txn = self.env.read_txn().expect("cannot create rw txn");
+        let txn = self.env.read_txn().expect("cannot create ro txn");
         let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))?;
         let res = f(&db, &txn);
         trace!(repo = %self.repo, "read txn finished");
@@ -430,47 +430,41 @@ impl RepoCache {
     /// Return numbers of (new, cached) packages.
     ///
     /// # Panics
-    /// Panic on time underflow.
+    /// Panic on time underflow and frag keys that are not found.
     ///
     /// # Errors
     /// Mostly heed errors.
     pub fn update_frags(
         &self,
-        recv: &crossbeam_channel::Receiver<(Vec<u8>, Option<RepoCacheFragment>)>,
+        db: std::sync::Arc<FragsDb>,
+        recv: crossbeam_channel::Receiver<(Vec<u8>, RepoCacheFragment, bool)>,
+        epoch: u128,
     ) -> Res<(u64, u64)> {
         #[allow(clippy::unwrap_in_result)]
-        let epoch = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .expect("time underflow")
-            .as_micros();
         let mut wtxn = self.env.write_txn()?;
-        let mut rtxn = self.env.read_txn()?;
         let mut new: u64 = 0;
         let mut cached: u64 = 0;
-        let db: FragsDb = self.env.create_database(&mut wtxn, Some(&self.repo))?;
-        while let Ok((key, frag)) = recv.recv() {
+        while let Ok((key, frag, is_new)) = recv.recv() {
             trace!(filename = %OsStr::from_bytes(&key).display(), "receive");
-            let mut frag = if let Some(frag) = frag {
-                new += 1;
-                frag
-            } else {
-                cached += 1;
-                db.get(&rtxn, &key)?.expect("frag key not found")
-            };
-            frag.epoch = epoch;
             db.put(&mut wtxn, &key, &frag)?;
-            if (new + cached).is_multiple_of(100) {
+            // PERF: we shouldn't do this until we encounter an error, only then should we retry
+            // committing is the main bottleneck in incremental mode
+            if (new + cached).is_multiple_of(5000) {
                 debug!("commit");
                 wtxn.commit()?;
                 wtxn = self.env.write_txn()?;
-                rtxn.commit()?;
-                rtxn = self.env.read_txn()?;
+            }
+            if is_new {
+                new += 1;
+            } else {
+                cached += 1;
             }
         } // until recv is closed
         wtxn.commit()?;
-        rtxn.commit()?;
-        info!("purging old fragments");
         wtxn = self.env.write_txn()?;
+        let db: FragsDb =
+            self.env.open_database(&wtxn, Some(&self.repo))?.expect("database must exist");
+        info!("purging old fragments");
         let mut it = db.iter_mut(&mut wtxn)?;
         while let Some(res) = it.next() {
             let (k, v) = res?;

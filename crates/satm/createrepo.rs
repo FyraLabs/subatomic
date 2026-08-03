@@ -106,17 +106,37 @@ fn process_rpms_auto(args: &CreaterepoArgs, incremental: bool) -> Result<()> {
     cache.zstd_level = args.zstd_level;
     let cache = Arc::new(cache);
     let cache2 = Arc::clone(&cache);
-    let joinhdl = std::thread::spawn(move || cache2.update_frags(&rx));
+
+    let mut txn = cache.env.write_txn()?;
+    let db: libsubatomic::repodata::FragsDb =
+        cache.env.create_database(&mut txn, Some(&cache.repo))?;
+    txn.commit()?;
+    let db = Arc::new(db);
+    let db2 = Arc::clone(&db);
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .expect("time underflow")
+        .as_micros();
+    let joinhdl = std::thread::spawn(move || {
+        cache2
+            .update_frags(db2, rx, epoch)
+            .inspect_err(|e| tracing::error!(?e, "update_frags failed"))
+    });
     jwalk::WalkDir::new(&args.input).into_iter().par_bridge().try_for_each(|fd| {
         let p = fd?.path();
         if !p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")) {
             return Ok::<_, color_eyre::Report>(());
         }
         let filename = p.file_name().expect("no filename");
-        let should_skip = incremental && cache.has(filename.as_bytes())?;
-        if should_skip {
-            tx.send((filename.as_bytes().to_owned(), None)).expect("channel should be open");
-            return Ok(());
+        if incremental {
+            let txn = cache.env.read_txn()?;
+            if let Some(mut frag) = db.get(&txn, filename.as_bytes())? {
+                txn.commit()?;
+                frag.epoch = epoch;
+                tx.send((filename.as_bytes().to_owned(), frag, false))?;
+                return Ok(());
+            }
+            txn.commit()?;
         }
         debug!(filename = %filename.display(), "parsing");
         match Package::open(&p) {
@@ -127,10 +147,10 @@ fn process_rpms_auto(args: &CreaterepoArgs, incremental: bool) -> Result<()> {
                 } else {
                     Vec::new()
                 };
-                let frag = RepoCacheFragment::new(&pkg, p.as_os_str(), appstream_frag);
+                let mut frag = RepoCacheFragment::new(&pkg, p.as_os_str(), appstream_frag);
+                frag.epoch = epoch;
                 trace!(filename = %filename.display(), "sending");
-                tx.send((filename.as_bytes().to_owned(), Some(frag)))
-                    .expect("channel should be open");
+                tx.send((filename.as_bytes().to_owned(), frag, true))?;
             }
             Err(e) => error!(path = %p.display(), error = %e, "skipping"),
         }
