@@ -7,6 +7,8 @@
 
 Requires Rust nightly.
 
+You should compile with `clang` to enable fat-LTO for `zstd`. See <https://lib.rs/crates/zstd-sys/features#feature-fat-lto>.
+
 ## 📃 License
 
     Copyright (C) 2026  Fyra Labs

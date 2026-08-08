@@ -13,11 +13,12 @@ use sha2::Digest;
 
 use crate::prelude::*;
 use std::os::linux::fs::MetadataExt;
-use tracing::{debug, error, info, trace, warn};
-
-pub type FragsDb = heed::Database<heed::types::Bytes, heed::types::SerdeBincode<RepoCacheFragment>>;
+use tracing::{debug, info, trace, warn};
 
 pub type CompsDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
+pub type FragDb = heed::Database<heed::types::Bytes, heed::types::Bytes>;
+pub type MarkDb =
+    heed::Database<heed::types::Bytes, heed::types::U128<heed::byteorder::NativeEndian>>;
 
 /// Cache for repository packages.
 ///
@@ -30,9 +31,16 @@ pub type CompsDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<re
 pub struct RepoCache {
     pub repo: String,
     pub cachedir: std::path::PathBuf,
+    pub repodata_dir: std::path::PathBuf,
     pub dir: std::path::PathBuf,
     pub env: heed::Env<heed::WithoutTls>,
     pub zstd_level: i32 = 0,
+    pub zstd_multi: u32 = 0,
+    pub db_pri: FragDb,
+    pub db_fil: FragDb,
+    pub db_oth: FragDb,
+    pub db_app: FragDb,
+    pub db_epo: MarkDb,
 }
 
 impl RepoCache {
@@ -78,51 +86,64 @@ impl RepoCache {
         let env = unsafe {
             heed::EnvOpenOptions::new()
                 .read_txn_without_tls()
-                .max_dbs(2)
+                .max_dbs(6)
                 .map_size(Self::DEFAULT_MAP_SIZE)
+                .flags(heed::EnvFlags::WRITE_MAP | heed::EnvFlags::NO_SYNC)
                 .open(path)?
         };
         trace!(repo, "cache opened");
-        Ok(Self { repo: repo.into(), env, cachedir, dir, .. })
+        let mut txn = env.write_txn()?;
+
+        let db_pri = env.create_database(&mut txn, Some("pri"))?;
+        let db_fil = env.create_database(&mut txn, Some("fil"))?;
+        let db_oth = env.create_database(&mut txn, Some("oth"))?;
+        let db_app = env.create_database(&mut txn, Some("app"))?;
+        let db_epo = env.create_database(&mut txn, Some("epo"))?;
+        txn.commit()?;
+        Ok(Self {
+            db_pri,
+            db_fil,
+            db_oth,
+            db_app,
+            db_epo,
+            repo: repo.into(),
+            env,
+            cachedir,
+            repodata_dir: dir.join("repodata"), // TODO: don't hardcode
+            dir,
+            ..
+        })
     }
 
-    fn write<T>(
-        &self,
-        f: impl FnOnce(&FragsDb, &mut heed::RwTxn<'_>) -> heed::Result<T>,
+    #[inline]
+    fn write<'a, T, K, B>(
+        &'a self,
+        db: &heed::Database<K, B>,
+        wtxn: &mut heed::RwTxn<'a>,
+        f: impl Fn(&heed::Database<K, B>, &mut heed::RwTxn<'_>) -> heed::Result<T>,
     ) -> heed::Result<T> {
-        trace!(repo = %self.repo, "starting write txn");
-        let mut txn = self.env.write_txn()?;
-        let db = self.env.create_database(&mut txn, Some(&self.repo))?;
-        match f(&db, &mut txn) {
-            Ok(v) => {
-                txn.commit()?;
-                trace!(repo = %self.repo, "write txn committed");
-                Ok(v)
+        match f(db, wtxn) {
+            Err(heed::Error::Mdb(heed::MdbError::MapFull)) => {
+                info!("committing due to MapFull");
+                replace_with::replace_with_or_abort(wtxn, |wtxn| {
+                    wtxn.commit().expect("cannot commit");
+                    self.env.write_txn().expect("cannot obtain wtxn")
+                });
+                f(db, wtxn)
             }
-            Err(e) => {
-                error!(repo = %self.repo, error = %e, "write txn failed, aborting");
-                txn.abort();
-                Err(e)
-            }
+            x => x,
         }
-    }
-
-    fn read<T>(&self, f: impl FnOnce(&FragsDb, &heed::RoTxn<'_>) -> T) -> Option<T> {
-        trace!(repo = %self.repo, "starting read txn");
-        let txn = self.env.read_txn().expect("cannot create ro txn");
-        let db = (self.env.open_database(&txn, Some(&self.repo)).expect("cannot open db"))?;
-        let res = f(&db, &txn);
-        trace!(repo = %self.repo, "read txn finished");
-        Some(res)
     }
 
     pub fn write_comps(&self, data: &repomd::Data) -> heed::Result<()> {
         let mut txn = self.env.write_txn()?;
+        // TODO: should we open this in new()?
         let db: CompsDb = self.env.create_database(&mut txn, Some("comps"))?;
         db.put(&mut txn, "compsdata", data)?;
         txn.commit()?;
         Ok(())
     }
+
     pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
         let txn = self.env.read_txn()?;
         self.env
@@ -138,109 +159,91 @@ impl RepoCache {
         Ok(existed)
     }
 
-    /// Insert packages into the cache.
-    ///
-    /// Fragments are generated in parallel via rayon, then written serially
-    /// to LMDB in a single write transaction.
-    ///
-    /// # Errors
-    /// This propagates errors from [`heed::Database::put`].
-    pub fn insert_pkgs<'b, I: IntoIterator<Item = (crate::pkg::Package, &'b OsStr, Vec<u8>)>>(
+    /// Insert a batch of already-serialised fragments directly into the split DBs.
+    /// No purging – intended for manual/add mode where we overwrite.
+    pub fn insert_fragments(
         &self,
-        pkgs: I,
+        fragments: impl IntoIterator<Item = (Vec<u8>, FragEph)>,
     ) -> heed::Result<()> {
-        let pkgs: Vec<_> = pkgs.into_iter().collect();
-        info!(count = pkgs.len(), "generating xml fragments in parallel");
-        let fragments: Vec<_> = pkgs
-            .into_par_iter()
-            .map(|(pkg, path, appstream_frag)| {
-                trace!(name = %pkg.name, "serializing package");
-                (path.as_bytes(), RepoCacheFragment::new(&pkg, path, appstream_frag))
-            })
-            .collect();
-        trace!(count = fragments.len(), "writing fragments to cache");
-        self.write(move |db, txn| {
-            fragments.into_iter().try_for_each(|(key, frag)| db.put(txn, key, &frag))
-        })
+        let mut wtxn = self.env.write_txn()?;
+        for (key, frag) in fragments {
+            self.db_pri.put(&mut wtxn, &key, frag.pri.0.as_deref().unwrap_or(b""))?;
+            self.db_fil.put(&mut wtxn, &key, frag.fil.0.as_deref().unwrap_or(b""))?;
+            self.db_oth.put(&mut wtxn, &key, frag.oth.0.as_deref().unwrap_or(b""))?;
+            if let Some(app) = &frag.app.0 {
+                self.db_app.put(&mut wtxn, &key, app)?;
+            }
+            // Mark as present (epoch doesn't matter for non‑incremental use)
+            self.db_epo.put(&mut wtxn, &key, &0u128)?;
+        }
+        wtxn.commit()?;
+        Ok(())
     }
 
-    /// Check whether a key already exists in the cache.
     pub fn has(&self, key: &[u8]) -> Res<bool> {
-        trace!(key, "checking cache key");
-        Ok(self.read(|db, txn| db.get(txn, key)).transpose()?.flatten().is_some())
+        let txn = self.env.read_txn()?;
+        Ok(self.db_epo.get(&txn, key)?.is_some())
     }
 
     /// Return the number of cached fragments.
     pub fn len(&self) -> heed::Result<u64> {
-        self.read(heed::Database::len).unwrap_or(Ok(0))
+        let txn = self.env.read_txn()?;
+        self.db_epo.len(&txn)
     }
 
     pub fn is_empty(&self) -> heed::Result<bool> {
         Ok(self.len()? == 0)
     }
 
-    /// Delete a list of packages (by key), returning a list of packages not found in the database.
+    /// Delete a list of packages (by key), returning the keys that were NOT found.
     ///
     /// # Errors
     /// An error is returned if deleting a package failed. Note that an invalid key (the package
     /// doesn't exist) would not result in an error.
-    pub fn delete_pkgs<'a>(&self, pkgs: &'a [&'a [u8]]) -> heed::Result<Vec<&'a &'a [u8]>> {
-        self.write(move |db, txn| {
-            pkgs.iter()
-                .map(|key| Ok((!db.delete(txn, key)?).then_some(key)))
-                .filter_map_ok(|f| f)
-                .try_collect()
-        })
-    }
-
-    pub fn get_fragment(&self, key: &[u8]) -> heed::Result<Option<RepoCacheFragment>> {
-        self.read(|db, txn| db.get(txn, key)).unwrap_or(Ok(None))
+    pub fn delete_pkgs<'a>(&self, pkgs: &[&'a [u8]]) -> heed::Result<Vec<&'a [u8]>> {
+        let mut not_found = Vec::new();
+        let mut wtxn = self.env.write_txn()?;
+        for &key in pkgs {
+            if self.db_epo.get(&wtxn, key)?.is_none() {
+                not_found.push(key);
+                continue;
+            }
+            self.db_epo.delete(&mut wtxn, key)?;
+            self.db_pri.delete(&mut wtxn, key)?;
+            self.db_fil.delete(&mut wtxn, key)?;
+            self.db_oth.delete(&mut wtxn, key)?;
+            self.db_app.delete(&mut wtxn, key)?;
+        }
+        wtxn.commit()?;
+        Ok(not_found)
     }
 
     /// Collect every key currently stored in the cache.
     pub fn keys(&self) -> heed::Result<Vec<Vec<u8>>> {
         debug!(repo = %self.repo, "listing cache keys");
-        self.read(|db, txn| {
-            let mut out = Vec::with_capacity(db.len(txn).unwrap_or(0).saturating_cast());
-            for item in db.iter(txn)? {
-                let (k, _) = item?;
-                out.push(k.to_owned());
-            }
-            trace!(count = out.len(), "collected cache keys");
-            Ok(out)
-        })
-        .unwrap_or_else(|| Ok(Vec::new()))
+        let txn = self.env.read_txn()?;
+        let mut out = Vec::new();
+        for res in self.db_epo.iter(&txn)? {
+            let (k, _) = res?;
+            out.push(k.to_owned());
+        }
+        Ok(out)
     }
 
-    /// Remove a single key from the cache.
-    ///
-    /// # Errors
-    /// This propagates errors from [`heed::Database::delete`].
-    pub fn remove(&self, key: &[u8]) -> heed::Result<bool> {
-        trace!(key, "removing cache key");
-        self.write(|db, txn| db.delete(txn, key))
-    }
-
-    /// Delete every key not present in `expected`.
-    ///
-    /// Returns the number of removed entries.
-    ///
-    /// # Errors
-    /// This propagates errors from LMDB write operations.
+    /// Delete every key not present in `expected`. Returns number of removed entries.
     pub fn prune(&self, expected: &std::collections::HashSet<&[u8]>) -> heed::Result<u64> {
-        let to_remove: Vec<_> =
-            self.keys()?.into_iter().filter(|k| !expected.contains(&**k)).collect();
-        debug!(stale = to_remove.len(), "pruning cache");
-        let mut count = 0u64;
-        for key in to_remove {
-            trace!(?key, "pruning stale key");
-            if self.write(|db, txn| db.delete(txn, &key))? {
-                count += 1;
-            }
+        let to_remove: Vec<Vec<u8>> =
+            self.keys()?.into_iter().filter(|k| !expected.contains(&k.as_slice())).collect();
+        let count = to_remove.len() as u64;
+        let mut wtxn = self.env.write_txn()?;
+        for k in &to_remove {
+            self.db_epo.delete(&mut wtxn, k)?;
+            self.db_pri.delete(&mut wtxn, k)?;
+            self.db_fil.delete(&mut wtxn, k)?;
+            self.db_oth.delete(&mut wtxn, k)?;
+            self.db_app.delete(&mut wtxn, k)?;
         }
-        if count > 0 {
-            info!(removed = count, "cache pruned");
-        }
+        wtxn.commit()?;
         Ok(count)
     }
 
@@ -338,6 +341,36 @@ impl RepoCache {
         }
     }
 
+    pub fn write_stage1(&self, path: &Path, dt: repomd::DataType) -> Res<repomd::Data> {
+        let fd = std::fs::File::create_buffered(path)?;
+        let csum = RepoWriterCsum::Sha256(sha2::Sha256::new());
+        let mut comp = zstd::Encoder::new(RepoWriterCompInner { fd, csum, .. }, self.zstd_level)?;
+        // enable multithread means we separate zstd from hashing, alleviating the bottleneck
+        #[allow(clippy::cast_possible_truncation)]
+        comp.multithread(self.zstd_multi)?;
+        let comp = RepoWriterComp::Zstd(comp);
+        let w = RepoWriter { comp, osum: RepoWriterCsum::Sha256(sha2::Sha256::new()), .. };
+        let mut disp = RepoWriteDispatcher { dt, w };
+        let txn = self.env.read_txn()?;
+        let db = match dt {
+            repomd::DataType::Primary => &self.db_pri,
+            repomd::DataType::Filelists => &self.db_fil,
+            repomd::DataType::Other => &self.db_oth,
+            repomd::DataType::Group => panic!("do not expect group in stage1"),
+            repomd::DataType::Appstream => &self.db_app,
+        };
+        let l = db.len(&txn)?;
+        trace!(count = l, "reading fragments from cache");
+        let frags = db.iter(&txn)?.map(|r| r.map(|(_, v)| v));
+        self.write_stage1_prexml(disp.dt, &mut disp.w, l)?;
+
+        for frag in frags {
+            disp.w.write_all(frag?)?;
+        }
+        self.write_stage1_postxml(disp.dt, &mut disp.w)?;
+        Ok(disp.w.into_data(disp.dt).map(|x| x.0)?)
+    }
+
     /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
     ///
     /// The caller should handling signing of the `repomd.xml` file.
@@ -347,58 +380,13 @@ impl RepoCache {
     /// Currently, the function panics if `datatypes` contains [`repomd::DataType::Group`].
     pub fn write_all(&self, datatypes: &[repomd::DataType]) -> Res<Vec<u8>> {
         info!(dir = %self.dir.display(), "writing repodata");
-        std::fs::create_dir_all(self.dir.join("repodata"))?;
-        let make_disps = |dt: repomd::DataType| {
-            let path = self.dir.join(format!("repodata/{dt}.xml.zst"));
-            std::io::Result::Ok(RepoWriteDispatcher {
-                dt,
-                w: RepoWriter {
-                    comp: RepoWriterComp::Zstd(zstd::Encoder::new(
-                        RepoWriterCompInner {
-                            fd: std::fs::File::create(path)?,
-                            csum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
-                            ..
-                        },
-                        self.zstd_level,
-                    )?),
-                    osum: RepoWriterCsum::Sha256(sha2::Sha256::new()),
-                    ..
-                },
-            })
-        };
-        let mut disps: Vec<RepoWriteDispatcher<'_>> =
-            datatypes.iter().map(|&dt| make_disps(dt)).try_collect()?;
-        // TODO: expand support for more compression & csum formats in [`RepoWriter`]
-        disps.par_iter_mut().try_for_each(|disp| {
-            self.read(|db, txn| {
-                let l = db.len(txn)?;
-                trace!(count = l, "reading fragments from cache");
-                let frags = db.iter(txn)?.map(|r| r.map(|(_, v)| v));
-                self.write_stage1_prexml(disp.dt, &mut disp.w, l)?;
-
-                for frag in frags {
-                    let frag = frag?;
-                    let bytes = match disp.dt {
-                        repomd::DataType::Primary => frag.primary.as_bytes(),
-                        repomd::DataType::Filelists => frag.filelists.as_bytes(),
-                        repomd::DataType::Other => frag.other.as_bytes(),
-                        repomd::DataType::Group => panic!("do not expect group frag"),
-                        repomd::DataType::Appstream => &frag.appstream,
-                    };
-                    disp.w.write_all(bytes)?;
-                }
-                self.write_stage1_postxml(disp.dt, &mut disp.w)?;
-                Res::Ok(())
-            })
-            .unwrap_or(Ok(()))
-        })?;
-        let mut data: Vec<_> =
-            disps.into_iter().map(|disp| disp.w.into_data(disp.dt).map(|x| x.0)).try_collect()?;
+        std::fs::create_dir_all(&self.repodata_dir)?;
+        let files = datatypes.iter().map(|dt| self.repodata_dir.join(dt.as_str())).collect_vec();
+        let data = datatypes.par_iter().copied().zip_eq(&files);
+        let data = data.map(|(dt, path)| self.write_stage1(path, dt));
+        let mut data = data.collect::<Res<Vec<_>>>()?;
         data.extend(self.read_comps()?);
-        // can safely rename since fds are dropped via into_data()
-        for (path, dat) in
-            datatypes.iter().map(|dt| self.dir.join(format!("repodata/{dt}.xml.zst"))).zip_eq(&data)
-        {
+        for (path, dat) in files.iter().zip(&data) {
             let newname = format!("repodata/{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
             std::fs::rename(path, self.dir.join(newname))?;
         }
@@ -407,6 +395,7 @@ impl RepoCache {
     }
 
     fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
+        debug!("writing repomd");
         let path = self.dir.join("repodata/repomd.xml");
         let mut fd_repomd = std::fs::OpenOptions::new()
             .read(true)
@@ -436,45 +425,60 @@ impl RepoCache {
     /// Mostly heed errors.
     pub fn update_frags(
         &self,
-        db: std::sync::Arc<FragsDb>,
-        recv: crossbeam_channel::Receiver<(Vec<u8>, RepoCacheFragment, bool)>,
-        epoch: u128,
+        // TODO: should we use Vec<u8> (filename) instead of PathBuf to reduce mem?
+        recv: &crossbeam_channel::Receiver<(PathBuf, Option<FragEph>)>,
     ) -> Res<(u64, u64)> {
-        #[allow(clippy::unwrap_in_result)]
+        let epoch = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .expect("time underflow")
+            .as_micros();
         let mut wtxn = self.env.write_txn()?;
         let mut new: u64 = 0;
         let mut cached: u64 = 0;
-        while let Ok((key, frag, is_new)) = recv.recv() {
-            trace!(filename = %OsStr::from_bytes(&key).display(), "receive");
-            db.put(&mut wtxn, &key, &frag)?;
-            // PERF: we shouldn't do this until we encounter an error, only then should we retry
-            // committing is the main bottleneck in incremental mode
-            if (new + cached).is_multiple_of(5000) {
-                debug!("commit");
-                wtxn.commit()?;
-                wtxn = self.env.write_txn()?;
-            }
-            if is_new {
+        while let Ok((p, frag)) = recv.recv() {
+            tracing::trace!(p=%p.display(), "received");
+            let key = p.file_name().expect("no filename").as_bytes();
+            self.write(&self.db_epo, &mut wtxn, |db, wtxn| db.put(wtxn, key, &epoch))?;
+            if let Some(frag) = frag {
+                self.write(&self.db_pri, &mut wtxn, |db, wtxn| {
+                    db.put(wtxn, key, frag.pri.0.as_deref().expect("pri"))
+                })?;
+                self.write(&self.db_fil, &mut wtxn, |db, wtxn| {
+                    db.put(wtxn, key, frag.fil.0.as_deref().expect("fil"))
+                })?;
+                self.write(&self.db_oth, &mut wtxn, |db, wtxn| {
+                    db.put(wtxn, key, frag.oth.0.as_deref().expect("oth"))
+                })?;
+                if let Some(app) = frag.app.0 {
+                    self.write(&self.db_app, &mut wtxn, |db, wtxn| db.put(wtxn, key, &app))?;
+                }
                 new += 1;
             } else {
                 cached += 1;
             }
+            tracing::trace!(p=%p.display(), "finished");
         } // until recv is closed
-        wtxn.commit()?;
-        wtxn = self.env.write_txn()?;
-        let db: FragsDb =
-            self.env.open_database(&wtxn, Some(&self.repo))?.expect("database must exist");
         info!("purging old fragments");
-        let mut it = db.iter_mut(&mut wtxn)?;
+        let mut it = self.db_epo.iter_mut(&mut wtxn)?;
+        // NOTE: unfortunately we cannot delete items in different dbs in parallel, but fortunately
+        // most of the time we don't delete packages.
+        let mut purged = Vec::new();
         while let Some(res) = it.next() {
             let (k, v) = res?;
-            if v.epoch != epoch {
+            if v != epoch {
                 debug!(old_key = %OsStr::from_bytes(k).display());
+                purged.push(k.to_owned());
                 // SAFETY: we do not keep any references to any values from this db
                 assert!(unsafe { it.del_current()? }, "cannot delete item");
             }
         }
         drop(it);
+        for db in [&self.db_pri, &self.db_fil, &self.db_oth, &self.db_app] {
+            for k in &purged {
+                db.delete(&mut wtxn, k)?;
+            }
+        }
+        wtxn.commit()?;
         Ok((new, cached))
     }
 }
@@ -524,6 +528,7 @@ impl RepoWriter<'_> {
             RepoWriterComp::Zstd(encoder) => encoder.finish()?,
         };
         let sha = inner.csum.csum();
+        let fd = inner.fd.into_inner().expect("cannot get bufreader inner");
         // TODO: don't hardcode href (esp when comp may be diff)
         Ok((
             repomd::Data {
@@ -533,17 +538,17 @@ impl RepoWriter<'_> {
                 r#type,
                 checksum: repomd::Checksum { sha, .. },
                 open_checksum: repomd::Checksum { sha: self.osum.csum(), .. },
-                timestamp: inner.fd.metadata()?.st_atime(),
+                timestamp: fd.metadata()?.st_atime(),
                 size: inner.size,
                 open_size: self.osize,
             },
-            inner.fd,
+            fd,
         ))
     }
 }
 
 pub struct RepoWriterCompInner {
-    pub fd: std::fs::File,
+    pub fd: std::io::BufWriter<std::fs::File>,
     pub csum: RepoWriterCsum,
     pub size: u64 = 0,
 }
@@ -605,6 +610,59 @@ impl RepoWriterCsum {
 struct RepoWriteDispatcher<'r> {
     dt: repomd::DataType,
     w: RepoWriter<'r>,
+}
+
+#[derive(Debug, Default)]
+pub struct Frag(pub Option<Vec<u8>>);
+impl std::fmt::Write for Frag {
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        let buf = if let Some(buf) = &mut self.0 {
+            buf
+        } else {
+            self.0 = Some(Vec::with_capacity(256));
+            self.0.as_mut().unwrap()
+        };
+        buf.extend(s.as_bytes());
+        Ok(())
+    }
+}
+
+/// Ephemeral fragment struct for sending xml fragments
+#[derive(Debug, Default)]
+pub struct FragEph {
+    pub pri: Frag,
+    pub fil: Frag,
+    pub oth: Frag,
+    pub app: Frag,
+}
+impl FragEph {
+    #[must_use]
+    pub fn new(pkg: &crate::pkg::Package, path: &OsStr) -> Self {
+        trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
+        let mut frag = Self::default();
+        frag.gen_pri(pkg, path.as_bytes());
+        frag.gen_fil(pkg);
+        frag.gen_oth(pkg);
+        trace!(name = %pkg.name, "cache fragment complete");
+        frag
+    }
+    fn gen_pri(&mut self, pkg: &crate::pkg::Package, path: &[u8]) {
+        trace!(name = %pkg.name, "serializing primary.xml");
+        quick_xml::se::to_writer(&mut self.pri, &primary::Package::from_pkg(pkg, path))
+            .expect("cannot serialize");
+    }
+
+    fn gen_fil(&mut self, pkg: &crate::pkg::Package) {
+        trace!(name = %pkg.name, "serializing filelists.xml");
+        quick_xml::se::to_writer(&mut self.fil, &filelists::FilelistsPackage::from_pkg(pkg))
+            .expect("cannot serialize");
+    }
+
+    fn gen_oth(&mut self, pkg: &crate::pkg::Package) {
+        trace!(name = %pkg.name, "serializing other.xml");
+        quick_xml::se::to_writer(&mut self.oth, &other::OtherPackage::from_pkg(pkg))
+            .expect("cannot serialize");
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

@@ -23,15 +23,21 @@ pub enum DataType {
     Group,
     Appstream,
 }
-impl std::fmt::Display for DataType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
+impl DataType {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::Primary => "primary",
             Self::Filelists => "filelists",
             Self::Other => "other",
             Self::Group => "comps",
             Self::Appstream => "appstream",
-        })
+        }
+    }
+}
+impl std::fmt::Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 

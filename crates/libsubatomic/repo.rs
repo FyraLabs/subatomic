@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::prelude::*;
+use crate::{
+    prelude::*,
+    repodata::{Frag, FragEph},
+};
 
 use sha2::Digest;
 
@@ -19,14 +22,11 @@ impl Repo {
     /// # Errors
     /// IO and [`heed`] errors are propagated.
     pub fn add_comps(&self, comps: &[u8]) -> Res<()> {
-        let fd = std::fs::File::create(self.cache.dir.join("repodata/comps.xml.zst"))?;
+        let fd = std::fs::File::create_buffered(self.cache.dir.join("repodata/comps.xml.zst"))?;
+        let csum = crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new());
         let mut rw = crate::repodata::RepoWriter {
             comp: crate::repodata::RepoWriterComp::Zstd(zstd::Encoder::new(
-                crate::repodata::RepoWriterCompInner {
-                    fd,
-                    csum: crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new()),
-                    ..
-                },
+                crate::repodata::RepoWriterCompInner { fd, csum, .. },
                 0,
             )?),
             osum: crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new()),
@@ -72,11 +72,7 @@ impl Repo {
         Ok(true)
     }
 
-    #[tracing::instrument]
-    fn add_one<'a>(
-        &self,
-        path: &&'a Path,
-    ) -> Result<(AddPkgOutput, (crate::pkg::Package, &'a OsStr, Vec<u8>)), rpm::Error> {
+    fn add_one(&self, path: &&Path) -> Result<(AddPkgOutput, (Vec<u8>, FragEph)), rpm::Error> {
         let mut ret = AddPkgOutput::default();
         let (pkg, mut rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
@@ -93,36 +89,23 @@ impl Repo {
             }
             ret.sig = Some(sig);
         }
-        let appstream_frag = if self.use_appstream {
-            crate::pkg::Package::appstream_frag(&mut rpmmeta)?
-        } else {
-            Vec::new()
-        };
-        let name = path.file_name().expect("rpm no filename");
-        Ok((ret, (pkg, name, appstream_frag)))
+        let mut frag = FragEph::new(&pkg, path.as_os_str());
+        if self.use_appstream {
+            frag.app = Frag(Some(crate::pkg::Package::appstream_frag(&mut rpmmeta)?));
+        }
+        let name = path.file_name().expect("rpm no filename").as_bytes().to_owned();
+        // We need the key (filename) and the fragment.
+        Ok((ret, (name, frag)))
     }
 
-    /// Upsert packages to the cache.
-    ///
-    /// `paths` should be a list of fs paths to the rpm packages in the correct directory. This
-    /// function will not move or modify any of the package files.
-    ///
-    /// The output [`AddPkgOutput`] may include signatures signed by [`Self::sig`].
-    /// These signatures are applied to the rpm files, in place if possible. See
-    /// [`rpm::Package::apply_signature_in_place`].
-    ///
-    /// # Panics
-    /// Invalid filename (path terminates in `/..`) will cause a panic. See [`Path::file_name`].
-    #[tracing::instrument]
     pub fn add(&self, paths: &[&Path]) -> Res<Vec<AddPkgOutput>> {
-        let pkgs = paths
+        // TODO: use update_frags()
+        let items: Vec<_> = paths
             .par_iter()
             .map(|rpm_path| self.add_one(rpm_path))
             .collect::<Result<Vec<_>, rpm::Error>>()?;
-        let (rets, pkgs): (Vec<_>, Vec<_>) = pkgs.into_iter().unzip();
-        self.cache.insert_pkgs(
-            pkgs.into_iter().map(|(pkg, name, appstream_frag)| (pkg, name, appstream_frag)),
-        )?;
+        let (rets, frags_with_keys): (Vec<_>, Vec<_>) = items.into_iter().unzip();
+        self.cache.insert_fragments(frags_with_keys)?;
         Ok(rets)
     }
 
@@ -138,6 +121,7 @@ impl Repo {
         &'a self,
         paths: &'b [&'c Path],
     ) -> Res<AddReplaceOutput<'b, 'c>> {
+        // TODO: use update_frags()
         let mut bad_filenames: Vec<&'b &'c Path> = Vec::new();
         let mut removed = Vec::new();
         let keys = self.cache.keys()?;
@@ -257,7 +241,7 @@ impl Repo {
     ///
     /// # Errors
     /// Propagate [`heed`] and IO errors.
-    pub fn del<'a>(&self, ids: &'a [&'a [u8]]) -> Res<Vec<&'a &'a [u8]>> {
+    pub fn del<'a>(&self, ids: &'a [&'a [u8]]) -> Res<Vec<&'a [u8]>> {
         let not_found = self.cache.delete_pkgs(ids)?;
         ids.iter()
             .filter(|f| !not_found.contains(f))

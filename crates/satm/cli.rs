@@ -39,6 +39,13 @@ pub struct CreaterepoArgs {
     /// rust zstd library (which should be 3).
     #[arg(long, default_value_t = 0)]
     pub zstd_level: i32,
+    /// Number of workers for `zstdmt` (multithreading). This speeds up the final repo metadata xml
+    /// generation at the cost of a sharp memory peak. The default value is the number of logical
+    /// cores. Setting this to 1 separates zstd and hashing into 2 different threads, while setting
+    /// this to 0 causes both to happen on the same thread. Setting this to a value larger than 0
+    /// may cause the peak memory usage to skyrocket by more than 10 times, so use this with caution.
+    #[arg(long, default_value_t = 0)]
+    pub zstd_multi: i64,
     /// Whether appstream support should be enabled.
     #[arg(long)]
     pub appstream: bool,

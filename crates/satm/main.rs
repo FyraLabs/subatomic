@@ -15,6 +15,7 @@ async fn main() -> color_eyre::Result<()> {
     tracing_subscriber::registry().with(fmt::layer()).with(EnvFilter::from_default_env()).init();
     color_eyre::install().expect("cannot install color_eyre");
 
+    tracing::debug!(ver = env!("CARGO_PKG_VERSION"), "satm");
     let cli = cli::Cli::parse();
     match cli.command {
         cli::Command::Createrepo(args) => createrepo::run(args),

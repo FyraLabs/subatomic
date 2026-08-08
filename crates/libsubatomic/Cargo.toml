@@ -14,10 +14,12 @@ heed = { version = "0.22.1", default-features = false, features = [
 ] }
 hex = "0.4.3"
 itertools = "0.15.0"
+num_cpus = "1.17.0"
 pgp = "0.20.0" # fixed by rpm
 quick-xml = { version = "0.41.0", features = ["serialize"] }
 rand = "0.8.7" # fixed by rpm
 rayon = "1.12.0"
+replace_with = "0.1.8"
 rpm = "0.26.0"
 serde = { version = "1.0.229", features = ["derive"] }
 sha2 = "0.11.0"
@@ -26,7 +28,7 @@ smartstring = { version = "1.0.1", features = ["serde"] }
 tempfile = "3.27.0"
 thiserror = "2.0.19"
 tracing = "0.1.44"
-zstd = "0.13.3"
+zstd = { version = "0.13.3", features = ["zstdmt", "fat-lto"] }
 
 [lints]
 workspace = true
