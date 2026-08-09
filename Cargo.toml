@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/libsubatomic", "crates/satm"]
+members = ["crates/libsubatomic", "crates/satm", "crates/kiritan"]
 
 # these are for performance optimizations, based on https://nnethercote.github.io/perf-book/build-configuration.html#optimization-level
 # these options can take a while to compile (up to 5-10 minutes), so its really only necessary for production binaries.
@@ -16,6 +16,7 @@ debug = true
 name = "subatomic"
 version = "1.0.0"
 edition = "2024"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["http2", "macros", "multipart"] }
@@ -56,6 +57,7 @@ complexity = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 suspicious = { level = "warn", priority = -1 }
+package = { level = "warn", priority = -1 }
 
 disallowed-macros = "deny"
 excessive-nesting = "warn"

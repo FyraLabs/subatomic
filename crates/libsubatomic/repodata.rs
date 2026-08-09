@@ -437,7 +437,7 @@ impl RepoCache {
         let mut cached: u64 = 0;
         while let Ok((p, frag)) = recv.recv() {
             tracing::trace!(p=%p.display(), "received");
-            let key = p.file_name().expect("no filename").as_bytes();
+            let key = p.as_os_str().as_encoded_bytes();
             self.write(&self.db_epo, &mut wtxn, |db, wtxn| db.put(wtxn, key, &epoch))?;
             if let Some(frag) = frag {
                 self.write(&self.db_pri, &mut wtxn, |db, wtxn| {

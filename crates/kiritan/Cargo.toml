@@ -1,0 +1,24 @@
+[package]
+name = "kiritan"
+version = "1.0.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Next-generation modern RPM repository metadata generator"
+
+[[bin]]
+name = "kiritan"
+path = "./main.rs"
+
+[dependencies]
+clap = { version = "4.6.4", features = ["derive", "env"] }
+color-eyre = "0.6.5"
+crossbeam-channel = { workspace = true }
+# WARN: deprecated
+jwalk = "0.9.0"
+libsubatomic = { path = "../libsubatomic" }
+num_cpus = "1.17.0"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true

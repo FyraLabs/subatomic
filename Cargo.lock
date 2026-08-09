@@ -2022,6 +2022,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kiritan"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "color-eyre",
+ "crossbeam-channel",
+ "jwalk",
+ "libsubatomic",
+ "num_cpus",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3193,11 +3207,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "color-eyre",
- "crossbeam-channel",
  "dotenvy",
- "jwalk",
- "libsubatomic",
- "num_cpus",
  "reqwest",
  "serde",
  "serde_json",

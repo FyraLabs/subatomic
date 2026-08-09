@@ -1,6 +1,5 @@
-
 #![allow(clippy::cast_possible_truncation)]
-use crate::cli::{CreaterepoArgs, CreaterepoMode};
+use crate::cli::{Cli, CreaterepoMode};
 use color_eyre::Result;
 use color_eyre::eyre::bail;
 use jwalk::rayon::iter::{ParallelBridge, ParallelIterator};
@@ -10,14 +9,14 @@ use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace};
 
-pub fn run(args: CreaterepoArgs) -> Result<()> {
+pub fn run(args: Cli) -> Result<()> {
     if !args.input.is_dir() {
         bail!("input is not a directory: {}", args.input.display());
     }
 
-    std::fs::create_dir_all(&args.output)?;
+    std::fs::create_dir_all(args.output())?;
 
-    if let CreaterepoMode::Auto { incremental: false } = args.mode
+    if let CreaterepoMode::Auto { no_cache: true } = args.mode
         && args.cache.exists()
     {
         debug!("removing stale cache");
@@ -26,14 +25,15 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
     std::fs::create_dir_all(&args.cache)?;
 
     let (add, remove, comps) = match args.mode {
-        CreaterepoMode::Auto { incremental } => {
-            process_rpms_auto(&args, incremental)?;
+        CreaterepoMode::Auto { no_cache } => {
+            process_rpms_auto(&args, !no_cache)?;
             return Ok(());
         }
         CreaterepoMode::Manual { add, remove, comps } => (add, remove, comps),
     };
+    let output = args.output.unwrap_or_else(|| args.input.join("repodata"));
 
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &output)?;
     cache.zstd_level = args.zstd_level;
     cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
     let cache = Arc::new(cache);
@@ -97,13 +97,13 @@ pub fn run(args: CreaterepoArgs) -> Result<()> {
         cache.compact_close()?;
     }
 
-    info!(dir = %args.output.display(), "repodata written");
+    info!(dir = %output.display(), "repodata written");
     Ok(())
 }
 
-fn process_rpms_auto(args: &CreaterepoArgs, incremental: bool) -> Result<()> {
+fn process_rpms_auto(args: &Cli, incremental: bool) -> Result<()> {
     let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &args.output)?;
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, args.output())?;
     cache.zstd_level = args.zstd_level;
     cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
     let cache = Arc::new(cache);

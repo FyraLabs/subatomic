@@ -6,7 +6,6 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod api_client;
 mod cli;
-mod createrepo;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -18,7 +17,6 @@ async fn main() -> color_eyre::Result<()> {
     tracing::debug!(ver = env!("CARGO_PKG_VERSION"), "satm");
     let cli = cli::Cli::parse();
     match cli.command {
-        cli::Command::Createrepo(args) => createrepo::run(args),
         cli::Command::Repo(cmd) => {
             let Some((url, token)) = (cmd.url.or_else(|| std::env::var("SUBATOMIC_API_URL").ok()))
                 .zip(cmd.token.or_else(|| std::env::var("SUBATOMIC_API_TOKEN").ok()))

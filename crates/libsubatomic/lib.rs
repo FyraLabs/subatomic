@@ -45,4 +45,7 @@ pub mod repo;
 pub mod repodata;
 pub mod sig;
 
+pub use err::Res;
+pub use pkg::Package;
 pub use repo::Repo;
+pub use repodata::RepoCache;

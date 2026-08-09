@@ -1,7 +1,20 @@
-# subatomic
+# subatomic & kiritan
 
 > [!WARNING]
 > This project is a work in progress.
+
+<img align="left" style="vertical-align: middle" height="120" src="docs/kiritan-ssr.png" alt="Kiritan saying super special rapid">
+
+`subatomic` is the modern package delivery system for RPMs.
+`v1` of subatomic (`satm1`) is written in Rust, and comes with an extremely fast repodata generator,
+around 10× faster and 30× more memory efficient than [`createrepo_c`] with cache.[^1]
+
+- Repodata generation is also available via a separate binary `kiritan`.
+- Interact with the API via the `satm` command.
+- `satm`, `kiritan`, and the backend `libsubatomic` are inside the `crates/` directory.
+
+> [!NOTE]
+> `v0` of subatomic (`satm0`) was written in Go. You may find the source code in the `v0` branch.
 
 ## 🏗️ Building
 
@@ -25,3 +38,8 @@ You should compile with `clang` to enable fat-LTO for `zstd`. See <https://lib.r
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+[^1]: See our blog for the benchmark: ...
+
+[`createrepo_c`]: https://github.com/rpm-software-management/createrepo_c/
