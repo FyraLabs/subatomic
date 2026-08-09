@@ -40,6 +40,6 @@ You should compile with `clang` to enable fat-LTO for `zstd`. See <https://lib.r
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-[^1]: See our blog for the benchmark: ...
+[^1]: See our blog for the benchmark: https://blog.fyralabs.com/kiritan-10x-faster-alternative-to-createrepo_c/
 
 [`createrepo_c`]: https://github.com/rpm-software-management/createrepo_c/

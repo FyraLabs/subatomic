@@ -36,4 +36,4 @@ You can view more information on our benchmarks on [this blog post].
 [^2]: `kiritan` uses a constant amount of memory, i.e. the memory complexity is O(1).
 
 
-[this blog post]: https://blog.fyralabs.com/p/06ec5fea-32de-416c-a7f5-0edbf79649da/?member_status=free
+[this blog post]: https://blog.fyralabs.com/kiritan-10x-faster-alternative-to-createrepo_c/
