@@ -32,7 +32,6 @@ pub struct RepoCache {
     pub repo: String,
     pub cachedir: std::path::PathBuf,
     pub repodata_dir: std::path::PathBuf,
-    pub dir: std::path::PathBuf,
     pub env: heed::Env<heed::WithoutTls>,
     pub zstd_level: i32 = 0,
     pub zstd_multi: u32 = 0,
@@ -61,11 +60,12 @@ impl RepoCache {
     ///
     /// # Errors
     /// An error is returned when `heed` fails to open the cache file.
-    pub fn new(repo: &str, cachedir: &Path, dir: &Path) -> heed::Result<Self> {
-        debug!(repo, cachedir = %cachedir.display(), dir = %dir.display(), "opening cache");
+    pub fn new(repo: &str, cachedir: &Path, repodata_dir: &Path) -> heed::Result<Self> {
+        debug!(repo, cachedir = %cachedir.display(), repodata_dir = %repodata_dir.display(), "opening cache");
         let path = cachedir.join(repo);
+        // PERF: might be better to take in owned values?
         let cachedir = cachedir.to_owned();
-        let dir = dir.to_owned();
+        let repodata_dir = repodata_dir.to_owned();
 
         // Remove any stale file sitting where LMDB wants a directory.
         if path.is_file() {
@@ -109,8 +109,7 @@ impl RepoCache {
             repo: repo.into(),
             env,
             cachedir,
-            repodata_dir: dir.join("repodata"), // TODO: don't hardcode
-            dir,
+            repodata_dir, // TODO: don't hardcode
             ..
         })
     }
@@ -257,12 +256,12 @@ impl RepoCache {
         let env_dir = self.env.path().to_path_buf();
         let repo = self.repo.clone();
         let cachedir = self.cachedir.clone();
-        let dir = self.dir.clone();
         let zstd = self.zstd_level;
+        let repodata_dir = self.repodata_dir.clone();
 
         self.compact_close()?;
 
-        let mut new = Self::new(&repo, &cachedir, &dir)?;
+        let mut new = Self::new(&repo, &cachedir, &repodata_dir)?;
         new.zstd_level = zstd;
         info!(dir = %env_dir.display(), "reopened cache");
         Ok(new)
@@ -379,7 +378,7 @@ impl RepoCache {
     ///
     /// Currently, the function panics if `datatypes` contains [`repomd::DataType::Group`].
     pub fn write_all(&self, datatypes: &[repomd::DataType]) -> Res<Vec<u8>> {
-        info!(dir = %self.dir.display(), "writing repodata");
+        info!(repodata_dir = %self.repodata_dir.display(), "writing repodata");
         std::fs::create_dir_all(&self.repodata_dir)?;
         let files = datatypes.iter().map(|dt| self.repodata_dir.join(dt.as_str())).collect_vec();
         let data = datatypes.par_iter().copied().zip_eq(&files);
@@ -387,8 +386,8 @@ impl RepoCache {
         let mut data = data.collect::<Res<Vec<_>>>()?;
         data.extend(self.read_comps()?);
         for (path, dat) in files.iter().zip(&data) {
-            let newname = format!("repodata/{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
-            std::fs::rename(path, self.dir.join(newname))?;
+            let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
+            std::fs::rename(path, self.repodata_dir.join(newname))?;
         }
 
         self.write_repomd(data)
@@ -396,7 +395,7 @@ impl RepoCache {
 
     fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
         debug!("writing repomd");
-        let path = self.dir.join("repodata/repomd.xml");
+        let path = self.repodata_dir.join("repomd.xml");
         let mut fd_repomd = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -436,7 +435,7 @@ impl RepoCache {
         let mut new: u64 = 0;
         let mut cached: u64 = 0;
         while let Ok((p, frag)) = recv.recv() {
-            tracing::trace!(p=%p.display(), "received");
+            tracing::debug!(p=%p.display(), "received");
             let key = p.as_os_str().as_encoded_bytes();
             self.write(&self.db_epo, &mut wtxn, |db, wtxn| db.put(wtxn, key, &epoch))?;
             if let Some(frag) = frag {

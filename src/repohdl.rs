@@ -88,7 +88,7 @@ impl RepoHdl {
         };
 
         let repodir = config.storage_dir.join(repo_name);
-        let cache = RepoCache::new(repo_name, &config.cache_dir, &repodir)
+        let cache = RepoCache::new(repo_name, &config.cache_dir, &repodir.join("repodata"))
             .map_err(libsubatomic::err::Error::from)?;
 
         let sig = if let Some(key_id) = repo.key_id {

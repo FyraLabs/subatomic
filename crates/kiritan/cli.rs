@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 /// Alternative to `createrepo_c`.
 pub struct Cli {
     /// Path to directory for a list of rpms, which will be searched recursively.
-    #[arg(short, long, default_value = ".")]
+    #[arg(default_value = ".")]
     pub input: PathBuf,
     /// Path to the `repodata/` directory, where xml metadata will be written to.
     #[arg(short, long)]

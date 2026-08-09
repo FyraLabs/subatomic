@@ -25,8 +25,8 @@ pub fn run(args: Cli) -> Result<()> {
     std::fs::create_dir_all(&args.cache)?;
 
     let (add, remove, comps) = match args.mode {
-        CreaterepoMode::Auto { no_cache } => {
-            process_rpms_auto(&args, !no_cache)?;
+        CreaterepoMode::Auto { .. } => {
+            process_rpms_auto(&args)?;
             return Ok(());
         }
         CreaterepoMode::Manual { add, remove, comps } => (add, remove, comps),
@@ -78,7 +78,8 @@ pub fn run(args: Cli) -> Result<()> {
 
     if let Some(comps_path) = comps {
         let comps_bytes = std::fs::read(comps_path)?;
-        let repo = libsubatomic::Repo { cache, sig: None, use_appstream: args.appstream };
+        let dir = args.input.clone();
+        let repo = libsubatomic::Repo { dir, cache, sig: None, use_appstream: args.appstream };
         // TODO: どっちに附則するかチグハグだね
         // maybe add this fn to repocache too?
         repo.add_comps(&comps_bytes)?;
@@ -101,7 +102,7 @@ pub fn run(args: Cli) -> Result<()> {
     Ok(())
 }
 
-fn process_rpms_auto(args: &Cli, incremental: bool) -> Result<()> {
+fn process_rpms_auto(args: &Cli) -> Result<()> {
     let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
     let mut cache = RepoCache::new(&args.repo_name, &args.cache, args.output())?;
     cache.zstd_level = args.zstd_level;
@@ -122,11 +123,11 @@ fn process_rpms_auto(args: &Cli, incremental: bool) -> Result<()> {
             if !p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")) {
                 return Ok::<_, color_eyre::Report>(());
             }
-            let filename = p.file_name().expect("no filename");
-            if incremental && cache.db_epo.get(txn, filename.as_bytes())?.is_some() {
+            if cache.db_epo.get(txn, p.as_os_str().as_encoded_bytes())?.is_some() {
                 tx.send((p, None))?;
                 return Ok(());
             }
+            let filename = p.file_name().expect("no filename");
             debug!(filename = %filename.display(), "parsing");
             match Package::open(&p) {
                 Ok((pkg, mut rpmreader)) => {

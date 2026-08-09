@@ -10,6 +10,7 @@ use sha2::Digest;
 
 #[derive(Clone, Debug)]
 pub struct Repo {
+    pub dir: PathBuf,
     pub cache: crate::repodata::RepoCache,
     pub sig: Option<crate::sig::Mgr>,
     pub use_appstream: bool = false,
@@ -23,7 +24,7 @@ impl Repo {
     /// # Errors
     /// IO and [`heed`] errors are propagated.
     pub fn add_comps(&self, comps: &[u8]) -> Res<()> {
-        let fd = std::fs::File::create_buffered(self.cache.dir.join("repodata/comps.xml.zst"))?;
+        let fd = std::fs::File::create_buffered(self.cache.repodata_dir.join("comps.xml.zst"))?;
         let csum = crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new());
         let mut rw = crate::repodata::RepoWriter {
             comp: crate::repodata::RepoWriterComp::Zstd(zstd::Encoder::new(
@@ -37,8 +38,8 @@ impl Repo {
         let (data, _) = rw.into_data(crate::repodata::repomd::DataType::Group)?;
         self.cache.write_comps(&data)?;
         std::fs::rename(
-            self.cache.dir.join("repodata/comps.xml.zst"),
-            self.cache.dir.join(format!("{}-comps.xml.zst", data.checksum.sha)),
+            self.cache.repodata_dir.join("comps.xml.zst"),
+            self.cache.repodata_dir.join(format!("{}-comps.xml.zst", data.checksum.sha)),
         )?;
         Ok(())
     }
@@ -60,7 +61,7 @@ impl Repo {
         if !self.cache.del_comps()? {
             return Ok(false);
         }
-        if let Some(f) = std::fs::read_dir(self.cache.dir.join("repodata"))?
+        if let Some(f) = std::fs::read_dir(&self.cache.repodata_dir)?
             .filter_ok(|f| {
                 f.file_name().as_bytes().windows(FILENAME_MATCH.len()).contains(FILENAME_MATCH)
             })
@@ -169,7 +170,7 @@ impl Repo {
     pub fn generate(&self) -> Res<Vec<u8>> {
         let repomd = self.cache.write_all(&self.datatypes())?; // for now use self.cache.dir as tempdir
         if let Some(sig) = &self.sig {
-            let mut asc_fd = std::fs::File::create(self.cache.dir.join("repomd.xml.asc"))?;
+            let mut asc_fd = std::fs::File::create(self.cache.repodata_dir.join("repomd.xml.asc"))?;
             sig.sign(&repomd)?
                 .to_armored_writer(&mut asc_fd, pgp::composed::ArmorOptions::default())?;
         }
@@ -188,7 +189,7 @@ impl Repo {
     /// # Panics
     /// The function panics if it encounters `..` as a file name.
     pub fn regenerate(&self, incremental: bool) -> Res<RegenerateOutput> {
-        let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&self.cache.dir)?
+        let rpm_paths: Vec<PathBuf> = std::fs::read_dir(&self.dir)?
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")))
             .collect();
@@ -229,8 +230,8 @@ impl Repo {
     /// # Errors
     /// Errors are propagated.
     pub fn compact_cache(self) -> Res<Self> {
-        let Self { cache, sig, use_appstream } = self;
-        Ok(Self { cache: cache.compact()?, sig, use_appstream })
+        let Self { dir, cache, sig, use_appstream } = self;
+        Ok(Self { dir, cache: cache.compact()?, sig, use_appstream })
     }
 
     /// Delete a list of packages by their filenames.
@@ -247,7 +248,7 @@ impl Repo {
         ids.iter()
             .filter(|f| !not_found.contains(f))
             .par_bridge()
-            .try_for_each(|&p| std::fs::remove_file(self.cache.dir.join(OsStr::from_bytes(p))))?;
+            .try_for_each(|&p| std::fs::remove_file(self.dir.join(OsStr::from_bytes(p))))?;
         Ok(not_found)
     }
 
