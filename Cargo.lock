@@ -3796,6 +3796,7 @@ name = "subatomic"
 version = "1.0.0"
 dependencies = [
  "axum",
+ "crossbeam-channel",
  "dotenvy",
  "envy",
  "futures-util",

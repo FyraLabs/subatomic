@@ -96,6 +96,69 @@ impl Package {
         Ok(appstream_frag)
     }
 
+    /// Parse a file
+    pub fn parse(
+        mut f: std::fs::File,
+        checksum: String,
+    ) -> Result<(Self, rpm::PackageReader), rpm::Error> {
+        let meta = f.metadata()?;
+        let btime = epoch!(meta.created()?);
+        let header_range = Self::get_header_byte_range(&mut f)?;
+        let rpm = rpm::PackageReader::parse(BufReader::new(f))?;
+        let m = &rpm.metadata;
+
+        Ok((
+            Self {
+                name: m.get_name()?.into(),
+                arch: m.get_arch()?.into(),
+                version: Version {
+                    epoch: m.get_epoch().unwrap_or(0).into(),
+                    ver: m.get_version()?.into(),
+                    rel: m.get_release()?.into(),
+                },
+                checksum,
+                summary: m.get_summary().unwrap_or_default().into(),
+                description: m.get_description().unwrap_or_default().into(),
+                packager: m.get_packager().ok().map(Into::into),
+                url: m.get_url().ok().map(Into::into),
+                time: Time { file: btime, build: m.get_build_time()? },
+                size: Size {
+                    package: meta.size(),
+                    installed: m.get_installed_size()?,
+                    archive: m
+                        .header
+                        .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                        .or_else(|_e| {
+                            m.header
+                                .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                                .map(u64::from)
+                        })
+                        .ok(),
+                },
+                format: Format {
+                    license: m.get_license().unwrap_or_default().into(),
+                    vendor: m.get_vendor().ok().map(Into::into),
+                    group: m.get_group().ok().map(Into::into),
+                    buildhost: m.get_build_host().ok().map(Into::into),
+                    sourcerpm: m.get_source_rpm().ok().map(Into::into),
+                    header_range,
+                    requires: Dependencies::from(m.get_requires()?),
+                    provides: Dependencies::from(m.get_provides()?),
+                    conflicts: Dependencies::from(m.get_conflicts()?),
+                    obsoletes: Dependencies::from(m.get_obsoletes()?),
+                    recommends: Dependencies::from(m.get_recommends()?),
+                    suggests: Dependencies::from(m.get_suggests()?),
+                    supplements: Dependencies::from(m.get_supplements()?),
+                    enhances: Dependencies::from(m.get_enhances()?),
+                    files: m.get_file_entries()?.into_iter().map(Into::into).collect(),
+                },
+                changelog: m.get_changelog_entries()?.into_iter().map(Into::into).collect(),
+                appstream_frag: Vec::new(),
+            },
+            rpm,
+        ))
+    }
+
     /// Open an `.rpm` package.
     ///
     /// # Errors

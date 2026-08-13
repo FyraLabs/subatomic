@@ -20,6 +20,7 @@ license = "AGPL-3.0-or-later"
 
 [dependencies]
 axum = { version = "0.8.9", features = ["http2", "macros", "multipart"] }
+crossbeam-channel = { workspace = true }
 dotenvy = { workspace = true }
 envy = "0.4.2"
 futures-util = "0.3.33"

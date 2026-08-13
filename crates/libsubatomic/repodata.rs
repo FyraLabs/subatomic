@@ -179,6 +179,27 @@ impl RepoCache {
         Ok(())
     }
 
+    /// Insert a batch of already-serialised fragments directly into the split DBs.
+    /// No purging – intended for manual/add mode where we overwrite.
+    pub fn insert_fragments2<'a>(
+        &self,
+        fragments: impl IntoIterator<Item = (&'a [u8], FragEph)>,
+    ) -> heed::Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        for (key, frag) in fragments {
+            self.db_pri.put(&mut wtxn, key, frag.pri.0.as_deref().unwrap_or(b""))?;
+            self.db_fil.put(&mut wtxn, key, frag.fil.0.as_deref().unwrap_or(b""))?;
+            self.db_oth.put(&mut wtxn, key, frag.oth.0.as_deref().unwrap_or(b""))?;
+            if let Some(app) = &frag.app.0 {
+                self.db_app.put(&mut wtxn, key, app)?;
+            }
+            // Mark as present (epoch doesn't matter for non‑incremental use)
+            self.db_epo.put(&mut wtxn, key, &0u128)?;
+        }
+        wtxn.commit()?;
+        Ok(())
+    }
+
     pub fn has(&self, key: &[u8]) -> Res<bool> {
         let txn = self.env.read_txn()?;
         Ok(self.db_epo.get(&txn, key)?.is_some())

@@ -1,3 +1,6 @@
+use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
+
 use crate::db::{Key, Repo};
 use crate::error::{ApiError, Result};
 use crate::{DbState, LockerState};
@@ -25,13 +28,25 @@ pub async fn upload_pkgs(
     State(locker): LockerState,
     Path(repo): Path<String>,
     mut multipart: Multipart,
-) -> Result<StatusCode> {
-    let Some(dir) = locker.read(&repo, async |repohdl| repohdl.repo.cache.dir.clone()).await?
+) -> Result<Json<serde_json::Value>> {
+    let Some((dir, keys, sig)) = locker
+        .read(&repo, async |hdl| {
+            (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
+        })
+        .await?
     else {
-        return Ok(StatusCode::NOT_FOUND);
+        return Err(ApiError::NotFound);
     };
+    let keys = keys.map_err(|e| ApiError::Internal(format!("can't get cache keys: {e}")))?;
     tokio::fs::create_dir_all(&dir).await?;
+    let parsed_keys = keys
+        .iter()
+        .map(|k| (k, libsubatomic::pkg::parse_filename(k).expect("can't parse cache keys")))
+        .collect_vec();
+    let mut bad_filenames = Vec::new();
+    let mut removed = Vec::new();
     let mut pkgs = Vec::new();
+    let mut out = Vec::new();
     while let Some(field) =
         multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
     {
@@ -40,30 +55,119 @@ pub async fn upload_pkgs(
         let path = dir.join(name);
         let mut body_reader =
             std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
-        try bikeshed std::io::Result<()> {
-            let mut file = tokio::io::BufWriter::new(tokio::fs::File::create(&path).await?);
-            tokio::io::copy(&mut body_reader, &mut file).await?;
+        let writer = try bikeshed std::io::Result<_> {
+            let fd = tokio::io::BufWriter::new(tokio::fs::File::create(&path).await?);
+            let mut writer = UploadWriter {
+                fd,
+                csum: libsubatomic::repodata::RepoWriterCsum::Sha256(Default::default()),
+            };
+            tokio::io::copy(&mut body_reader, &mut writer).await?;
+            writer
         }
         .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
 
-        pkgs.push(path);
+        let filename = path.file_name().expect("expected file").as_bytes();
+        let Some(libsubatomic::pkg::ParsePathOutput { name, arch, .. }) =
+            libsubatomic::pkg::parse_filename(filename)
+        else {
+            bad_filenames.push(path);
+            continue;
+        };
+        let prev_versions = (parsed_keys.iter())
+            .filter(|(_, k)| k.name == name && k.arch == arch)
+            .filter(|(k, _)| *k != filename);
+        removed.extend(prev_versions.map(|(k, _)| k.as_slice()));
+        let (pkg, mut rpmreader) = libsubatomic::Package::parse(
+            writer.fd.into_inner().into_std().await,
+            writer.csum.csum(),
+        )
+        .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
+        let sig = if let Some(sig) = &sig {
+            tracing::debug!("signing");
+            let sig = sig
+                .sign_rpm(&rpmreader.metadata)
+                .map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
+            if let Err(e) =
+                libsubatomic::prelude::rpm::Package::apply_signature_in_place(&path, sig.clone())
+            {
+                let libsubatomic::prelude::rpm::Error::InsufficientReservedSpace { .. } = e else {
+                    return Err(ApiError::Internal(format!("cannot sign pkg: {e}")));
+                };
+                tracing::debug!("cannot apply signature in place, opening full file");
+                let mut p = libsubatomic::prelude::rpm::Package::open(&path)
+                    .map_err(|e| ApiError::Internal(format!("cannot open rpm: {e}")))?;
+                p.apply_signature(sig.clone())
+                    .map_err(|e| ApiError::Internal(format!("cannot apply signature: {e}")))?;
+                p.write_file(&path)
+                    .map_err(|e| ApiError::Internal(format!("cannot write file with sig: {e}")))?;
+            }
+            Some(sig)
+        } else {
+            None
+        };
+        out.push(serde_json::json!({
+            "pkg": filename,
+            "sig": sig,
+        }));
+        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
+        let appstream = libsubatomic::pkg::Package::appstream_frag(&mut rpmreader)
+            .map_err(|e| ApiError::BadRequest(format!("cannot parse appstream in rpm: {e}")))?;
+        if !appstream.is_empty() {
+            frag.app = libsubatomic::repodata::Frag(Some(appstream));
+        }
+        pkgs.push((path.as_os_str().as_encoded_bytes().to_owned(), frag));
     }
-    let pkgs2 = pkgs.iter().map(std::path::PathBuf::as_path).collect_vec();
-    let pkgs2 = pkgs2.as_slice();
-    let Some(out) = locker
+    let Some(res) = locker
         .write(&repo, async |hdl| try bikeshed Res<_> {
-            let out = hdl.repo.add_replace(pkgs2)?;
+            hdl.repo.del(&removed)?;
+            hdl.repo.cache.insert_fragments(pkgs)?;
             hdl.repo.generate()?;
-            out
         })
         .await?
     else {
-        // something happened during last processing…!?
-        return Ok(StatusCode::NOT_FOUND);
+        return Err(ApiError::NotFound);
     };
-    out?;
-    // TODO: maybe return `out` as json?
-    Ok(StatusCode::NO_CONTENT)
+    res?;
+    Ok(Json(serde_json::json!({
+        "added": out,
+        "bad_filenames": bad_filenames,
+        "removed": removed,
+    })))
+}
+
+struct UploadWriter {
+    fd: tokio::io::BufWriter<tokio::fs::File>,
+    csum: libsubatomic::repodata::RepoWriterCsum,
+}
+
+impl tokio::io::AsyncWrite for UploadWriter {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let ret = tokio::io::AsyncWrite::poll_write(std::pin::pin!(&mut self.as_mut().fd), cx, buf);
+        if let std::task::Poll::Ready(res) = &ret {
+            res.as_ref()
+                .inspect(|&&len| _ = self.csum.write(&buf[..len]))
+                .expect("hashing should not panic");
+        }
+        ret
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncWrite::poll_flush(std::pin::pin!(&mut self.as_mut().fd), cx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        tokio::io::AsyncWrite::poll_shutdown(std::pin::pin!(&mut self.as_mut().fd), cx)
+    }
 }
 
 pub async fn delete_repo(

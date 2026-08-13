@@ -101,7 +101,7 @@ impl RepoHdl {
             None
         };
 
-        let repo = libsubatomic::Repo { cache, sig, use_appstream: true };
+        let repo = libsubatomic::Repo { cache, sig, use_appstream: true, dir: repodir };
 
         Ok(Some(Self { repo }))
     }
