@@ -11,7 +11,7 @@ pub struct repomd { // FIXME: how to make roottag lowercase properly
     pub data: Vec<Data>,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DataType {
     Primary,
@@ -22,16 +22,41 @@ pub enum DataType {
     // OtherZck,
     Group,
     Appstream,
+    /// (serialized [`Data::r#type`], filename)
+    Custom(String, String),
 }
+
+impl serde::Serialize for DataType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_type())
+    }
+}
+
 impl DataType {
     #[must_use]
-    pub const fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Primary => "primary",
             Self::Filelists => "filelists",
             Self::Other => "other",
             Self::Group => "comps",
             Self::Appstream => "appstream",
+            Self::Custom(_, s) => s,
+        }
+    }
+
+    #[must_use]
+    pub fn as_type(&self) -> &str {
+        match self {
+            Self::Primary => "primary",
+            Self::Filelists => "filelists",
+            Self::Other => "other",
+            Self::Group => "group",
+            Self::Appstream => "appstream",
+            Self::Custom(k, _) => k,
         }
     }
 }
@@ -55,7 +80,7 @@ pub enum CsumType {
     Sha256,
 }
 
-#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Data {
     #[serde(rename = "@type")]
