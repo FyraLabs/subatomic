@@ -6,8 +6,6 @@ use crate::{
     repodata::{Frag, FragEph},
 };
 
-use sha2::Digest;
-
 #[derive(Clone, Debug)]
 pub struct Repo {
     pub dir: PathBuf,
@@ -24,24 +22,10 @@ impl Repo {
     /// # Errors
     /// IO and [`heed`] errors are propagated.
     pub fn add_comps(&self, comps: &[u8]) -> Res<()> {
-        let fd = std::fs::File::create_buffered(self.cache.repodata_dir.join("comps.xml.zst"))?;
-        let csum = crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new());
-        let mut rw = crate::repodata::RepoWriter {
-            comp: crate::repodata::RepoWriterComp::Zstd(zstd::Encoder::new(
-                crate::repodata::RepoWriterCompInner { fd, csum, .. },
-                0,
-            )?),
-            osum: crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new()),
-            ..
-        };
-        rw.write_all(comps)?;
-        let (data, _) = rw.into_data(crate::repodata::repomd::DataType::Group)?;
-        self.cache.write_comps(&data)?;
-        std::fs::rename(
-            self.cache.repodata_dir.join("comps.xml.zst"),
-            self.cache.repodata_dir.join(format!("{}-comps.xml.zst", data.checksum.sha)),
-        )?;
-        Ok(())
+        self.cache.update_custom_datatype(
+            crate::repodata::repomd::DataType::Custom("group".into(), "comps".into()),
+            comps,
+        )
     }
 
     /// Delete comps file.

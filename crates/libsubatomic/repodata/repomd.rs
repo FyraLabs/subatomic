@@ -20,6 +20,7 @@ pub enum DataType {
     // PrimaryZck,
     // FilelistsZck,
     // OtherZck,
+    #[deprecated = "use Custom(\"group\", \"comps\")"]
     Group,
     Appstream,
     /// (serialized [`Data::r#type`], filename)

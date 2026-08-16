@@ -159,6 +159,30 @@ impl RepoCache {
         self.write_custom_datatype(data)
     }
 
+    pub fn update_custom_datatype(&self, dt: repomd::DataType, buf: &[u8]) -> Res<()> {
+        let temppath = self.repodata_dir.join(format!("{}.xml.zst", dt.as_str()));
+        let fd = std::fs::File::create_buffered(&temppath)?;
+        let csum = crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new());
+        let mut rw = crate::repodata::RepoWriter {
+            comp: crate::repodata::RepoWriterComp::Zstd(zstd::Encoder::new(
+                crate::repodata::RepoWriterCompInner { fd, csum, .. },
+                0,
+            )?),
+            osum: crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new()),
+            ..
+        };
+        rw.write_all(buf)?;
+        let (data, _) = rw.into_data(dt)?;
+        self.write_custom_datatype(&data)?;
+        let path = self.repodata_dir.join(format!(
+            "{}-{}.xml.zst",
+            data.checksum.sha,
+            data.r#type.as_str()
+        ));
+        std::fs::rename(&temppath, &path)?;
+        Ok(())
+    }
+
     #[deprecated = "use read_custom_datatype instead"]
     pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
         self.read_custom_datatype("group")

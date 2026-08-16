@@ -16,6 +16,10 @@ pub fn run(args: Cli) -> Result<()> {
 
     std::fs::create_dir_all(args.output())?;
 
+    let mut cache = RepoCache::new(&args.repo_name, &args.cache, args.output())?;
+    cache.zstd_level = args.zstd_level;
+    cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
+
     if let CreaterepoMode::Auto { no_cache: true } = args.mode
         && args.cache.exists()
     {
@@ -30,12 +34,26 @@ pub fn run(args: Cli) -> Result<()> {
             return Ok(());
         }
         CreaterepoMode::Manual { add, remove, comps } => (add, remove, comps),
+        CreaterepoMode::Md { delete, key, file } => {
+            if delete {
+                cache.del_custom_datatype(&key)?;
+                return Ok(());
+            }
+            let f = file.expect("filename should be provided unless with --delete");
+            let filename = f.file_name().expect("bad filename");
+            let (id, _) = filename
+                .as_encoded_bytes()
+                .split_once(|&b| b == b'-')
+                .expect("the filename format should be <id>-*.xml");
+            cache.update_custom_datatype(
+                DataType::Custom(key.into(), core::str::from_utf8(id)?.into()),
+                &std::fs::read(&f)?,
+            )?;
+            return Ok(());
+        }
     };
     let output = args.output.unwrap_or_else(|| args.input.join("repodata"));
 
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, &output)?;
-    cache.zstd_level = args.zstd_level;
-    cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
     let cache = Arc::new(cache);
     let cache2 = Arc::clone(&cache);
 

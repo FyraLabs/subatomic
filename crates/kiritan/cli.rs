@@ -66,4 +66,14 @@ pub enum CreaterepoMode {
         #[arg(long)]
         comps: Option<PathBuf>,
     },
+    /// In md mode, you can add and remove custom datatypes (metadata).
+    Md {
+        /// Whether to remove the metadata.
+        #[arg(long, short)]
+        delete: bool,
+        /// Key / Tag in `repomd.xml`.
+        key: String,
+        /// Path to xml file to add.
+        file: Option<PathBuf>,
+    },
 }
