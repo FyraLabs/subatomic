@@ -20,10 +20,10 @@ pub enum DataType {
     // PrimaryZck,
     // FilelistsZck,
     // OtherZck,
-    #[deprecated = "use Custom(\"group\", \"comps\")"]
+    #[deprecated = "use Custom(\"group\", \"comps.xml\")"]
     Group,
     Appstream,
-    /// (serialized [`Data::r#type`], filename)
+    /// (serialized [`Data::r#type`], uncompressed filename)
     Custom(String, String),
 }
 

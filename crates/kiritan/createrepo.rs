@@ -41,12 +41,8 @@ pub fn run(args: Cli) -> Result<()> {
             }
             let f = file.expect("filename should be provided unless with --delete");
             let filename = f.file_name().expect("bad filename");
-            let (id, _) = filename
-                .as_encoded_bytes()
-                .split_once(|&b| b == b'-')
-                .expect("the filename format should be <id>-*.xml");
             cache.update_custom_datatype(
-                DataType::Custom(key.into(), core::str::from_utf8(id)?.into()),
+                DataType::Custom(key.into(), filename.to_string_lossy().into()),
                 &std::fs::read(&f)?,
             )?;
             return Ok(());

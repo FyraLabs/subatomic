@@ -23,7 +23,7 @@ impl Repo {
     /// IO and [`heed`] errors are propagated.
     pub fn add_comps(&self, comps: &[u8]) -> Res<()> {
         self.cache.update_custom_datatype(
-            crate::repodata::repomd::DataType::Custom("group".into(), "comps".into()),
+            crate::repodata::repomd::DataType::Custom("group".into(), "comps.xml".into()),
             comps,
         )
     }
