@@ -21,6 +21,7 @@ impl Repo {
     ///
     /// # Errors
     /// IO and [`heed`] errors are propagated.
+    #[deprecated = "use self.cache.update_custom_datatype()"]
     pub fn add_comps(&self, comps: &[u8]) -> Res<()> {
         self.cache.update_custom_datatype(
             crate::repodata::repomd::DataType::Custom("group".into(), "comps.xml".into()),
@@ -40,9 +41,10 @@ impl Repo {
     /// # Errors
     /// Returns [`heed`] errors and IO errors if the file was found but could not be deleted.
     /// However, `Ok(true)` is returned if comps was in cache but the file does not exist.
+    #[deprecated = "use self.cache.del_custom_datatype()"]
     pub fn del_comps(&self) -> Res<bool> {
         const FILENAME_MATCH: &[u8] = b"-comps.xml";
-        if !self.cache.del_comps()? {
+        if self.cache.del_comps()?.is_none() {
             return Ok(false);
         }
         if let Some(f) = std::fs::read_dir(&self.cache.repodata_dir)?

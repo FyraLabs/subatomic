@@ -137,21 +137,34 @@ impl RepoCache {
         }
     }
 
+    #[inline]
     pub fn write_custom_datatype(&self, data: &repomd::Data) -> heed::Result<()> {
         let mut txn = self.env.write_txn()?;
         self.db_cus.put(&mut txn, data.r#type.as_type(), data)?;
         txn.commit()?;
         Ok(())
     }
+    #[inline]
     pub fn read_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
         let txn = self.env.read_txn()?;
         self.db_cus.get(&txn, dt)
     }
-    pub fn del_custom_datatype(&self, dt: &str) -> heed::Result<bool> {
+
+    #[tracing::instrument]
+    pub fn del_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
         let mut txn = self.env.write_txn()?;
-        let existed = self.db_cus.delete(&mut txn, dt)?;
+        let Some(data) = self.db_cus.get(&txn, dt)? else { return Ok(None) };
+        let path = self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
+        if let Err(e) = std::fs::remove_file(&path) {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                warn!("cannot remove from fs: {e}");
+            } else {
+                return Err(e.into());
+            }
+        }
+        self.db_cus.delete(&mut txn, dt)?;
         txn.commit()?;
-        Ok(existed)
+        Ok(Some(data))
     }
 
     #[deprecated = "use write_custom_datatype instead"]
@@ -159,72 +172,60 @@ impl RepoCache {
         self.write_custom_datatype(data)
     }
 
+    /// Add or modify a [`repomd::DataType::Custom`]. Write `buf` to the filesystem, and save the
+    /// `repomd` fragment into the cache.
+    ///
+    /// Filename and [`repomd::Data::r#type`] are determined by `dt`.
+    ///
+    /// To only save the `repomd` fragment, use [`Self::write_custom_datatype`].
     pub fn update_custom_datatype(&self, dt: repomd::DataType, buf: &[u8]) -> Res<()> {
         let temppath = self.repodata_dir.join(format!("{}.zst", dt.as_str()));
-        let fd = std::fs::File::create_buffered(&temppath)?;
-        let csum = crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new());
-        let mut rw = crate::repodata::RepoWriter {
-            comp: crate::repodata::RepoWriterComp::Zstd(zstd::Encoder::new(
-                crate::repodata::RepoWriterCompInner { fd, csum, .. },
-                0,
-            )?),
-            osum: crate::repodata::RepoWriterCsum::Sha256(sha2::Sha256::new()),
-            ..
-        };
-        rw.write_all(buf)?;
-        let (data, _) = rw.into_data(dt)?;
+        let mut w = self.writer(std::fs::File::create_buffered(&temppath)?)?;
+        w.write_all(buf)?;
+        let (data, _) = w.into_data(dt)?;
         self.write_custom_datatype(&data)?;
-        let path =
-            self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type.as_str()));
+        let path = self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
         std::fs::rename(&temppath, &path)?;
         Ok(())
+    }
+
+    pub fn writer(&self, fd: std::io::BufWriter<std::fs::File>) -> std::io::Result<RepoWriter<'_>> {
+        // TODO: custom csum/compression fmts
+        let csum = RepoWriterCsum::Sha256(sha2::Sha256::new());
+        let mut comp = zstd::Encoder::new(RepoWriterCompInner { fd, csum, .. }, self.zstd_level)?;
+        // enable multithread means we separate zstd from hashing, alleviating the bottleneck
+        #[allow(clippy::cast_possible_truncation)]
+        comp.multithread(self.zstd_multi)?;
+        let comp = RepoWriterComp::Zstd(comp);
+        let osum = RepoWriterCsum::Sha256(sha2::Sha256::new());
+        Ok(crate::repodata::RepoWriter { comp, osum, .. })
     }
 
     #[deprecated = "use read_custom_datatype instead"]
     pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
         self.read_custom_datatype("group")
     }
-    pub fn del_comps(&self) -> heed::Result<bool> {
+    #[deprecated = "use del_custom_datatype instead"]
+    pub fn del_comps(&self) -> heed::Result<Option<repomd::Data>> {
         self.del_custom_datatype("group")
     }
 
     /// Insert a batch of already-serialised fragments directly into the split DBs.
     /// No purging – intended for manual/add mode where we overwrite.
-    pub fn insert_fragments(
+    pub fn insert_fragments<I: IntoIterator<Item = (B, FragEph)>, B: AsRef<[u8]>>(
         &self,
-        fragments: impl IntoIterator<Item = (Vec<u8>, FragEph)>,
+        fragments: I,
     ) -> heed::Result<()> {
         let mut wtxn = self.env.write_txn()?;
         for (key, frag) in fragments {
-            self.db_pri.put(&mut wtxn, &key, frag.pri.0.as_deref().unwrap_or(b""))?;
-            self.db_fil.put(&mut wtxn, &key, frag.fil.0.as_deref().unwrap_or(b""))?;
-            self.db_oth.put(&mut wtxn, &key, frag.oth.0.as_deref().unwrap_or(b""))?;
+            self.db_pri.put(&mut wtxn, key.as_ref(), frag.pri.0.as_deref().unwrap_or(b""))?;
+            self.db_fil.put(&mut wtxn, key.as_ref(), frag.fil.0.as_deref().unwrap_or(b""))?;
+            self.db_oth.put(&mut wtxn, key.as_ref(), frag.oth.0.as_deref().unwrap_or(b""))?;
             if let Some(app) = &frag.app.0 {
-                self.db_app.put(&mut wtxn, &key, app)?;
+                self.db_app.put(&mut wtxn, key.as_ref(), app)?;
             }
             // Mark as present (epoch doesn't matter for non‑incremental use)
-            self.db_epo.put(&mut wtxn, &key, &0u128)?;
-        }
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    /// Insert a batch of already-serialised fragments directly into the split DBs.
-    /// No purging – intended for manual/add mode where we overwrite.
-    pub fn insert_fragments2<'a>(
-        &self,
-        fragments: impl IntoIterator<Item = (&'a [u8], FragEph)>,
-    ) -> heed::Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        for (key, frag) in fragments {
-            self.db_pri.put(&mut wtxn, key, frag.pri.0.as_deref().unwrap_or(b""))?;
-            self.db_fil.put(&mut wtxn, key, frag.fil.0.as_deref().unwrap_or(b""))?;
-            self.db_oth.put(&mut wtxn, key, frag.oth.0.as_deref().unwrap_or(b""))?;
-            if let Some(app) = &frag.app.0 {
-                self.db_app.put(&mut wtxn, key, app)?;
-            }
-            // Mark as present (epoch doesn't matter for non‑incremental use)
-            self.db_epo.put(&mut wtxn, key, &0u128)?;
+            self.db_epo.put(&mut wtxn, key.as_ref(), &0u128)?;
         }
         wtxn.commit()?;
         Ok(())
@@ -398,14 +399,7 @@ impl RepoCache {
     }
 
     pub fn write_stage1(&self, path: &Path, dt: repomd::DataType) -> Res<repomd::Data> {
-        let fd = std::fs::File::create_buffered(path)?;
-        let csum = RepoWriterCsum::Sha256(sha2::Sha256::new());
-        let mut comp = zstd::Encoder::new(RepoWriterCompInner { fd, csum, .. }, self.zstd_level)?;
-        // enable multithread means we separate zstd from hashing, alleviating the bottleneck
-        #[allow(clippy::cast_possible_truncation)]
-        comp.multithread(self.zstd_multi)?;
-        let comp = RepoWriterComp::Zstd(comp);
-        let w = RepoWriter { comp, osum: RepoWriterCsum::Sha256(sha2::Sha256::new()), .. };
+        let w = self.writer(std::fs::File::create_buffered(path)?)?;
         let dt1 = dt.clone();
         let mut disp = RepoWriteDispatcher { dt, w };
         let txn = self.env.read_txn()?;

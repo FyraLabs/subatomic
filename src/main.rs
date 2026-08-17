@@ -98,6 +98,8 @@ async fn inner_main() {
         .route("/v1/repos/{name}/rpms", post(api::repos::del_rpms))
         .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
         .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
+        .route("/v1/repos/{name}/md/{md}", put(api::repos::upl_md))
+        .route("/v1/repos/{name}/md/{md}", delete(api::repos::del_md))
         .route("/v1/keys", post(api::keys::create_key))
         .route("/v1/keys", get(api::keys::list_keys))
         .route("/v1/keys/{id}", get(api::keys::get_key))

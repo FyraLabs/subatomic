@@ -49,3 +49,4 @@ pub use err::Res;
 pub use pkg::Package;
 pub use repo::Repo;
 pub use repodata::RepoCache;
+pub use repodata::repomd::DataType;

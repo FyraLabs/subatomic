@@ -351,3 +351,46 @@ pub async fn del_rpms(
     };
     Ok(Json(serde_json::json!({ "not_found": not_found })))
 }
+
+pub async fn upl_md(
+    State(locker): LockerState,
+    Path((repo, md)): Path<(String, String)>,
+    mut multipart: Multipart,
+) -> Result<StatusCode> {
+    let field = (multipart.next_field().await.expect("multipart err"))
+        .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
+    let filename =
+        field.file_name().ok_or_else(|| ApiError::BadRequest("expected filename".into()))?.into();
+    let content = (field.bytes().await)
+        .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
+
+    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
+        hdl.repo.cache.update_custom_datatype(
+            libsubatomic::DataType::Custom(md.into(), filename),
+            &content,
+        )?;
+        // TODO: only generate repomd
+        hdl.repo.generate()?;
+    });
+    if w.await?.transpose()?.is_some() {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
+    }
+}
+
+pub async fn del_md(
+    State(locker): LockerState,
+    Path((repo, md)): Path<(String, String)>,
+) -> Result<StatusCode> {
+    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
+        hdl.repo.cache.del_custom_datatype(&md)?;
+        // TODO: only generate repomd
+        hdl.repo.generate()?;
+    });
+    if w.await?.transpose()?.is_some() {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
+    }
+}
