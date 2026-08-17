@@ -6,7 +6,7 @@ use crate::{
     repodata::{Frag, FragEph},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Repo {
     pub dir: PathBuf,
     pub cache: crate::repodata::RepoCache,
@@ -61,6 +61,13 @@ impl Repo {
     }
 
     fn add_one(&self, path: &&Path) -> Result<(AddPkgOutput, (Vec<u8>, FragEph)), rpm::Error> {
+        let path_relative = path.strip_prefix(&self.dir).map_err(|e| {
+            rpm::Error::Io(std::io::Error::other(format!(
+                "{} should be in {}; cannot strip_prefix: {e}",
+                path.display(),
+                self.dir.display()
+            )))
+        })?;
         let mut ret = AddPkgOutput::default();
         let (pkg, mut rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
@@ -81,9 +88,8 @@ impl Repo {
         if self.use_appstream {
             frag.app = Frag(Some(crate::pkg::Package::appstream_frag(&mut rpmmeta)?));
         }
-        let name = path.file_name().expect("rpm no filename").as_bytes().to_owned();
         // We need the key (filename) and the fragment.
-        Ok((ret, (name, frag)))
+        Ok((ret, (path_relative.as_os_str().as_encoded_bytes().to_owned(), frag)))
     }
 
     pub fn add(&self, paths: &[&Path]) -> Res<Vec<AddPkgOutput>> {

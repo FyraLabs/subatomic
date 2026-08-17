@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc)]
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 
@@ -57,10 +58,8 @@ pub async fn upload_pkgs(
             std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
         let writer = try bikeshed std::io::Result<_> {
             let fd = tokio::io::BufWriter::new(tokio::fs::File::create(&path).await?);
-            let mut writer = UploadWriter {
-                fd,
-                csum: libsubatomic::repodata::RepoWriterCsum::Sha256(Default::default()),
-            };
+            let csum = libsubatomic::repodata::RepoWriterCsum::Sha256(Default::default());
+            let mut writer = UploadWriter { fd, csum };
             tokio::io::copy(&mut body_reader, &mut writer).await?;
             writer
         }
@@ -82,29 +81,7 @@ pub async fn upload_pkgs(
             writer.csum.csum(),
         )
         .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
-        let sig = if let Some(sig) = &sig {
-            tracing::debug!("signing");
-            let sig = sig
-                .sign_rpm(&rpmreader.metadata)
-                .map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
-            if let Err(e) =
-                libsubatomic::prelude::rpm::Package::apply_signature_in_place(&path, sig.clone())
-            {
-                let libsubatomic::prelude::rpm::Error::InsufficientReservedSpace { .. } = e else {
-                    return Err(ApiError::Internal(format!("cannot sign pkg: {e}")));
-                };
-                tracing::debug!("cannot apply signature in place, opening full file");
-                let mut p = libsubatomic::prelude::rpm::Package::open(&path)
-                    .map_err(|e| ApiError::Internal(format!("cannot open rpm: {e}")))?;
-                p.apply_signature(sig.clone())
-                    .map_err(|e| ApiError::Internal(format!("cannot apply signature: {e}")))?;
-                p.write_file(&path)
-                    .map_err(|e| ApiError::Internal(format!("cannot write file with sig: {e}")))?;
-            }
-            Some(sig)
-        } else {
-            None
-        };
+        let sig = sign(sig.as_ref(), &path, &rpmreader)?;
         out.push(serde_json::json!({
             "pkg": filename,
             "sig": sig,
@@ -133,6 +110,34 @@ pub async fn upload_pkgs(
         "bad_filenames": bad_filenames,
         "removed": removed,
     })))
+}
+
+fn sign(
+    sig: Option<&libsubatomic::sig::Mgr>,
+    path: &std::path::PathBuf,
+    rpmreader: &libsubatomic::prelude::rpm::PackageReader,
+) -> Result<Option<Vec<u8>>, ApiError> {
+    let Some(sig) = sig else { return Ok(None) };
+    tracing::debug!("signing");
+    let sig = sig
+        .sign_rpm(&rpmreader.metadata)
+        .map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
+    let Err(e) = libsubatomic::prelude::rpm::Package::apply_signature_in_place(path, sig.clone())
+    else {
+        return Ok(Some(sig));
+    };
+
+    let libsubatomic::prelude::rpm::Error::InsufficientReservedSpace { .. } = e else {
+        return Err(ApiError::Internal(format!("cannot sign pkg: {e}")));
+    };
+    tracing::debug!("cannot apply signature in place, opening full file");
+    let mut p = libsubatomic::prelude::rpm::Package::open(path)
+        .map_err(|e| ApiError::Internal(format!("cannot open rpm: {e}")))?;
+    p.apply_signature(sig.clone())
+        .map_err(|e| ApiError::Internal(format!("cannot apply signature: {e}")))?;
+    p.write_file(path)
+        .map_err(|e| ApiError::Internal(format!("cannot write file with sig: {e}")))?;
+    Ok(Some(sig))
 }
 
 struct UploadWriter {
@@ -204,16 +209,12 @@ pub async fn push_comps(
 }
 
 pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
-    if locker
-        .write(&repo, async |hdl| try bikeshed Res<()> {
-            hdl.repo.del_comps()?;
-            // TODO: only generate repomd
-            hdl.repo.generate()?;
-        })
-        .await?
-        .transpose()?
-        .is_some()
-    {
+    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
+        hdl.repo.del_comps()?;
+        // TODO: only generate repomd
+        hdl.repo.generate()?;
+    });
+    if w.await?.transpose()?.is_some() {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Ok(StatusCode::NOT_FOUND)
@@ -248,22 +249,16 @@ pub async fn set_key(
     };
     let mgr = libsubatomic::sig::Mgr::parse(&key.pri).map_err(libsubatomic::err::Error::from)?;
 
-    let Some(true) = locker
-        .write(&repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
-            let q = sqlx::query!("UPDATE repos SET key_id = $1 WHERE name = $2", key.id, &repo);
-            let ra = q.execute(&*db).await?.rows_affected();
-            if ra == 0 {
-                return Ok(false);
-            }
-            hdl.repo.sig = Some(mgr);
-            true
-        })
-        .await?
-        .transpose()?
-    else {
-        return Ok(StatusCode::NOT_FOUND);
-    };
-    Ok(StatusCode::NO_CONTENT)
+    let w = locker.write(&repo, async |mut hdl| try bikeshed sqlx::Result<StatusCode> {
+        let q = sqlx::query!("UPDATE repos SET key_id = $1 WHERE name = $2", key.id, &repo);
+        let ra = q.execute(&*db).await?.rows_affected();
+        if ra == 0 {
+            return Ok(StatusCode::NOT_FOUND);
+        }
+        hdl.repo.sig = Some(mgr);
+        StatusCode::NO_CONTENT
+    });
+    w.await?.transpose()?.ok_or(ApiError::NotFound)
 }
 
 pub async fn del_key(

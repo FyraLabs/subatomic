@@ -61,21 +61,19 @@ pub fn run(args: Cli) -> Result<()> {
     let len = add.len();
 
     add.into_iter().enumerate().par_bridge().try_for_each(|(i, path)| {
-        info!(progress = format!("[{}/{}]", i + 1, len), path = %path.display(), "parsing");
-        match Package::open(&path) {
-            Ok((pkg, mut rpmreader)) => {
-                trace!(filename = %path.display(), "process");
-                let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
-                if args.appstream {
-                    frag.app = libsubatomic::repodata::Frag(Some(Package::appstream_frag(
-                        &mut rpmreader,
-                    )?));
-                }
-                trace!(filename = %path.display(), "sending");
-                tx.send((path, Some(frag))).expect("tx should be open");
-            }
-            Err(e) => error!(path = %path.display(), error = %e, "skipping"),
+        info!(progress = format!("[{}/{len}]", i + 1), path = %path.display(), "parsing");
+        let Ok((pkg, mut rpmreader)) = Package::open(&path)
+            .inspect_err(|e| error!(path = %path.display(), error = %e, "skipping"))
+        else {
+            return Ok(());
+        };
+        trace!(filename = %path.display(), "process");
+        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
+        if args.appstream {
+            frag.app = libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));
         }
+        trace!(filename = %path.display(), "sending");
+        tx.send((path, Some(frag))).expect("tx should be open");
         libsubatomic::err::Res::Ok(())
     })?;
     drop(tx);
@@ -143,20 +141,19 @@ fn process_rpms_auto(args: &Cli) -> Result<()> {
             }
             let filename = p.file_name().expect("no filename");
             debug!(filename = %filename.display(), "parsing");
-            match Package::open(&p) {
-                Ok((pkg, mut rpmreader)) => {
-                    trace!(filename = %filename.display(), "process");
-                    let mut frag = libsubatomic::repodata::FragEph::new(&pkg, p.as_os_str());
-                    if args.appstream {
-                        frag.app = libsubatomic::repodata::Frag(Some(Package::appstream_frag(
-                            &mut rpmreader,
-                        )?));
-                    }
-                    trace!(filename = %filename.display(), "sending");
-                    tx.send((p, Some(frag)))?;
-                }
-                Err(e) => error!(path = %p.display(), error = %e, "skipping"),
+            let Ok((pkg, mut rpmreader)) = Package::open(&p)
+                .inspect_err(|e| error!(path = %p.display(), error = %e, "skipping"))
+            else {
+                return Ok(());
+            };
+            trace!(filename = %filename.display(), "process");
+            let mut frag = libsubatomic::repodata::FragEph::new(&pkg, p.as_os_str());
+            if args.appstream {
+                frag.app =
+                    libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));
             }
+            trace!(filename = %filename.display(), "sending");
+            tx.send((p, Some(frag)))?;
             Ok(())
         },
     )?;
