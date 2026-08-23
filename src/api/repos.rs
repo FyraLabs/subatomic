@@ -182,6 +182,7 @@ pub async fn delete_repo(
     Ok(if locker.del(&name).await? { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
+#[deprecated]
 pub async fn push_comps(
     State(locker): LockerState,
     Path(repo): Path<String>,
@@ -208,6 +209,7 @@ pub async fn push_comps(
     }
 }
 
+#[deprecated]
 pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
     let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
         hdl.repo.del_comps()?;
