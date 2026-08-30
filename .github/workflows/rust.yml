@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/terrapkg/builder:f44
-      options: --cap-add=SYS_ADMIN --privileged --network host
+      options: --cap-add=SYS_ADMIN --privileged
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
     services:
@@ -47,8 +47,6 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: subatomic
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -94,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/terrapkg/builder:f44
-      options: --cap-add=SYS_ADMIN --privileged --network host
+      options: --cap-add=SYS_ADMIN --privileged
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
     services:
@@ -104,8 +102,6 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: subatomic
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
