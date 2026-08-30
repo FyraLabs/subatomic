@@ -35,6 +35,9 @@ jobs:
       security-events: write
     if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/terrapkg/builder:f44
+      options: --cap-add=SYS_ADMIN --privileged
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
     services:
@@ -53,7 +56,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Install dependencies
-        run: apt install libzstd-dev
+        run: dnf in -y 'pkgconfig(libzstd)'
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -89,6 +92,9 @@ jobs:
   test:
     if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/terrapkg/builder:f44
+      options: --cap-add=SYS_ADMIN --privileged
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
     services:
@@ -107,7 +113,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Install dependencies
-        run: apt install libzstd-dev
+        run: dnf in -y 'pkgconfig(libzstd)'
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
