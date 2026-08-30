@@ -64,7 +64,10 @@ jobs:
           components: clippy
 
       - name: Install required cargo
-        run: cargo install clippy-sarif sarif-fmt
+        run: cargo install clippy-sarif sarif-fmt sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Perform database migration
+        run: cargo sqlx migrate run
 
       - name: Run rust-clippy
         run: cargo clippy
@@ -115,6 +118,12 @@ jobs:
 
       - name: Fetch
         run: cargo fetch --locked
+
+      - name: Install required cargo
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Perform database migration
+        run: cargo sqlx migrate run
 
       - name: Run tests
         run: cargo llvm-cov
