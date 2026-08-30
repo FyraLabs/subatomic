@@ -64,7 +64,7 @@ jobs:
           components: clippy
 
       - name: Install required cargo
-        run: cargo install clippy-sarif sarif-fmt sqlx-cli --no-default-features --features native-tls,postgres
+        run: cargo install clippy-sarif sarif-fmt sqlx-cli --no-default-features -F sqlx-cli/native-tls,sqlx-cli/postgres
 
       - name: Perform database migration
         run: cargo sqlx migrate run
