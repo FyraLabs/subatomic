@@ -75,16 +75,12 @@ fn mainloop(term: &Arc<AtomicBool>) {
     }
 }
 
-async fn inner_main() {
-    let config = Config::from_env().expect("cannot obtain config from env");
-    let config = Arc::new(config);
-
-    let pool = create_pool(&config.database_url).await.expect("cannot create pool");
-    let pool = Arc::new(pool);
-
-    let locker = Arc::new(repohdl::Locker::new(Arc::clone(&pool), Arc::clone(&config)));
-
-    let app = Router::new()
+pub fn app(
+    config: &Arc<Config>,
+    pool: Arc<sqlx::Pool<sqlx::Postgres>>,
+    locker: Arc<repohdl::Locker>,
+) -> Router {
+    Router::new()
         .route("/v1/repos", get(api::repos::list_repos))
         .route("/v1/repos/{name}", put(api::repos::create_repo))
         .route("/v1/repos/{name}", delete(api::repos::delete_repo))
@@ -106,7 +102,19 @@ async fn inner_main() {
         .route("/v1/keys/{id}", delete(api::keys::del_key))
         .route_layer(axum::middleware::from_fn_with_state(Arc::clone(&config), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(&config), pool, locker })
-        .layer(DefaultBodyLimit::max(config.body_limit));
+        .layer(DefaultBodyLimit::max(config.body_limit))
+}
+
+async fn inner_main() {
+    let config = Config::from_env().expect("cannot obtain config from env");
+    let config = Arc::new(config);
+
+    let pool = create_pool(&config.database_url).await.expect("cannot create pool");
+    let pool = Arc::new(pool);
+
+    let locker = Arc::new(repohdl::Locker::new(Arc::clone(&pool), Arc::clone(&config)));
+
+    let app = app(&config, pool, locker);
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     tracing::info!(addr, "starting server");

@@ -72,7 +72,8 @@ impl Repo {
         let (pkg, mut rpmmeta) = crate::pkg::Package::open(path)?;
         if let Some(sig) = &self.sig {
             tracing::debug!("signing");
-            let sig = sig.sign_rpm(&rpmmeta.metadata)?;
+            // TODO: write back
+            let sig = sig.sign_rpm(&mut rpmmeta.metadata)?;
             if let Err(e) = rpm::Package::apply_signature_in_place(path, sig.clone()) {
                 let rpm::Error::InsufficientReservedSpace { .. } = e else {
                     return Err(e);

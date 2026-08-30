@@ -76,7 +76,7 @@ Use `Authentication: Bearer <jwt>` header.
 
 ### `PUT /v1/repos/{name}/key`: Set signing key
 
-- request: `{ id: <i32_signing_key_id> }`
+- request: `{ id: "<sigkeyid>" }`
   - obtain the id from `GET /v1/keys`
 - response: 204 NO CONTENT | 404 NOT FOUND
 
@@ -139,7 +139,7 @@ This invalidates the cache then regenerates the repository metadata.
   ```
 - response:
   ```json
-  { "id": <i32_signing_key_id>, "name": "<keyname>", "public_armor": "-----BEGIN PGP …" }
+  { "id": "<sigkeyid>", "public_armor": "-----BEGIN PGP …" }
   ```
 - `name` is not actively used
 - `userid` is used only during key creation
@@ -148,12 +148,15 @@ This invalidates the cache then regenerates the repository metadata.
 
 - response: 200 OK
   ```json
-  [{ "id": <i32_signing_key_id>, "name": "<keyname>" }, ...]
+  [{ "id": "<sigkeyid>", "userid": "<userid>" }, ...]
   ```
 
 ### `GET /v1/keys/{id}`: Get signing key
 
-- response: 200 OK, armor public key in raw text
+- response: 200 OK
+  ```json
+  { "userid": "<userid>", "public_armor": "-----BEGIN PGP …" }
+  ```
 
 ### `DELETE /v1/keys/{id}`: Delete signing key
 
@@ -168,6 +171,6 @@ This invalidates the cache then regenerates the repository metadata.
 pub struct Repo {
     pub id: i32,
     pub name: String,
-    pub key_id: Option<i32>,
+    pub key_id: Option<String>,
 }
 ```

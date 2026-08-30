@@ -1,0 +1,3 @@
+[submodule "random-rpm-examples"]
+	path = random-rpm-examples
+	url = https://github.com/madonuko/random-rpm-examples

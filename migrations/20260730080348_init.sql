@@ -1,12 +1,11 @@
 CREATE TABLE IF NOT EXISTS keys (
-    id      SERIAL PRIMARY KEY,
-    name    TEXT UNIQUE NOT NULL,
+    id      TEXT PRIMARY KEY,
     userid  TEXT NOT NULL,
-    pri     BYTEA NOT NULL
+    pri     TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS repos (
     id      SERIAL PRIMARY KEY,
     name    TEXT UNIQUE NOT NULL,
-    key_id  INTEGER REFERENCES keys(id) ON DELETE RESTRICT
+    key_id  TEXT REFERENCES keys(id) ON DELETE RESTRICT
 );

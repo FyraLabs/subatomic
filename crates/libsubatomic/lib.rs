@@ -46,7 +46,9 @@ pub mod repodata;
 pub mod sig;
 
 pub use err::Res;
+pub use pgp;
 pub use pkg::Package;
 pub use repo::Repo;
 pub use repodata::RepoCache;
 pub use repodata::repomd::DataType;
+pub use rpm;

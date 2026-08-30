@@ -104,6 +104,7 @@ impl Package {
         let meta = f.metadata()?;
         let btime = epoch!(meta.created()?);
         let header_range = Self::get_header_byte_range(&mut f)?;
+        f.seek(std::io::SeekFrom::Start(0))?;
         let rpm = rpm::PackageReader::parse(BufReader::new(f))?;
         let m = &rpm.metadata;
 

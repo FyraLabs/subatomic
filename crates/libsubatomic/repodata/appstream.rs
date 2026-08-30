@@ -28,7 +28,7 @@ pub fn transform<R: std::io::BufRead>(
     let Err(e) = try {
         loop {
             match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) if e.name().as_ref() == b"component" => {
+                Ok(Event::Start(e)) if e.name().as_ref() == "component" => {
                     writer.write_event(Event::Start(e))?;
                     writer.create_element("pkgname").write_text_content(BytesText::new(pkgname))?;
                 }

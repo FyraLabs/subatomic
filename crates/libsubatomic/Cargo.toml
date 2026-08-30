@@ -12,12 +12,12 @@ crossbeam-channel = { workspace = true }
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",
 ] }
-hex = "0.4.3"
+hex = { workspace = true }
 itertools = "0.15.0"
 num_cpus = "1.17.0"
-pgp = "0.20.0" # fixed by rpm
-quick-xml = { version = "0.41.0", features = ["serialize"] }
-rand = "0.8.7" # fixed by rpm
+pgp = { workspace = true }
+quick-xml = { version = "0.42.0", features = ["serialize"] }
+rand = "0.8.8" # fixed by rpm
 rayon = "1.12.0"
 replace_with = "0.1.8"
 rpm = "0.26.0"

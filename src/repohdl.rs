@@ -96,7 +96,10 @@ impl RepoHdl {
                 .bind(key_id)
                 .fetch_one(pool)
                 .await?;
-            Some(libsubatomic::sig::Mgr::parse(&key.pri).map_err(libsubatomic::err::Error::from)?)
+            Some(
+                libsubatomic::sig::Mgr::from_armor(&key.pri)
+                    .map_err(libsubatomic::err::Error::from)?,
+            )
         } else {
             None
         };
