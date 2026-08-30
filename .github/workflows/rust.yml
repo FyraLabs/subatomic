@@ -56,7 +56,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Install dependencies
-        run: dnf in -y 'pkgconfig(libzstd)' gcc
+        run: dnf in -y gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)'
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -113,7 +113,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Install dependencies
-        run: dnf in -y 'pkgconfig(libzstd)' gcc
+        run: dnf in -y gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)'
 
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
