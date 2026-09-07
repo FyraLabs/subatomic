@@ -70,9 +70,17 @@ pub enum CompsAction {
 
 #[derive(Subcommand)]
 pub enum RepoKeyAction {
-    Get { name: String },
-    Set { name: String, id: i32 },
-    Delete { name: String },
+    Get {
+        name: String,
+    },
+    Set {
+        name: String,
+        /// String identifier of the signing key.
+        id: String,
+    },
+    Delete {
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -99,16 +107,18 @@ pub struct KeyArgs {
 pub enum KeySubcommand {
     List,
     Get {
-        id: i32,
+        /// String identifier of the signing key.
+        id: String,
     },
     /// Create a new signing key.
     Create {
-        /// Key name.
-        name: String,
+        /// Caller-provided string identifier for the signing key.
+        id: String,
         /// User ID of the key, probably in the format `Repository Name <mail@example.com>`.
         userid: String,
     },
     Delete {
-        id: i32,
+        /// String identifier of the signing key.
+        id: String,
     },
 }

@@ -1,8 +1,9 @@
 use color_eyre::{Result, eyre::ContextCompat};
 use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sha2::{Digest, Sha256};
 use std::path::Path;
-use tokio::fs::File;
+use tokio::{fs::File, io::AsyncReadExt};
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -19,14 +20,18 @@ pub struct Repo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KeySummary {
-    pub id: i32,
-    pub name: String,
+    pub id: String,
+    pub userid: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateKeyResp {
-    pub id: i32,
-    pub name: String,
+    pub id: String,
+    pub public_armor: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetKeyResp {
     pub public_armor: String,
 }
 
@@ -86,7 +91,7 @@ impl ApiClient {
     }
 
     pub async fn create_repo(&self, name: &str) -> Result<Repo> {
-        self.send_json(self.request_builder(reqwest::Method::POST, &format!("/v1/repos/{name}")))
+        self.send_json(self.request_builder(reqwest::Method::PUT, &format!("/v1/repos/{name}")))
             .await
     }
 
@@ -97,8 +102,12 @@ impl ApiClient {
     ) -> Result<()> {
         let mut form = multipart::Form::new();
         for p in paths {
-            let file_name = p.as_ref().file_name().context("invalid file name")?.to_string_lossy();
-            form = form.file(file_name.to_string(), p).await?;
+            let path = p.as_ref();
+            let file_name = path.file_name().context("invalid file name")?.to_string_lossy();
+            let checksum = sha256_file(path).await?;
+            let file = File::open(path).await?;
+            let part = multipart::Part::stream(file).file_name(file_name.to_string());
+            form = form.part(file_name.to_string(), part).text("sha256", checksum);
         }
         let req = self
             .request_builder(reqwest::Method::POST, &format!("/v1/repos/{name}"))
@@ -140,7 +149,7 @@ impl ApiClient {
             .await
     }
 
-    pub async fn set_repo_key(&self, repo: &str, key_id: i32) -> Result<()> {
+    pub async fn set_repo_key(&self, repo: &str, key_id: &str) -> Result<()> {
         let body = serde_json::json!({ "id": key_id });
         let req = self
             .request_builder(reqwest::Method::PUT, &format!("/v1/repos/{repo}/key"))
@@ -185,18 +194,35 @@ impl ApiClient {
         self.send_json(self.request_builder(reqwest::Method::GET, "/v1/keys")).await
     }
 
-    pub async fn get_key(&self, id: i32) -> Result<String> {
-        self.send_text(self.request_builder(reqwest::Method::GET, &format!("/v1/keys/{id}"))).await
+    pub async fn get_key(&self, id: &str) -> Result<String> {
+        let response: GetKeyResp = self
+            .send_json(self.request_builder(reqwest::Method::GET, &format!("/v1/keys/{id}")))
+            .await?;
+        Ok(response.public_armor)
     }
 
-    pub async fn create_key(&self, name: &str, userid: &str) -> Result<CreateKeyResp> {
-        let body = serde_json::json!({ "name": name, "userid": userid });
+    pub async fn create_key(&self, id: &str, userid: &str) -> Result<CreateKeyResp> {
+        let body = serde_json::json!({ "id": id, "userid": userid });
         let req = self.request_builder(reqwest::Method::POST, "/v1/keys").json(&body);
         self.send_json(req).await
     }
 
-    pub async fn del_key(&self, id: i32) -> Result<()> {
+    pub async fn del_key(&self, id: &str) -> Result<()> {
         self.send_empty(self.request_builder(reqwest::Method::DELETE, &format!("/v1/keys/{id}")))
             .await
     }
+}
+
+async fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = File::open(path).await?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let bytes_read = file.read(&mut buffer).await?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
 }

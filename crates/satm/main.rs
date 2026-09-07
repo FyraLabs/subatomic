@@ -68,7 +68,7 @@ async fn handle_api_repos(
                 let public_key = client.get_repo_key(&name).await?;
                 println!("{public_key}");
             }
-            cli::RepoKeyAction::Set { name, id } => client.set_repo_key(&name, id).await?,
+            cli::RepoKeyAction::Set { name, id } => client.set_repo_key(&name, &id).await?,
             cli::RepoKeyAction::Delete { name } => client.del_repo_key(&name).await?,
         },
         cli::RepoSubcommand::Pkg { action } => match action {
@@ -99,14 +99,14 @@ async fn handle_api_keys(
             println!("{}", serde_json::to_string_pretty(&keys)?);
         }
         cli::KeySubcommand::Get { id } => {
-            let public_key = client.get_key(id).await?;
+            let public_key = client.get_key(&id).await?;
             println!("{public_key}");
         }
-        cli::KeySubcommand::Create { name, userid } => {
-            let key = client.create_key(&name, &userid).await?;
+        cli::KeySubcommand::Create { id, userid } => {
+            let key = client.create_key(&id, &userid).await?;
             println!("{}\n{}", key.id, key.public_armor);
         }
-        cli::KeySubcommand::Delete { id } => client.del_key(id).await?,
+        cli::KeySubcommand::Delete { id } => client.del_key(&id).await?,
     }
     Ok(())
 }
