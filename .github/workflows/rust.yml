@@ -1,4 +1,4 @@
-# FyraLabs/actions/main/.github/workflows/rust.yml, but nightly
+# FyraLabs/actions/main/.github/workflows/rust.yml but nightly
 
 name: Rust
 permissions:
