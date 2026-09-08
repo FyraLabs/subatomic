@@ -16,6 +16,7 @@ Use `Authentication: Bearer <jwt>` header.
 | `PUT`    | `/v1/repos/{name}`         | `repos::create_repo`  |
 | `DELETE` | `/v1/repos/{name}`         | `repos::delete_repo`  |
 | `POST`   | `/v1/repos/{name}`         | `repos::upload_pkgs`  |
+| `POST`   | `/v1/repos/{name}/sign`    | `repos::sign_headers` |
 | `PUT`    | `/v1/repos/{name}/comps`   | `repos::push_comps`   |
 | `DELETE` | `/v1/repos/{name}/comps`   | `repos::del_comps`    |
 | `GET`    | `/v1/repos/{name}/key`     | `repos::get_key`      |
@@ -44,18 +45,22 @@ Use `Authentication: Bearer <jwt>` header.
 
 ### `POST /v1/repos/{name}`: Upload packages
 
-- request: a multipart consisting of fields of files, where the field name should be the filename.
+This endpoint does not sign packages. To sign packages, use `POST /v1/repos/{name}/sign`.
+
+- request: a multipart consisting of many of:
+  - field with rpm file, where the field name should be the filename, followed by
+  - text field with the file checksum
 - response:
   ```json
   {
-    "added": [
-      { "pkg": "<byte filename>", "sig": "[byte signature]" },
-      ...
-    ],
-    "bad_filenames": ["<byte filename>", ...],
     "removed": ["<byte filename>", ...]
   }
   ```
+
+### `POST /v1/repos/{name}/sign`: Sign packages
+
+- request: a multipart (list of raw rpm header bytes)
+- response: multipart (list of raw signature bytes)
 
 ### `PUT /v1/repos/{name}/comps`: [DEPRECATED] Push comps
 
