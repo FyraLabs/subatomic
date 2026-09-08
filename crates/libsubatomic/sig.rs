@@ -28,20 +28,20 @@ impl Mgr {
     pub fn new(userid: std::string::String) -> Self {
         // const KEYTYPE: pgp::composed::KeyType = pgp::composed::KeyType::Rsa(4096);
         const KEYTYPE: pgp::composed::KeyType = pgp::composed::KeyType::Ed25519;
-        let mut signkey = pgp::composed::SubkeyParamsBuilder::default();
-        signkey
-            .key_type(KEYTYPE)
-            .can_sign(true)
-            .can_encrypt(pgp::composed::EncryptionCaps::None)
-            .can_authenticate(false);
+        // let mut signkey = pgp::composed::SubkeyParamsBuilder::default();
+        // signkey
+        //     .key_type(KEYTYPE)
+        //     .can_sign(true)
+        //     .can_encrypt(pgp::composed::EncryptionCaps::None)
+        //     .can_authenticate(false);
         Self {
             private: pgp::composed::SecretKeyParamsBuilder::default()
                 .key_type(KEYTYPE)
                 .can_certify(true)
-                .can_sign(false)
+                .can_sign(true)
                 .can_encrypt(pgp::composed::EncryptionCaps::None)
                 .primary_user_id(userid)
-                .subkey(signkey.build().expect("can't build signkey"))
+                // .subkey(signkey.build().expect("can't build signkey"))
                 .build()
                 .expect("cannot build prikey params")
                 .generate(rand::thread_rng())

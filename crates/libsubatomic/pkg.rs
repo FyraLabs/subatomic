@@ -464,7 +464,7 @@ impl From<rpm::ChangelogEntry> for Changelog {
     }
 }
 
-fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
+pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     let mut hasher = sha2::Sha256::new();
     let mut buffer = [0; 10240];
 

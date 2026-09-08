@@ -118,23 +118,7 @@ mod test {
         // ↓ もーちょっといいフォーマットほしい
         assert_eq!(
             resp.public_armor,
-            "\
------BEGIN PGP PUBLIC KEY BLOCK-----
-
-xiYEapLgohtkDJWHO+gGf6sbCqYmIPWapA9gT827kHjPR2VUI98qaM1CTnVjbGVh
-ciBGaXNzaW9uIDxudWNsZWFyZmlzc2lvbi1idWlsZHN5c0BsaXN0cy5udWNsZWFy
-Zmlzc2lvbi5vcmc+woIEExsIAC4FAmqS4KIWIQSzS8+aFFav6L1fdCQiSajuiI4/
-GQIbAQIeAQELARUBFgEnAhkBAAoJECJJqO6Ijj8ZZGTwXzux988mIRtQ4m0n5Gg+
-k63tR/XAE7r6dSMM9UrTJUgXsFTcWMbTQvWrcO8joydX/9BfKy3FsQsI88Y4UWMO
-ziYEapLgohvKi4pH+2R1a9VfsdSJwz1e2U75vlNjJxgAei7mgugV3cLAJwQYGwgA
-kwUCapLgogIbAhYhBLNLz5oUVq/ovV90JCJJqO6Ijj8ZciAEGRsIAB0FAmqS4KIW
-IQRUWbqLRMdsOKgSWzaJdzVbxskf6QAKCRCJdzVbxskf6aG9CwVFIu9RfomNJdRO
-xXBT2gDlL25PcHQnMEGHUwfn4AJwmGoqWbGn4/hPw1ZmfF5oAr6M0GMKSn3zkNDP
-BhVPAAAKCRAiSajuiI4/GeIEUQt1F02UN+/22/DDiwuw8SjlORdMy/J91kTFVKMJ
-fhdGPQoBupYJnU+Zmyyaf1LCQjNddHYi2oxniGHuZ9cwCw==
-=SdsG
------END PGP PUBLIC KEY BLOCK-----
-"
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nxiYEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0Orr80xUlBNIEZp\nc3Npb24gPG51Y2xlYXJmaXNzaW9uLWJ1aWxkc3lzQGV4YW1wbGUuY29tPsKCBBMb\nCAAuBQJqnuwkFiEEXJRZV2R0/irfk0kpCQbDJozm21kCGwMCHgEBCwEVARYBJwIZ\nAQAKCRAJBsMmjObbWcmepReucqGgmJpkfBsJTy2GBxosNWNVJgDUQ3tme7PrlVky\nWS8MgEGm+39VbWwIk6oN/LBttfmijVIhRR8p0heuDg==\n=vX5C\n-----END PGP PUBLIC KEY BLOCK-----\n"
         );
         assert_eq!(resp.userid, "key1 <k1@example.com>");
     }

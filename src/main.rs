@@ -85,6 +85,7 @@ pub fn app(
         .route("/v1/repos/{name}", put(api::repos::create_repo))
         .route("/v1/repos/{name}", delete(api::repos::delete_repo))
         .route("/v1/repos/{name}", post(api::repos::upload_pkgs))
+        .route("/v1/repos/{name}/sign", post(api::repos::sign_headers))
         .route("/v1/repos/{name}/comps", put(api::repos::push_comps))
         .route("/v1/repos/{name}/comps", delete(api::repos::del_comps))
         .route("/v1/repos/{name}/key", get(api::repos::get_key))
@@ -100,8 +101,8 @@ pub fn app(
         .route("/v1/keys", get(api::keys::list_keys))
         .route("/v1/keys/{id}", get(api::keys::get_key))
         .route("/v1/keys/{id}", delete(api::keys::del_key))
-        .route_layer(axum::middleware::from_fn_with_state(Arc::clone(&config), auth::jwt_auth))
-        .with_state(AppState { config: Arc::clone(&config), pool, locker })
+        .route_layer(axum::middleware::from_fn_with_state(Arc::clone(config), auth::jwt_auth))
+        .with_state(AppState { config: Arc::clone(config), pool, locker })
         .layer(DefaultBodyLimit::max(config.body_limit))
 }
 

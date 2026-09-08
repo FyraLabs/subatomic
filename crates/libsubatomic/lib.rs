@@ -52,3 +52,4 @@ pub use repo::Repo;
 pub use repodata::RepoCache;
 pub use repodata::repomd::DataType;
 pub use rpm;
+pub use smartstring;

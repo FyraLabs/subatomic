@@ -11,7 +11,6 @@ use axum::http::StatusCode;
 use futures_util::TryStreamExt;
 use libsubatomic::err::Res;
 use libsubatomic::prelude::Itertools;
-use tokio::io::AsyncWriteExt;
 use tokio_util::io::StreamReader;
 
 pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<Repo>>> {
@@ -26,19 +25,47 @@ pub async fn create_repo(State(pool): DbState, Path(name): Path<String>) -> Resu
     ))
 }
 
+pub async fn sign_headers(
+    State(locker): LockerState,
+    Path(repo): Path<String>,
+    mut multipart: Multipart,
+) -> Result<impl axum::response::IntoResponse> {
+    let sig =
+        locker.read(&repo, async |hdl| hdl.repo.sig.clone()).await?.ok_or(ApiError::NotFound)?;
+    let Some(mgr) = sig.as_ref() else { return Ok((StatusCode::NO_CONTENT, Default::default())) };
+    let mut resp = rust_multipart_rfc7578_2::client::multipart::Form::default();
+
+    while let Some(field) =
+        multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
+    {
+        let body = (field.bytes().await)
+            .map_err(|e| ApiError::BadRequest(format!("cannot get multipart field: {e}")))?;
+        let mut bufr = std::io::BufReader::new(body.as_ref());
+        let mut metadata = libsubatomic::rpm::PackageMetadata::parse(&mut bufr)
+            .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm metadata: {e}")))?;
+
+        let sig = (mgr.sign_rpm(&mut metadata))
+            .map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
+        // `Cursor` to feed in owned sig
+        resp.add_reader_2("", std::io::Cursor::new(sig), None, None, vec![]);
+    }
+    Ok((
+        StatusCode::OK,
+        axum::body::Body::from_stream(rust_multipart_rfc7578_2::client::multipart::Body::from(
+            resp,
+        )),
+    ))
+}
+
 pub async fn upload_pkgs(
     State(locker): LockerState,
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
-    let Some((dir, keys, sig)) = locker
-        .read(&repo, async |hdl| {
-            (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
-        })
-        .await?
-    else {
-        return Err(ApiError::NotFound);
-    };
+    let r = locker.read(&repo, async |hdl| {
+        (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
+    });
+    let (dir, keys, sig) = r.await?.ok_or(ApiError::NotFound)?;
     let keys = keys.map_err(|e| ApiError::Internal(format!("can't get cache keys: {e}")))?;
     tokio::fs::create_dir_all(&dir).await?;
 
@@ -55,7 +82,7 @@ pub async fn upload_pkgs(
     });
     w.await?.ok_or_else(|| ApiError::NotFound)??;
     Ok(Json(serde_json::json!({
-        "added": processor.out,
+        // "added": processor.out,
         "removed": processor.removed,
     })))
 }
@@ -81,21 +108,21 @@ impl UploadProcessor<'_> {
             multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
         {
             let ReceiveRpmOut { csum, path } = self.receive_rpm(field).await?;
-            let filename_str = (path.file_name().expect("filename").to_str())
-                .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
-            self.check_csum(multipart, csum).await?;
-            let sig = self.sign(&path)?;
-            let frag = Self::parse_to_frag(&path)?;
+            // let filename_str = (path.file_name().expect("filename").to_str())
+            //     .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
+            self.check_csum(multipart, &csum).await?;
+            // let sig = self.sign(&path)?;
+            let frag = Self::parse_to_frag(&path, csum)?;
             self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
-            self.out.push(serde_json::json!({
-                "pkg": filename_str,
-                "sig": sig,
-            }));
+            // self.out.push(serde_json::json!({
+            //     "pkg": filename_str,
+            //     "sig": sig,
+            // }));
         }
         Ok(())
     }
 
-    async fn check_csum(&self, multipart: &mut Multipart, csum: String) -> Result<()> {
+    async fn check_csum(&self, multipart: &mut Multipart, csum: &str) -> Result<()> {
         let field = (multipart.next_field().await)
             .map_err(|e| {
                 ApiError::Internal(format!("can't get hash field: {e}: {}", e.body_text()))
@@ -171,13 +198,15 @@ impl UploadProcessor<'_> {
             .filter(|(k, _)| *k != filename);
         self.removed.extend(prev_versions.map(|(k, _)| k.as_slice()));
         let csum = writer.csum.csum().into();
-        let mut fd = writer.fd.into_inner();
-        fd.flush().await?;
         Ok(ReceiveRpmOut { csum, path })
     }
 
-    fn parse_to_frag(path: &std::path::Path) -> Result<libsubatomic::repodata::FragEph, ApiError> {
-        let (pkg, mut rpmreader) = libsubatomic::Package::open(path)
+    fn parse_to_frag(
+        path: &std::path::Path,
+        csum: String,
+    ) -> Result<libsubatomic::repodata::FragEph, ApiError> {
+        let fd = std::fs::File::open(path)?;
+        let (pkg, mut rpmreader) = libsubatomic::Package::parse(fd, csum.into())
             .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
         let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
         let appstream = libsubatomic::pkg::Package::appstream_frag(&mut rpmreader)
@@ -539,13 +568,66 @@ mod test {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         println!("{body}");
-        let first = &body.get("added").unwrap().as_array().unwrap()[0];
-        assert_eq!(
-            first.as_object().unwrap().get("pkg").unwrap().as_str().unwrap(),
-            "terra-release-44-4.noarch.rpm",
-        );
+        // let first = &body.get("added").unwrap().as_array().unwrap()[0];
+        // assert_eq!(
+        //     first.as_object().unwrap().get("pkg").unwrap().as_str().unwrap(),
+        //     "terra-release-44-4.noarch.rpm",
+        // );
         assert!(body.get("removed").unwrap().as_array().unwrap().is_empty());
         let path = cfg.storage_dir.join("rpmfission/terra-release-44-4.noarch.rpm");
         assert!(std::fs::exists(path).unwrap());
+    }
+
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn sign_headers(pool: Pool) {
+        let states = app(pool);
+        let States { app, .. } = states;
+        let mut form = MultipartForm::default();
+        let mut rpmmeta = libsubatomic::rpm::PackageMetadata::parse(&mut std::io::BufReader::new(
+            &mut &include_bytes!("../../random-rpm-examples/terra-release-44-4.noarch.rpm")[..],
+        ))
+        .unwrap();
+        let mut buf = vec![];
+        rpmmeta.write(&mut buf).unwrap();
+        form.add_reader_2(
+            "terra-release-44-4.noarch.rpm",
+            std::io::Cursor::new(buf.clone()),
+            Some("terra-release-44-4.noarch.rpm".into()),
+            None,
+            vec![],
+        );
+        let req = Request::post("/v1/repos/rpmfission/sign")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let i = body.windows(4).position(|bs| bs == b"\r\n\r\n").unwrap() + 4;
+        let j = body.windows(4).rposition(|bs| bs == b"\r\n--").unwrap();
+        let sig = body.slice(i..j);
+        let mgr = libsubatomic::sig::Mgr::from_armor(
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUkEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0OrrwCb9NEYCgt/
+X+732x931pW/h8IirjscbwJ5CQcG44Z1eA6xzTFSUE0gRmlzc2lvbiA8bnVjbGVh
+cmZpc3Npb24tYnVpbGRzeXNAZXhhbXBsZS5jb20+woIEExsIAC4FAmqe7CQWIQRc
+lFlXZHT+Kt+TSSkJBsMmjObbWQIbAwIeAQELARUBFgEnAhkBAAoJEAkGwyaM5ttZ
+yZ6lF65yoaCYmmR8GwlPLYYHGiw1Y1UmANRDe2Z7s+uVWTJZLwyAQab7f1VtbAiT
+qg38sG21+aKNUiFFHynSF64O
+=lkCs
+-----END PGP PRIVATE KEY BLOCK-----",
+        )
+        .unwrap();
+        rpmmeta.signature =
+            libsubatomic::rpm::SignatureHeaderBuilder::from_existing(&rpmmeta.signature)
+                .unwrap()
+                .add_openpgp_signature(sig.to_vec())
+                .build()
+                .unwrap();
+        let verifier =
+            libsubatomic::rpm::signature::pgp::Verifier::from_asc(&mgr.public_armor().unwrap())
+                .unwrap();
+        rpmmeta.verify_signature(verifier).unwrap();
     }
 }
