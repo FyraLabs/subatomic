@@ -8,8 +8,8 @@ COPY ./crates     ./crates
 COPY ./src        ./src/
 COPY ./migrations ./migrations
 COPY ./.sqlx      ./.sqlx
-RUN PATH="$HOME/.cargo/bin:$PATH" ZSTD_SYS_USE_PKG_CONFIG=1 cargo build --release -p subatomic
-RUN /usr/lib/rpm/rpmdeps --define="_use_internal_dependency_generator 1" --requires subatomic > deps.txt
+RUN PATH="$HOME/.cargo/bin:$PATH" ZSTD_SYS_USE_PKG_CONFIG=1 cargo build --release
+RUN /usr/lib/rpm/rpmdeps --define="_use_internal_dependency_generator 1" --requires target/release/subatomic > deps.txt
 
 FROM registry.fedoraproject.org/fedora-minimal:44
 COPY --from=terra /subatomic/target/release/subatomic .
