@@ -39,7 +39,7 @@ jobs:
       image: ghcr.io/terrapkg/builder:f44
       options: --cap-add=SYS_ADMIN --privileged
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/subatomic
     services:
       postgres:
         image: postgres:16
@@ -96,7 +96,7 @@ jobs:
       image: ghcr.io/terrapkg/builder:f44
       options: --cap-add=SYS_ADMIN --privileged
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/subatomic
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/subatomic
     services:
       postgres:
         image: postgres:16
