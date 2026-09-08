@@ -11,8 +11,7 @@ pub struct repomd { // FIXME: how to make roottag lowercase properly
     pub data: Vec<Data>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum DataType {
     Primary,
     Filelists,
@@ -32,7 +31,49 @@ impl serde::Serialize for DataType {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(self.as_type())
+        if let Self::Custom(t, s) = self {
+            if s.starts_with(':') {
+                serializer.serialize_str(t)
+            } else {
+                serializer.serialize_str(&format!("{t}:{s}"))
+            }
+        } else {
+            serializer.serialize_str(self.as_type())
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DataType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(DataType::Primary)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for DataType {
+    type Value = Self;
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(match v {
+            "primary" => Self::Primary,
+            "filelists" => Self::Filelists,
+            "other" => Self::Other,
+            "group" => Self::Group,
+            "appstream" => Self::Appstream,
+            any if let Some((typ, str)) = any.split_once(':') => {
+                Self::Custom(typ.into(), str.into())
+            }
+            any => return Err(E::custom(format!("unknown datatype: {any}"))),
+        })
+    }
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("any string")
     }
 }
 

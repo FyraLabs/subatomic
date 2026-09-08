@@ -192,6 +192,7 @@ impl RepoCache {
     ///
     /// To only save the `repomd` fragment, use [`Self::write_custom_datatype`].
     pub fn update_custom_datatype(&self, dt: repomd::DataType, buf: &[u8]) -> Res<()> {
+        // TODO: check if custom?
         let temppath = self.repodata_dir.join(format!("{}.zst", dt.as_str()));
         let mut w = self.writer(std::fs::File::create_buffered(&temppath)?)?;
         w.write_all(buf)?;
@@ -454,19 +455,29 @@ impl RepoCache {
         let data = datatypes.par_iter().cloned().zip_eq(&files);
         let data = data.map(|(dt, path)| self.write_stage1(path, dt));
         let mut data = data.collect::<Res<Vec<_>>>()?;
-        self.extend_custom_datatypes(&mut data)?;
         for dat in &data {
             let oldname = self.repodata_dir.join(dat.r#type.as_str());
             let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
             std::fs::rename(oldname, self.repodata_dir.join(newname))?;
         }
+        self.extend_custom_datatypes(&mut data)?;
 
         self.write_repomd(data)
     }
 
     fn extend_custom_datatypes(&self, data: &mut Vec<repomd::Data>) -> Res<()> {
         let txn = self.env.read_txn()?;
-        self.db_cus.iter(&txn)?.map_ok(|(_, d)| d).process_results(|it| data.extend(it))?;
+        self.db_cus.iter(&txn)?.map_ok(|(_, d)| d).process_results(|it| {
+            // FIXME: refactor this????
+            data.extend(it.update(|d| {
+                if let repomd::DataType::Custom(typ, filename) = &mut d.r#type {
+                    d.r#type = repomd::DataType::Custom(
+                        std::mem::take(typ),
+                        format!(":{filename}").into(),
+                    );
+                }
+            }));
+        })?;
         Ok(())
     }
 
@@ -597,12 +608,15 @@ impl RepoWriter<'_> {
     /// This propagates errors from the comp encoder finalizing their output.
     pub fn into_data(
         self,
-        r#type: repomd::DataType,
+        mut r#type: repomd::DataType,
     ) -> std::io::Result<(repomd::Data, std::fs::File)> {
         let inner = match self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.finish()?,
         };
         let sha = inner.csum.csum();
+        if let repomd::DataType::Custom(typ, filename) = r#type {
+            r#type = repomd::DataType::Custom(typ, format!("{sha}-{filename}.zst").into());
+        }
         let fd = inner.fd.into_inner()?;
         // TODO: don't hardcode href (esp when comp may be diff)
         let href = format!("repodata/{sha}-{type}.xml.zst").into();

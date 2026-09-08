@@ -113,6 +113,7 @@ impl UploadProcessor<'_> {
             self.check_csum(multipart, &csum).await?;
             // let sig = self.sign(&path)?;
             let frag = Self::parse_to_frag(&path, csum)?;
+            let path = path.strip_prefix(&self.dir).expect("rpm not in repodir");
             self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
             // self.out.push(serde_json::json!({
             //     "pkg": filename_str,
@@ -303,7 +304,7 @@ pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Re
     locker
         .read(&repo, async |hdl| {
             let Some(mgr) = &hdl.repo.sig else {
-                return Err(ApiError::Internal("no key for this repo".into()));
+                return Err(ApiError::NotFound);
             };
             mgr.public_armor().map_err(|e| ApiError::Internal(format!("pgp error: {e}")))
         })
@@ -439,6 +440,8 @@ pub async fn upl_md(
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
     let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
+        tokio::fs::create_dir_all(&hdl.repo.cache.repodata_dir).await?;
+        tokio::fs::create_dir_all(&hdl.repo.cache.cachedir).await?;
         hdl.repo.cache.update_custom_datatype(
             libsubatomic::DataType::Custom(md.into(), filename),
             &content,
@@ -475,9 +478,10 @@ mod test {
     use std::sync::Arc;
     use tower::util::ServiceExt;
 
-    use axum::{body::Body, extract::Path, http::Request};
+    use axum::extract::{Json, Path};
+    use axum::{body::Body, http::Request};
     use rust_multipart_rfc7578_2::client::multipart::{
-        Body as MultipartBody, BoundaryGenerator, Form as MultipartForm,
+        Body as MultipartBody, Form as MultipartForm,
     };
 
     type Pool = sqlx::Pool<sqlx::Postgres>;
@@ -546,10 +550,10 @@ mod test {
     }
 
     #[sqlx::test(fixtures("keys", "repos"))]
-    async fn upload_pkgs(pool: Pool) {
+    async fn upload_list_del_pkgs(pool: Pool) {
         const CSUM: &str = "bb6f1421400b7ac575d3b223f910b600990842a37b9f143fdd42380431165f77";
         let states = app(pool);
-        let States { app, cfg, .. } = states;
+        let States { app, cfg, locker, .. } = states;
         let mut form = MultipartForm::default();
         form.add_reader_2(
             "terra-release-44-4.noarch.rpm",
@@ -568,14 +572,22 @@ mod test {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         println!("{body}");
-        // let first = &body.get("added").unwrap().as_array().unwrap()[0];
-        // assert_eq!(
-        //     first.as_object().unwrap().get("pkg").unwrap().as_str().unwrap(),
-        //     "terra-release-44-4.noarch.rpm",
-        // );
         assert!(body.get("removed").unwrap().as_array().unwrap().is_empty());
         let path = cfg.storage_dir.join("rpmfission/terra-release-44-4.noarch.rpm");
-        assert!(std::fs::exists(path).unwrap());
+        assert!(std::fs::exists(&path).unwrap());
+        let rpms = vec!["terra-release-44-4.noarch.rpm".into()];
+        let ret = super::list_rpms(locker.clone(), Path("rpmfission".into())).await.unwrap().0;
+        assert_eq!(ret.as_array().unwrap().len(), 1);
+        assert_eq!(
+            ret.as_array().unwrap().first().unwrap().as_str().unwrap(),
+            "terra-release-44-4.noarch.rpm"
+        );
+        let ret =
+            super::del_rpms(locker, Path("rpmfission".into()), Json(super::DelRpmsReq { rpms }));
+        let ret = ret.await.unwrap().0;
+        println!("{ret:?}");
+        assert!(!std::fs::exists(&path).unwrap());
+        assert!(ret.get("not_found").unwrap().as_array().unwrap().is_empty());
     }
 
     #[sqlx::test(fixtures("keys", "repos"))]
@@ -629,5 +641,122 @@ qg38sG21+aKNUiFFHynSF64O
             libsubatomic::rpm::signature::pgp::Verifier::from_asc(&mgr.public_armor().unwrap())
                 .unwrap();
         rpmmeta.verify_signature(verifier).unwrap();
+    }
+
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn repo_key_management(pool: Pool) {
+        let states = app(pool);
+        let States { app, .. } = states;
+
+        let req = Request::get("/v1/repos/rpmfission/key")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let req = Request::put("/v1/repos/rpmfission/key")
+            .header("Authorization", AUTH)
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "id": "key2" }).to_string()))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 204);
+
+        let req = Request::get("/v1/repos/rpmfission/key")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 200);
+        let pubarmor = resp.into_body().collect().await.unwrap().to_bytes();
+        assert!(pubarmor.starts_with(b"-----BEGIN PGP PUBLIC KEY BLOCK-----"));
+
+        let req = Request::delete("/v1/repos/rpmfission/key")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 204);
+
+        let req = Request::get("/v1/repos/rpmfission/key")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn custom_metadata(pool: Pool) {
+        let states = app(pool);
+        let States { app, cfg, .. } = states;
+
+        // Upload custom metadata
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "my-custom.xml",
+            std::io::Cursor::new("<custom>data</custom>"),
+            Some("my-custom.xml".into()),
+            None,
+            vec![],
+        );
+        let req = Request::put("/v1/repos/rpmfission/md/mytype")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let status = resp.status();
+        assert_eq!(status, 204);
+
+        // Verify repomd.xml contains the new data type
+        let repomd_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
+        let content = std::fs::read_to_string(&repomd_path).unwrap();
+        assert!(content.contains(r#"<data type="mytype">"#));
+
+        // Delete custom metadata
+        let req = Request::delete("/v1/repos/rpmfission/md/mytype")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 204);
+
+        // Verify removed
+        let content = std::fs::read_to_string(repomd_path).unwrap();
+        assert!(!content.contains(r#"<data type="mytype">"#));
+    }
+
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn unknown_repo(pool: Pool) {
+        let states = app(pool);
+        let States { app, .. } = states;
+
+        let req = Request::get("/v1/repos/rpmcone/rpms")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 404);
+        // This endpoint doesn't exist (only list_repos). But for refresh, delete, etc.:
+        let req = Request::post("/v1/repos/nosuch/refresh")
+            .header("Authorization", AUTH)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[sqlx::test]
+    async fn invalid_jwt(pool: Pool) {
+        let states = app(pool);
+        let States { app, .. } = states;
+        let req = Request::get("/v1/repos")
+            .header("Authorization", "Bearer invalid")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 401);
     }
 }
