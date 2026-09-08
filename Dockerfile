@@ -1,14 +1,25 @@
-FROM ghcr.io/terrapkg/builder:f44
-ENV SERVER_HOST=localhost
-ENV SERVER_PORT=3000
+FROM ghcr.io/terrapkg/builder:f44 as terra
+WORKDIR /subatomic
+RUN dnf in -y gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)' rustup /usr/lib/rpm/rpmdeps
+RUN rustup-init --default-toolchain nightly -y -q
+COPY ./Cargo.lock ./Cargo.lock
+COPY ./Cargo.toml ./Cargo.toml
+COPY ./crates     ./crates
+COPY ./src        ./src/
+COPY ./migrations ./migrations
+COPY ./.sqlx      ./.sqlx
+RUN ZSTD_SYS_USE_PKG_CONFIG=1 cargo build --release -p subatomic
+RUN /usr/lib/rpm/rpmdeps --define="_use_internal_dependency_generator 1" --requires subatomic > deps.txt
+
+FROM registry.fedoraproject.org/fedora-minimal:44
+COPY --from=terra /subatomic/target/release/subatomic .
+COPY --from=terra /subatomic/deps.txt .
+# install dynamically linked libraries
+RUN dnf in -y --setopt=install_weak_deps=0 $(cat deps.txt)
 ENV DATABASE_URL=postgres://postgres:postgres@localhost:5432/subatomic
 ENV STORAGE_DIR=./storage/
 ENV CACHE_DIR=./cache/
 ENV BODY_LIMIT=10737418240
 ENV RUST_LOG=debug
-RUN dnf in -y gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)' rustup
-RUN rustup-init --default-toolchain nightly -y -q
-RUN --mount=type=bind,source=.,target=. \
-    PATH="$HOME/.cargo/bin:$PATH" cargo build --release
 EXPOSE $SERVER_PORT
-CMD ["./target/release/subatomic"]
+CMD ["./subatomic"]
