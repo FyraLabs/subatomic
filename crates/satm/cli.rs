@@ -5,6 +5,8 @@ use std::path::PathBuf;
 #[command(name = "satm")]
 /// Tool for interactive with subatomic servers and an alternative to `createrepo_c`.
 pub struct Cli {
+    #[clap(flatten)]
+    pub verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::WarnLevel>,
     #[command(subcommand)]
     pub command: Command,
 }

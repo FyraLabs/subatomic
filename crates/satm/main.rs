@@ -5,17 +5,35 @@ use color_eyre::eyre::bail;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod api_client;
+
 mod cli;
+
+pub const fn convert_filter(
+    filter: clap_verbosity_flag::log::LevelFilter,
+) -> tracing_subscriber::filter::LevelFilter {
+    use clap_verbosity_flag::log::LevelFilter;
+    match filter {
+        LevelFilter::Off => tracing_subscriber::filter::LevelFilter::OFF,
+        LevelFilter::Error => tracing_subscriber::filter::LevelFilter::ERROR,
+        LevelFilter::Warn => tracing_subscriber::filter::LevelFilter::WARN,
+        LevelFilter::Info => tracing_subscriber::filter::LevelFilter::INFO,
+        LevelFilter::Debug => tracing_subscriber::filter::LevelFilter::DEBUG,
+        LevelFilter::Trace => tracing_subscriber::filter::LevelFilter::TRACE,
+    }
+}
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     _ = dotenvy::dotenv();
 
-    tracing_subscriber::registry().with(fmt::layer()).with(EnvFilter::from_default_env()).init();
     color_eyre::install().expect("cannot install color_eyre");
+    let cli = cli::Cli::parse();
+    let sub = tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(convert_filter(cli.verbose.log_level_filter()))
+        .finish();
+    sub.with(fmt::layer()).with(EnvFilter::from_default_env()).init();
 
     tracing::debug!(ver = env!("CARGO_PKG_VERSION"), "satm");
-    let cli = cli::Cli::parse();
     match cli.command {
         cli::Command::Repo(cmd) => {
             let Some((url, token)) = (cmd.url.or_else(|| std::env::var("SUBATOMIC_API_URL").ok()))
