@@ -7,6 +7,8 @@ pub struct Config {
     #[serde(default = "defaults::_3000")]
     pub server_port: u16,
     pub database_url: String,
+    #[serde(default = "defaults::_32")]
+    pub db_max_conns: u32,
     pub jwt_secret: String,
     #[serde(default = "defaults::subatomic_repos")]
     pub storage_dir: PathBuf,
@@ -33,7 +35,7 @@ impl Config {
     pub fn check(&self) {
         if self.body_limit <= 1_073_741_824 {
             tracing::warn!("uploads > {} B are not accepted", self.body_limit);
-            tracing::warn!("we recommend setting $BODY_LIMIT to above 1 GiB");
+            tracing::warn!("$BODY_LIMIT > 1 GiB is recommended for large repositories");
         }
         assert!(!self.jwt_secret.is_empty(), "$JWT_SECRET is empty");
         assert!(!self.database_url.is_empty(), "$DATABASE_URL is empty");
@@ -47,6 +49,9 @@ mod defaults {
     /// Port used in subatomic v0.
     pub const fn _3000() -> u16 {
         3000
+    }
+    pub const fn _32() -> u32 {
+        32
     }
     pub fn subatomic_repos() -> std::path::PathBuf {
         std::path::PathBuf::from("./subatomic-repos/")

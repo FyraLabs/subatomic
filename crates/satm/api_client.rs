@@ -249,7 +249,7 @@ impl ApiClient {
         self.json(self.request_builder(reqwest::Method::GET, "/v1/keys")).await
     }
 
-    pub async fn get_key(&self, id: i32) -> Result<String> {
+    pub async fn get_key(&self, id: &str) -> Result<String> {
         self.text(self.request_builder(reqwest::Method::GET, &format!("/v1/keys/{id}"))).await
     }
 

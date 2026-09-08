@@ -107,7 +107,7 @@ async fn inner_main() {
     config.check();
     let config = Arc::new(config);
 
-    let pool = create_pool(&config.database_url).await.expect("cannot create pool");
+    let pool = create_pool(&config).await.expect("cannot create pool");
     let pool = Arc::new(pool);
 
     let locker = Arc::new(repohdl::Locker::new(Arc::clone(&pool), Arc::clone(&config)));

@@ -465,14 +465,15 @@ mod test {
         let cache_dir = tempfile::tempdir().expect("cache_dir");
         (
             Arc::new(crate::config::Config {
-                server_host: "".into(),
+                server_host: String::new(),
                 server_port: 0,
-                database_url: "".into(),
+                database_url: String::new(),
+                db_max_conns: 32,
                 jwt_secret: "cad4a3a28cfdb1a464e26e5851e6cd44a95fd8c57c117d294a9e8391e70274d2"
                     .into(),
                 storage_dir: storage_dir.path().to_owned(),
                 cache_dir: cache_dir.path().to_owned(),
-                body_limit: 10485760, // 10 MiB
+                body_limit: 10_485_760, // 10 MiB
             }),
             (storage_dir, cache_dir),
         )
