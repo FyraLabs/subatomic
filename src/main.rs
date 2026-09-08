@@ -9,7 +9,7 @@ pub mod error;
 pub mod repohdl;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use crate::config::Config;
 use crate::db::create_pool;
@@ -50,16 +50,12 @@ fn main() {
 
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
-    mainloop(&term);
-}
 
-fn mainloop(term: &Arc<AtomicBool>) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("cannot build tokio");
     let handle = runtime.spawn(inner_main());
-
     loop {
         if handle.is_finished() {
             tracing::info!("main finished");
@@ -108,6 +104,7 @@ pub fn app(
 
 async fn inner_main() {
     let config = Config::from_env().expect("cannot obtain config from env");
+    config.check();
     let config = Arc::new(config);
 
     let pool = create_pool(&config.database_url).await.expect("cannot create pool");

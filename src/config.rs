@@ -12,8 +12,25 @@ pub struct Config {
 }
 
 impl Config {
+    /// Populate a new [`Config`] from environment variables.
+    ///
+    /// # Errors
+    /// Missing environment variables cause an error.
     pub fn from_env() -> envy::Result<Self> {
         _ = dotenvy::dotenv();
         envy::from_env::<Self>()
+    }
+
+    /// Check if all configurations are valid.
+    ///
+    /// # Panics
+    /// The program panics if bad configurations are found.
+    pub fn check(&self) {
+        if self.body_limit < 1_073_741_824 {
+            tracing::warn!("uploads > {} B are not accepted", self.body_limit);
+            tracing::warn!("we recommend setting $BODY_LIMIT to above 1 GiB");
+        }
+        assert!(!self.jwt_secret.is_empty(), "$JWT_SECRET is empty");
+        assert!(!self.database_url.is_empty(), "$DATABASE_URL is empty");
     }
 }
