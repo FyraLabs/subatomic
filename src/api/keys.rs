@@ -72,14 +72,19 @@ pub async fn get_key(State(pool): DbState, Path(id): Path<String>) -> Result<Jso
     Ok(Json(GetKeyResp { userid: key.userid, public_armor }))
 }
 
-pub async fn del_key(State(pool): DbState, Path(id): Path<String>) -> Result<StatusCode> {
+pub async fn del_key(
+    State(pool): DbState,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, &'static str)> {
     // db has fk check, we don't need to modify locker as we are certain nobody is using the key
     let q = sqlx::query!("DELETE FROM keys WHERE id = $1", id);
-    if q.execute(&*pool).await?.rows_affected() == 0 {
-        Err(ApiError::NotFound)
-    } else {
-        Ok(StatusCode::NO_CONTENT)
+    let q = q.execute(&*pool).await;
+    if q.as_ref()
+        .is_err_and(|e| e.as_database_error().is_some_and(|e| e.is_foreign_key_violation()))
+    {
+        return Ok((StatusCode::CONFLICT, "the key is still in use (by another repo)"));
     }
+    Ok((if q?.rows_affected() == 0 { StatusCode::NOT_FOUND } else { StatusCode::NO_CONTENT }, ""))
 }
 
 #[cfg(test)]
@@ -123,13 +128,17 @@ mod test {
         assert_eq!(resp.userid, "key1 <k1@example.com>");
     }
 
-    #[sqlx::test(fixtures("keys"))]
+    #[sqlx::test(fixtures("keys", "repos"))]
     async fn del_key(pool: Pool) {
         let call = super::del_key(state(pool.clone()), Path("key2".into()));
-        assert!(call.await.unwrap().is_success());
-        let axum::Json(keys) = super::list_keys(state(pool)).await.unwrap();
+        assert_eq!(call.await.unwrap().0, super::StatusCode::NO_CONTENT);
+        let axum::Json(keys) = super::list_keys(state(pool.clone())).await.unwrap();
         assert_eq!(keys.len(), 1);
         assert_eq!(keys[0].id, "key1");
         assert_eq!(keys[0].userid, "key1 <k1@example.com>");
+        let call = super::del_key(state(pool.clone()), Path("key2".into()));
+        assert_eq!(call.await.unwrap().0, super::StatusCode::NOT_FOUND);
+        let call = super::del_key(state(pool.clone()), Path("key1".into()));
+        assert_eq!(call.await.unwrap().0, super::StatusCode::CONFLICT);
     }
 }

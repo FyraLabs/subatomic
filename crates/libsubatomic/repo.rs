@@ -44,7 +44,7 @@ impl Repo {
     #[deprecated = "use self.cache.del_custom_datatype()"]
     pub fn del_comps(&self) -> Res<bool> {
         const FILENAME_MATCH: &[u8] = b"-comps.xml";
-        if self.cache.del_comps()?.is_none() {
+        if self.cache.del_custom_datatype("group")?.is_none() {
             return Ok(false);
         }
         if let Some(f) = std::fs::read_dir(&self.cache.repodata_dir)?

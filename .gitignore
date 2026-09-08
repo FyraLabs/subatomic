@@ -3,3 +3,4 @@ test
 .subatomic-cache
 .env
 test/
+rustc-ice-*.txt

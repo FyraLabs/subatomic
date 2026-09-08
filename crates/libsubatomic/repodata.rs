@@ -38,7 +38,10 @@ pub type MarkDb =
 pub struct RepoCache {
     pub repo: String,
     pub cachedir: std::path::PathBuf,
+    /// Path to the `repodata` directory.
     pub repodata_dir: std::path::PathBuf,
+    /// Path prefix used in xml contents. This is usually `repodata/`.
+    pub prefix: std::path::PathBuf,
     pub env: heed::Env<heed::WithoutTls>,
     pub zstd_level: i32 = 0,
     pub zstd_multi: u32 = 0,
@@ -120,7 +123,8 @@ impl RepoCache {
             repo: repo.into(),
             env,
             cachedir,
-            repodata_dir, // TODO: don't hardcode
+            repodata_dir,                                 // TODO: don't hardcode
+            prefix: std::path::PathBuf::from("repodata"), // TODO: don't hardcode
             ..
         })
     }
@@ -196,7 +200,7 @@ impl RepoCache {
         let temppath = self.repodata_dir.join(format!("{}.zst", dt.as_str()));
         let mut w = self.writer(std::fs::File::create_buffered(&temppath)?)?;
         w.write_all(buf)?;
-        let (data, _) = w.into_data(dt)?;
+        let (data, _) = w.into_data(dt, &self.prefix)?;
         self.write_custom_datatype(&data)?;
         let path = self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
         std::fs::rename(&temppath, &path)?;
@@ -217,15 +221,6 @@ impl RepoCache {
         let comp = RepoWriterComp::Zstd(comp);
         let osum = RepoWriterCsum::Sha256(sha2::Sha256::new());
         Ok(crate::repodata::RepoWriter { comp, osum, .. })
-    }
-
-    #[deprecated = "use read_custom_datatype instead"]
-    pub fn read_comps(&self) -> heed::Result<Option<repomd::Data>> {
-        self.read_custom_datatype("group")
-    }
-    #[deprecated = "use del_custom_datatype instead"]
-    pub fn del_comps(&self) -> heed::Result<Option<repomd::Data>> {
-        self.del_custom_datatype("group")
     }
 
     /// Insert a batch of already-serialised fragments directly into the split DBs.
@@ -438,7 +433,7 @@ impl RepoCache {
             w.write_all(frag?)?;
         }
         self.write_stage1_postxml(&dt, &mut w)?;
-        Ok(w.into_data(dt).map(|x| x.0)?)
+        Ok(w.into_data(dt, &self.prefix).map(|x| x.0)?)
     }
 
     /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
@@ -609,6 +604,7 @@ impl RepoWriter<'_> {
     pub fn into_data(
         self,
         mut r#type: repomd::DataType,
+        prefix: &Path,
     ) -> std::io::Result<(repomd::Data, std::fs::File)> {
         let inner = match self.comp {
             RepoWriterComp::Zstd(encoder) => encoder.finish()?,
@@ -619,7 +615,7 @@ impl RepoWriter<'_> {
         }
         let fd = inner.fd.into_inner()?;
         // TODO: don't hardcode href (esp when comp may be diff)
-        let href = format!("repodata/{sha}-{type}.xml.zst").into();
+        let href = prefix.join(format!("{sha}-{type}.xml.zst")).to_string_lossy().into();
         Ok((
             repomd::Data {
                 location: repomd::Location { href },

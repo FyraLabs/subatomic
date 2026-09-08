@@ -83,7 +83,7 @@ pub async fn upload_pkgs(
     w.await?.ok_or_else(|| ApiError::NotFound)??;
     Ok(Json(serde_json::json!({
         // "added": processor.out,
-        "removed": processor.removed,
+        "removed": processor.removed.into_iter().map(|bs| String::from_utf8_lossy(bs).to_string()).collect_vec(),
     })))
 }
 
@@ -111,7 +111,6 @@ impl UploadProcessor<'_> {
             // let filename_str = (path.file_name().expect("filename").to_str())
             //     .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
             self.check_csum(multipart, &csum).await?;
-            // let sig = self.sign(&path)?;
             let frag = Self::parse_to_frag(&path, csum)?;
             let path = path.strip_prefix(&self.dir).expect("rpm not in repodir");
             self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
@@ -136,37 +135,6 @@ impl UploadProcessor<'_> {
             return Err(ApiError::BadRequest(format!("calculated sha256: {csum}")));
         }
         Ok(())
-    }
-
-    fn sign(&self, path: &std::path::PathBuf) -> Result<Option<Vec<u8>>> {
-        let Some(mgr) = self.sig.as_ref() else { return Ok(None) };
-        let sig = Self::get_sig(path, mgr)?;
-        let Err(e) = libsubatomic::rpm::Package::apply_signature_in_place(path, sig.clone()) else {
-            return Ok(Some(sig));
-        };
-        let libsubatomic::rpm::Error::InsufficientReservedSpace { .. } = e else {
-            return Err(ApiError::Internal(format!("cannot sign pkg: {e}")));
-        };
-        tracing::debug!("cannot apply signature in place, opening full file");
-        let mut p = libsubatomic::prelude::rpm::Package::open(path)
-            .map_err(|e| ApiError::Internal(format!("cannot open rpm: {e}")))?;
-        p.apply_signature(sig.clone())
-            .map_err(|e| ApiError::Internal(format!("cannot apply signature: {e}")))?;
-        p.write_file(path)
-            .map_err(|e| ApiError::Internal(format!("cannot write file with sig: {e}")))?;
-        Ok(Some(sig))
-    }
-
-    fn get_sig(path: &std::path::PathBuf, mgr: &libsubatomic::sig::Mgr) -> Result<Vec<u8>> {
-        let fd = std::fs::File::open(path)?;
-        let mut bufr = std::io::BufReader::new(fd);
-        let mut metadata = libsubatomic::rpm::PackageMetadata::parse(&mut bufr)
-            .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
-        let metadata: &mut libsubatomic::rpm::PackageMetadata = &mut metadata;
-        tracing::debug!("signing");
-        let sig =
-            mgr.sign_rpm(metadata).map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
-        Ok(sig)
     }
 
     async fn receive_rpm(
@@ -562,7 +530,29 @@ mod test {
             None,
             vec![],
         );
-        form.add_text("a", CSUM);
+        form.add_text("", CSUM);
+        let req = Request::post("/v1/repos/rpmfission")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        println!("{body}");
+        assert!(body.get("removed").unwrap().as_array().unwrap().is_empty());
+        let old = cfg.storage_dir.join("rpmfission/terra-release-44-4.noarch.rpm");
+        assert!(std::fs::exists(&old).unwrap());
+
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "terra-release-44-5.noarch.rpm",
+            &include_bytes!("../../random-rpm-examples/terra-release-44-4.noarch.rpm")[..],
+            Some("terra-release-44-5.noarch.rpm".into()),
+            None,
+            vec![],
+        );
+        form.add_text("", CSUM);
         let req = Request::post("/v1/repos/rpmfission")
             .header("Authorization", AUTH)
             .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
@@ -572,21 +562,24 @@ mod test {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         println!("{body}");
-        assert!(body.get("removed").unwrap().as_array().unwrap().is_empty());
-        let path = cfg.storage_dir.join("rpmfission/terra-release-44-4.noarch.rpm");
-        assert!(std::fs::exists(&path).unwrap());
-        let rpms = vec!["terra-release-44-4.noarch.rpm".into()];
+        let removed = body.get("removed").unwrap().as_array().unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed.first().unwrap().as_str().unwrap(), "terra-release-44-4.noarch.rpm");
+        let new = cfg.storage_dir.join("rpmfission/terra-release-44-5.noarch.rpm");
+        assert!(!old.exists());
+        assert!(new.exists());
+
         let ret = super::list_rpms(locker.clone(), Path("rpmfission".into())).await.unwrap().0;
-        assert_eq!(ret.as_array().unwrap().len(), 1);
-        assert_eq!(
-            ret.as_array().unwrap().first().unwrap().as_str().unwrap(),
-            "terra-release-44-4.noarch.rpm"
-        );
+        let rpms = ret.as_array().unwrap();
+        assert_eq!(rpms.len(), 1);
+        assert_eq!(rpms.first().unwrap().as_str().unwrap(), "terra-release-44-5.noarch.rpm");
+
+        let rpms = vec!["terra-release-44-5.noarch.rpm".into()];
         let ret =
             super::del_rpms(locker, Path("rpmfission".into()), Json(super::DelRpmsReq { rpms }));
         let ret = ret.await.unwrap().0;
         println!("{ret:?}");
-        assert!(!std::fs::exists(&path).unwrap());
+        assert!(!new.exists());
         assert!(ret.get("not_found").unwrap().as_array().unwrap().is_empty());
     }
 
@@ -692,7 +685,6 @@ qg38sG21+aKNUiFFHynSF64O
         let states = app(pool);
         let States { app, cfg, .. } = states;
 
-        // Upload custom metadata
         let mut form = MultipartForm::default();
         form.add_reader_2(
             "my-custom.xml",
@@ -710,12 +702,10 @@ qg38sG21+aKNUiFFHynSF64O
         let status = resp.status();
         assert_eq!(status, 204);
 
-        // Verify repomd.xml contains the new data type
         let repomd_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
         let content = std::fs::read_to_string(&repomd_path).unwrap();
         assert!(content.contains(r#"<data type="mytype">"#));
 
-        // Delete custom metadata
         let req = Request::delete("/v1/repos/rpmfission/md/mytype")
             .header("Authorization", AUTH)
             .body(Body::empty())
@@ -723,9 +713,21 @@ qg38sG21+aKNUiFFHynSF64O
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), 204);
 
-        // Verify removed
         let content = std::fs::read_to_string(repomd_path).unwrap();
         assert!(!content.contains(r#"<data type="mytype">"#));
+    }
+
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn del_repos(pool: Pool) {
+        let states = app(pool);
+        let States { cfg, locker, .. } = states;
+        std::fs::create_dir_all(cfg.storage_dir.join("rpmball")).unwrap();
+        assert_eq!(
+            super::delete_repo(locker.clone(), Path("rpmball".into())).await.unwrap(),
+            super::StatusCode::NO_CONTENT
+        );
+        assert!(!cfg.storage_dir.join("rpmball").exists());
+        assert!(locker.read("rpmball", async |_| unreachable!()).await.unwrap().is_none());
     }
 
     #[sqlx::test(fixtures("keys", "repos"))]
@@ -739,7 +741,6 @@ qg38sG21+aKNUiFFHynSF64O
             .unwrap();
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), 404);
-        // This endpoint doesn't exist (only list_repos). But for refresh, delete, etc.:
         let req = Request::post("/v1/repos/nosuch/refresh")
             .header("Authorization", AUTH)
             .body(Body::empty())
@@ -756,6 +757,9 @@ qg38sG21+aKNUiFFHynSF64O
             .header("Authorization", "Bearer invalid")
             .body(Body::empty())
             .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), 401);
+        let req = Request::get("/v1/repos").body(Body::empty()).unwrap();
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), 401);
     }

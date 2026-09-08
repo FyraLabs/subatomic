@@ -43,7 +43,7 @@ impl Locker {
         let ret = f(self.repolocks.read().await.get(repo).unwrap().write().await).await;
         // TODO: handle error properly
         let mut w = self.repolocks.write().await;
-        let (key, repohdl) = w.remove_entry(repo).unwrap();
+        let (_ /* key */, repohdl) = w.remove_entry(repo).unwrap();
         let mut repohdl = repohdl.into_inner();
         repohdl.repo = repohdl.repo.compact_cache().expect("cannot compact cache");
         // NOTE: I feel like always keeping this in the cache makes chances for corruption higher…
@@ -54,19 +54,17 @@ impl Locker {
     }
     #[tracing::instrument(skip(self))]
     pub async fn del(&self, repo: &str) -> Result<bool> {
-        let rows_affected = sqlx::query("DELETE FROM repos WHERE name = $1")
-            .bind(repo)
-            .execute(&*self.db)
-            .await?
-            .rows_affected();
-        if rows_affected == 0 {
+        let hdl = self.repolocks.write().await.remove(repo);
+        let hdl = if let Some(hdl) = hdl {
+            hdl.into_inner()
+        } else if let Some(hdl) = RepoHdl::new(&self.db, &self.cfg, repo).await? {
+            hdl
+        } else {
             return Ok(false);
-        }
-
-        let Some(hdl) = self.repolocks.write().await.remove(repo) else {
-            return Ok(true);
         };
-        hdl.write().await.delete_physical(Arc::clone(&self.cfg)).await?;
+        sqlx::query("DELETE FROM repos WHERE name = $1").bind(repo).execute(&*self.db).await?;
+
+        hdl.delete_physical(Arc::clone(&self.cfg)).await?;
         Ok(true)
     }
 }
@@ -110,7 +108,7 @@ impl RepoHdl {
     }
 
     pub async fn delete_physical(&self, config: Arc<Config>) -> Result<()> {
-        let path = std::path::Path::new(&config.storage_dir).join(&*self.repo.cache.repo);
+        let path = config.storage_dir.join(&*self.repo.cache.repo);
         if path.exists() {
             tokio::fs::remove_dir_all(path).await?;
         }

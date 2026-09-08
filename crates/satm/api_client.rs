@@ -182,6 +182,7 @@ impl ApiClient {
         self.void(self.request_builder(reqwest::Method::DELETE, &format!("/v1/repos/{name}"))).await
     }
 
+    // FIXME: use new endpoint & support more datatypes
     pub async fn upload_comps<P: AsRef<Path> + Send + Sync>(
         &self,
         name: &str,
