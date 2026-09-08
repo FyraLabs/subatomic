@@ -73,7 +73,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cargo/bin
             target
           key: ${{ runner.os }}-cargo-nightly-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: |
@@ -141,7 +140,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cargo/bin
             target
           key: ${{ runner.os }}-cargo-nightly-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: |
