@@ -1,4 +1,4 @@
-FROM ghcr.io/terrapkg/builder:f44 as terra
+FROM ghcr.io/terrapkg/builder:f44 AS terra
 WORKDIR /subatomic
 RUN dnf in -y gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)' rustup /usr/lib/rpm/rpmdeps
 RUN rustup-init --default-toolchain nightly -y -q
@@ -8,7 +8,7 @@ COPY ./crates     ./crates
 COPY ./src        ./src/
 COPY ./migrations ./migrations
 COPY ./.sqlx      ./.sqlx
-RUN ZSTD_SYS_USE_PKG_CONFIG=1 cargo build --release -p subatomic
+RUN PATH="$HOME/.cargo/bin:$PATH" ZSTD_SYS_USE_PKG_CONFIG=1 cargo build --release -p subatomic
 RUN /usr/lib/rpm/rpmdeps --define="_use_internal_dependency_generator 1" --requires subatomic > deps.txt
 
 FROM registry.fedoraproject.org/fedora-minimal:44
