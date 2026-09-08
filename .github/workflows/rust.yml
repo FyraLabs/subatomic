@@ -70,7 +70,7 @@ jobs:
       - name: Install required cargo
         run: |
           cargo install clippy-sarif sarif-fmt
-          cargo install sqlx-cli --no-default-features -F native-tls,postgres
+          cargo install sqlx-cli --version 0.9.0 --locked --no-default-features -F native-tls,postgres
 
       - name: Perform database migration
         run: cargo sqlx migrate run
@@ -130,7 +130,7 @@ jobs:
         run: cargo fetch --locked
 
       - name: Install required cargo
-        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+        run: cargo install sqlx-cli --version 0.9.0 --locked --no-default-features --features native-tls,postgres
 
       - name: Perform database migration
         run: cargo sqlx migrate run
