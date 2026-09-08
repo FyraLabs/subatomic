@@ -12,6 +12,7 @@ jobs:
     uses: FyraLabs/actions/.github/workflows/docker.yml@933fab053fd1ad769efa7f821e1760bd45266cce
     secrets: inherit
     permissions:
+      contents: read
       packages: write
       id-token: write
     with:
