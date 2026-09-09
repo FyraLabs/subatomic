@@ -3,7 +3,6 @@ members = ["crates/libsubatomic", "crates/satm", "crates/kiritan"]
 
 # these are for performance optimizations, based on https://nnethercote.github.io/perf-book/build-configuration.html#optimization-level
 # these options can take a while to compile (up to 5-10 minutes), so its really only necessary for production binaries.
-# also look in .cargo/config.toml for info on microarchitecture optimizations.
 [profile.release-optimized]
 inherits = "release"
 
@@ -31,13 +30,16 @@ rust-multipart-rfc7578_2 = "0.9.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 signal-hook = "0.4.4"
-sqlx = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = "0.7.19"
 tracing = { workspace = true }
 tracing-logfmt = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dependencies.sqlx]
+version = "0.9.0"
+features = ["postgres", "runtime-tokio", "tls-native-tls", "migrate"]
 
 [workspace.dependencies]
 crossbeam-channel = "0.5.16"
@@ -48,17 +50,19 @@ pgp = "0.20.0"
 rayon = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sqlx = { version = "0.9.0", features = ["postgres", "runtime-tokio"] }
 thiserror = "2.0.19"
-tokio = { version = "1.53.1", features = ["full"] }
 tracing = "0.1.44"
 tracing-logfmt = "0.3.7"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
+[workspace.dependencies.tokio]
+version = "1.53.1"
+default-features = false
+features = ["rt-multi-thread"]
+
 [dev-dependencies]
 http-body-util = "0.1.5"
 rust-multipart-rfc7578_2 = "0.9.0"
-sqlx = { workspace = true, features = ["migrate"] }
 tempfile = "3.27.0"
 tower = "0.5.3"
 
