@@ -65,15 +65,21 @@ pub async fn upload_pkgs(
     let r = locker.read(&repo, async |hdl| {
         (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
     });
-    let (dir, keys, sig) = r.await?.ok_or(ApiError::NotFound)?;
+    let (dir, keys, _sig) = r.await?.ok_or(ApiError::NotFound)?;
     let keys = keys.map_err(|e| ApiError::Internal(format!("can't get cache keys: {e}")))?;
     tokio::fs::create_dir_all(&dir).await?;
 
     let parsed_keys = keys
         .iter()
-        .map(|k| (k, libsubatomic::pkg::parse_filename(k).expect("can't parse cache keys")))
-        .collect_vec();
-    let mut processor = UploadProcessor { dir, parsed_keys, sig, ..UploadProcessor::default() };
+        .map(|k| {
+            Result::<_, ApiError>::Ok((
+                k,
+                libsubatomic::pkg::parse_filename(k)
+                    .ok_or_else(|| ApiError::Internal("can't parse cache keys".to_owned()))?,
+            ))
+        })
+        .try_collect()?;
+    let mut processor = UploadProcessor { dir, parsed_keys, ..UploadProcessor::default() };
     processor.receive_rpms(&mut multipart).await?;
     let w = locker.write(&repo, async |hdl| try bikeshed Res<_> {
         hdl.repo.del(&processor.removed)?;
@@ -92,9 +98,9 @@ struct UploadProcessor<'k> {
     dir: std::path::PathBuf,
     parsed_keys: Vec<(&'k Vec<u8>, libsubatomic::pkg::ParsePathOutput<'k>)>,
     removed: Vec<&'k [u8]>,
-    out: Vec<serde_json::Value>,
+    // out: Vec<serde_json::Value>,
     pkgs: Vec<(Vec<u8>, libsubatomic::repodata::FragEph)>,
-    sig: Option<libsubatomic::sig::Mgr>,
+    // sig: Option<libsubatomic::sig::Mgr>,
 }
 
 struct ReceiveRpmOut {
