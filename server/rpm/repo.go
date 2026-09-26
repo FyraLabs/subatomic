@@ -8,9 +8,11 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/tetsudou"
+	"github.com/getsentry/sentry-go"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 
@@ -20,11 +22,6 @@ import (
 )
 
 var logger = log.With(logging.Logger, "module", "rpm")
-
-type MRepoBatchFile struct {
-	AppStreamData MRepoCBatchData `ini:"appstream"`
-	Icons         MRepoCBatchData `ini:"appstream-icons"`
-}
 
 // TOML struct for modifyrepo_c batch scripts
 //
@@ -61,6 +58,13 @@ func UpdateRepo(repoPath string) error {
 
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
 
+	// createrepo_c preserves additional metadata during --update and fails if a
+	// referenced AppStream payload has disappeared. Remove the records first;
+	// fresh AppStream metadata is added again after the repository update.
+	if err := removeRepoAppStream(repoPath); err != nil {
+		return err
+	}
+
 	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -95,15 +99,49 @@ func UpdateRepo(repoPath string) error {
 			return err
 		}
 
-		if err := ModifyRepoAppStream(repoPath, appstreamDir); err != nil {
-			level.Error(logger).Log("msg", "failed to modify repo appstream, failing silently", "error_msg", err.Error())
+		modified, err := modifyRepoAppStream(repoPath, appstreamDir)
+		if err != nil {
+			reportAppStreamWarning("failed to modify repo appstream; continuing without refreshed appstream metadata", repoPath, err.Error())
+		} else if modified {
+			level.Info(logger).Log("msg", "modified repo appstream metadata successfully")
 		}
-		
-		level.Info(logger).Log("msg", "modified repo appstream metadata successfully")
 	}
 
 	if err := writeTetsudouMetadata(repoPath); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func reportAppStreamWarning(message string, repoPath string, detail string) {
+	level.Warn(logger).Log("msg", message, "repo", repoPath, "detail", detail)
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetLevel(sentry.LevelWarning)
+		scope.SetTag("module", "rpm")
+		scope.SetContext("appstream", map[string]interface{}{
+			"repo":   repoPath,
+			"detail": detail,
+		})
+		sentry.CaptureMessage(message)
+	})
+}
+
+func removeRepoAppStream(repoPath string) error {
+	repodataDir := path.Join(repoPath, "repodata")
+	if exists, err := fileExists(path.Join(repodataDir, "repomd.xml")); err != nil || !exists {
+		return err
+	}
+
+	for _, metadataType := range []string{"appstream", "appstream-icons"} {
+		flags := []string{"--remove", metadataType, repodataDir}
+		output, err := exec.Command("modifyrepo_c", flags...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("modifyrepo_c returned non-zero exit code while removing %s with output %q: %w", metadataType, string(output), err)
+		}
+		if warning := strings.TrimSpace(string(output)); warning != "" && !strings.Contains(warning, "doesn't exist in repomd.xml") {
+			reportAppStreamWarning("modifyrepo_c warned while removing appstream metadata", repoPath, warning)
+		}
 	}
 
 	return nil
@@ -169,21 +207,32 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	iconsConfig.Type = "appstream-icons"
 	iconsConfig.NewName = "appstream-icons-64x64.tar"
 
-	repoBatch := MRepoBatchFile{
-		// AppStreamData: appstreamConfig,
-		// Icons:         iconsConfig,
-	}
-	if _, err := os.Stat(iconsFile); err == nil {
-		repoBatch.Icons = iconsConfig
-	}
-
-	if _, err := os.Stat(appstreamFile); err == nil {
-		repoBatch.AppStreamData = appstreamConfig
-	}
 	ini.PrettyFormat = false
-
 	inifile := ini.Empty()
-	inifile.ReflectFrom(&repoBatch)
+
+	if exists, err := fileExists(iconsFile); err != nil {
+		return nil, err
+	} else if exists {
+		section, err := inifile.NewSection("appstream-icons")
+		if err != nil {
+			return nil, err
+		}
+		if err := section.ReflectFrom(&iconsConfig); err != nil {
+			return nil, err
+		}
+	}
+
+	if exists, err := fileExists(appstreamFile); err != nil {
+		return nil, err
+	} else if exists {
+		section, err := inifile.NewSection("appstream")
+		if err != nil {
+			return nil, err
+		}
+		if err := section.ReflectFrom(&appstreamConfig); err != nil {
+			return nil, err
+		}
+	}
 
 	configFileName := fmt.Sprintf("%s-mrepoc.ini", repoName)
 	configPath := path.Join("/tmp", configFileName)
@@ -195,38 +244,74 @@ func MrepoCConfig(repoPath string, appstreamPath string) (*string, error) {
 	return &configPath, nil
 }
 
+func fileExists(filePath string) (bool, error) {
+	_, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func appStreamMetadataPaths(repoPath string, appstreamPath string) []string {
+	repoName := path.Base(repoPath)
+	appstreamDir := path.Join(appstreamPath, repoName, "latest/appstream")
+	return []string{
+		path.Join(appstreamDir, fmt.Sprintf("%s.xml.gz", repoName)),
+		path.Join(appstreamDir, fmt.Sprintf("%s-icons-64x64.tar.gz", repoName)),
+	}
+}
+
 func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
-	level.Debug(logger).Log("msg", "Generating mrepo_c config")
-	configPath, err := MrepoCConfig(repoPath, appstreamPath)
-	if err != nil {
-		return err
+	_, err := modifyRepoAppStream(repoPath, appstreamPath)
+	return err
+}
+
+func modifyRepoAppStream(repoPath string, appstreamPath string) (bool, error) {
+	paths := appStreamMetadataPaths(repoPath, appstreamPath)
+	metadata := []struct {
+		filePath string
+		dataType string
+		newName  string
+	}{
+		{filePath: paths[0], dataType: "appstream", newName: "appstream.xml"},
+		{filePath: paths[1], dataType: "appstream-icons", newName: "appstream-icons-64x64.tar"},
 	}
 
-	level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "configPath", *configPath)
-
-	// log("Using mrepo_c config at", *configPath)
+	modified := false
+	var missingMetadata []string
 	repodataDir := path.Join(repoPath, "repodata")
-	flags := []string{"-f", *configPath, repodataDir}
+	for _, item := range metadata {
+		exists, err := fileExists(item.filePath)
+		if err != nil {
+			return false, err
+		}
+		if !exists {
+			missingMetadata = append(missingMetadata, item.filePath)
+			continue
+		}
 
-	if _, err := exec.Command("modifyrepo_c", flags...).Output(); err != nil {
-		level.Error(logger).Log("msg", "modifyrepo_c failed", "error_msg", err)
-		return err
+		flags := []string{
+			"--zck",
+			"--mdtype", item.dataType,
+			"--new-name", item.newName,
+			item.filePath,
+			repodataDir,
+		}
+		level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "metadata_path", item.filePath)
+		output, err := exec.Command("modifyrepo_c", flags...).CombinedOutput()
+		if err != nil {
+			return modified, fmt.Errorf("modifyrepo_c returned non-zero exit code while adding %s with output %q: %w", item.dataType, string(output), err)
+		}
+		if warning := strings.TrimSpace(string(output)); warning != "" {
+			reportAppStreamWarning("modifyrepo_c warned while adding appstream metadata", repoPath, warning)
+		}
+		modified = true
 	}
 
-	level.Debug(logger).Log("msg", "Modified repo with mrepo_c successfully")
-	defer func() {
-		level.Debug(logger).Log("msg", "Config file contents", "contents", func() string {
-					b, err := os.ReadFile(*configPath)
-					if err != nil {
-						return fmt.Sprintf("error reading config file: %v", err)
-					}
-					return string(b)
-				}())
-		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
-		os.Remove(*configPath)
-
-	}()
-	return nil
+	if len(missingMetadata) > 0 {
+		reportAppStreamWarning("appstream source metadata does not exist; skipping missing files", repoPath, strings.Join(missingMetadata, ","))
+	}
+	return modified, nil
 }
 
 func AddRpmToRepo(repoPath string, rpmFile io.ReadSeeker) error {
