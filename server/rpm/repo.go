@@ -267,50 +267,51 @@ func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
 }
 
 func modifyRepoAppStream(repoPath string, appstreamPath string) (bool, error) {
-	hasMetadata := false
+	paths := appStreamMetadataPaths(repoPath, appstreamPath)
+	metadata := []struct {
+		filePath string
+		dataType string
+		newName  string
+	}{
+		{filePath: paths[0], dataType: "appstream", newName: "appstream.xml"},
+		{filePath: paths[1], dataType: "appstream-icons", newName: "appstream-icons-64x64.tar"},
+	}
+
+	modified := false
 	var missingMetadata []string
-	for _, metadataPath := range appStreamMetadataPaths(repoPath, appstreamPath) {
-		exists, err := fileExists(metadataPath)
+	repodataDir := path.Join(repoPath, "repodata")
+	for _, item := range metadata {
+		exists, err := fileExists(item.filePath)
 		if err != nil {
 			return false, err
 		}
 		if !exists {
-			missingMetadata = append(missingMetadata, metadataPath)
+			missingMetadata = append(missingMetadata, item.filePath)
 			continue
 		}
-		hasMetadata = true
+
+		flags := []string{
+			"--zck",
+			"--mdtype", item.dataType,
+			"--new-name", item.newName,
+			item.filePath,
+			repodataDir,
+		}
+		level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "metadata_path", item.filePath)
+		output, err := exec.Command("modifyrepo_c", flags...).CombinedOutput()
+		if err != nil {
+			return modified, fmt.Errorf("modifyrepo_c returned non-zero exit code while adding %s with output %q: %w", item.dataType, string(output), err)
+		}
+		if warning := strings.TrimSpace(string(output)); warning != "" {
+			reportAppStreamWarning("modifyrepo_c warned while adding appstream metadata", repoPath, warning)
+		}
+		modified = true
 	}
+
 	if len(missingMetadata) > 0 {
 		reportAppStreamWarning("appstream source metadata does not exist; skipping missing files", repoPath, strings.Join(missingMetadata, ","))
 	}
-	if !hasMetadata {
-		return false, nil
-	}
-
-	level.Debug(logger).Log("msg", "Generating mrepo_c config")
-	configPath, err := MrepoCConfig(repoPath, appstreamPath)
-	if err != nil {
-		return false, err
-	}
-	defer func() {
-		level.Debug(logger).Log("msg", "Removing temporary mrepo_c config file", "configPath", *configPath)
-		_ = os.Remove(*configPath)
-	}()
-
-	level.Debug(logger).Log("msg", "Modifying repo with mrepo_c", "configPath", *configPath)
-	repodataDir := path.Join(repoPath, "repodata")
-	flags := []string{"-f", *configPath, repodataDir}
-
-	output, err := exec.Command("modifyrepo_c", flags...).CombinedOutput()
-	if err != nil {
-		return false, fmt.Errorf("modifyrepo_c returned non-zero exit code with output %q: %w", string(output), err)
-	}
-	if warning := strings.TrimSpace(string(output)); warning != "" {
-		reportAppStreamWarning("modifyrepo_c warned while adding appstream metadata", repoPath, warning)
-	}
-
-	level.Debug(logger).Log("msg", "Modified repo with mrepo_c successfully")
-	return true, nil
+	return modified, nil
 }
 
 func AddRpmToRepo(repoPath string, rpmFile io.ReadSeeker) error {
