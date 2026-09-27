@@ -54,36 +54,48 @@ func CreateRepo(repoPath string) error {
 	return nil
 }
 
-func UpdateRepo(repoPath string) error {
+func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
+	repoPath = filepath.Clean(repoPath)
+	liveRepodata := path.Join(repoPath, "repodata")
 
-	flags := []string{"--update", "--zck", "--xz", "--local-sqlite"}
-
-	// createrepo_c preserves additional metadata during --update and fails if a
-	// referenced AppStream payload has disappeared. Remove the records first;
-	// fresh AppStream metadata is added again after the repository update.
-	if err := removeRepoAppStream(repoPath); err != nil {
+	stagingPath := path.Join(path.Dir(repoPath), "."+path.Base(repoPath)+".staging")
+	stagingRepodata := path.Join(stagingPath, "repodata")
+	if err := os.RemoveAll(stagingPath); err != nil {
 		return err
 	}
-
-	_, err := os.Stat(path.Join(repoPath, "comps.xml"))
-	if err != nil && !os.IsNotExist(err) {
+	if err := os.MkdirAll(stagingPath, os.ModePerm); err != nil {
 		return err
 	}
+	defer os.RemoveAll(stagingPath)
 
-	if err == nil {
-		flags = append(flags, "--groupfile", "comps.xml")
+	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
+
+	if exists, err := fileExists(path.Join(liveRepodata, "repomd.xml")); err != nil {
+		return err
+	} else if exists {
+		if err := os.CopyFS(stagingRepodata, os.DirFS(liveRepodata)); err != nil {
+			return err
+		}
+
+		if err := removeRepoAppStream(repoPath, stagingRepodata); err != nil {
+			return err
+		}
+	}
+
+	flags := []string{"--update", "--zck", "--xz", "--local-sqlite", "--outputdir", stagingPath}
+
+	compsPath := path.Join(repoPath, "comps.xml")
+	if exists, err := fileExists(compsPath); err != nil {
+		return err
+	} else if exists {
+		flags = append(flags, "--groupfile", compsPath)
 	}
 
 	flags = append(flags, repoPath)
 
-	// This will only remove something if the directory was in a broken state before
-	// Callers of UpdateRepo are expected to lock calls, so we make the assumption this is safe
-	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
-
 	level.Info(logger).Log("msg", "running createrepo_c", "flags", flags)
 	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
 		if err, ok := err.(*exec.ExitError); ok {
-			_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
 			return fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
 		}
 
@@ -99,7 +111,7 @@ func UpdateRepo(repoPath string) error {
 			return err
 		}
 
-		modified, err := modifyRepoAppStream(repoPath, appstreamDir)
+		modified, err := modifyRepoAppStream(repoPath, stagingRepodata, appstreamDir)
 		if err != nil {
 			reportAppStreamWarning("failed to modify repo appstream; continuing without refreshed appstream metadata", repoPath, err.Error())
 		} else if modified {
@@ -107,7 +119,26 @@ func UpdateRepo(repoPath string) error {
 		}
 	}
 
-	if err := writeTetsudouMetadata(repoPath); err != nil {
+	if err := writeTetsudouMetadata(stagingPath); err != nil {
+		return err
+	}
+
+	if ring != nil {
+		if err := SignRepo(stagingPath, ring); err != nil {
+			return err
+		}
+	}
+
+	return swapRepodata(liveRepodata, stagingRepodata, path.Join(stagingPath, "repodata.old"))
+}
+
+func swapRepodata(liveRepodata string, stagingRepodata string, oldRepodata string) error {
+	if err := os.Rename(liveRepodata, oldRepodata); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.Rename(stagingRepodata, liveRepodata); err != nil {
+		_ = os.Rename(oldRepodata, liveRepodata)
 		return err
 	}
 
@@ -127,13 +158,12 @@ func reportAppStreamWarning(message string, repoPath string, detail string) {
 	})
 }
 
-func removeRepoAppStream(repoPath string) error {
-	repodataDir := path.Join(repoPath, "repodata")
+func removeRepoAppStream(repoPath string, repodataDir string) error {
 	if exists, err := fileExists(path.Join(repodataDir, "repomd.xml")); err != nil || !exists {
 		return err
 	}
 
-	for _, metadataType := range []string{"appstream", "appstream-icons"} {
+	for _, metadataType := range []string{"appstream", "appstream_zck", "appstream-icons", "appstream-icons_zck"} {
 		flags := []string{"--remove", metadataType, repodataDir}
 		output, err := exec.Command("modifyrepo_c", flags...).CombinedOutput()
 		if err != nil {
@@ -262,11 +292,11 @@ func appStreamMetadataPaths(repoPath string, appstreamPath string) []string {
 }
 
 func ModifyRepoAppStream(repoPath string, appstreamPath string) error {
-	_, err := modifyRepoAppStream(repoPath, appstreamPath)
+	_, err := modifyRepoAppStream(repoPath, path.Join(repoPath, "repodata"), appstreamPath)
 	return err
 }
 
-func modifyRepoAppStream(repoPath string, appstreamPath string) (bool, error) {
+func modifyRepoAppStream(repoPath string, repodataDir string, appstreamPath string) (bool, error) {
 	paths := appStreamMetadataPaths(repoPath, appstreamPath)
 	metadata := []struct {
 		filePath string
@@ -279,7 +309,6 @@ func modifyRepoAppStream(repoPath string, appstreamPath string) (bool, error) {
 
 	modified := false
 	var missingMetadata []string
-	repodataDir := path.Join(repoPath, "repodata")
 	for _, item := range metadata {
 		exists, err := fileExists(item.filePath)
 		if err != nil {

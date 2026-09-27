@@ -418,15 +418,8 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
-		// TODO: Also siging the repodata
-		if err := rpm.UpdateRepo(targetDirectory); err != nil {
+		if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 			panic(err)
-		}
-
-		if ring != nil {
-			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
-				panic(err)
-			}
 		}
 
 		if re.TetsudouURL != nil {
@@ -640,14 +633,8 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 		panic(err)
-	}
-
-	if ring != nil {
-		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
-			panic(err)
-		}
 	}
 
 	if re.TetsudouURL != nil {
@@ -749,14 +736,8 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 		panic(err)
-	}
-
-	if ring != nil {
-		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
-			panic(err)
-		}
 	}
 
 	if re.TetsudouURL != nil {
@@ -999,11 +980,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if err := rpm.UpdateRepo(targetDirectory); err != nil {
-				panic(err)
-			}
-
-			if err := rpm.SignRepo(targetDirectory, ring); err != nil {
+			if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 				panic(err)
 			}
 
@@ -1102,14 +1079,8 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 
 	_ = compsFile.Close()
 
-	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 		panic(err)
-	}
-
-	if ring != nil {
-		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
-			panic(err)
-		}
 	}
 
 	if re.TetsudouURL != nil {
@@ -1189,14 +1160,8 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory); err != nil {
+	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
 		panic(err)
-	}
-
-	if ring != nil {
-		if err := rpm.SignRepo(targetDirectory, ring); err != nil {
-			panic(err)
-		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
