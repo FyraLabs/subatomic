@@ -1,12 +1,15 @@
 package rpm
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/FyraLabs/subatomic/server/tetsudou"
+	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
 	"gopkg.in/ini.v1"
 )
 
@@ -41,6 +44,17 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 	).CombinedOutput(); err != nil {
 		t.Fatalf("modifyrepo_c failed: %s: %v", output, err)
 	}
+	// Production repos also carry _zck records, which are added by modifyrepo_c --zck
+	if output, err := exec.Command(
+		"modifyrepo_c",
+		"--zck",
+		"--mdtype", "appstream",
+		"--new-name", "appstream.xml",
+		iconsPath,
+		repodataPath,
+	).CombinedOutput(); err != nil {
+		t.Fatalf("modifyrepo_c failed: %s: %v", output, err)
+	}
 
 	entries, err := os.ReadDir(repodataPath)
 	if err != nil {
@@ -59,8 +73,17 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 		t.Fatal("modifyrepo_c did not create an AppStream icon payload")
 	}
 
+	key, err := pgp.GenerateKey("Test", "test@example.com", "x25519", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring, err := pgp.NewKeyRing(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	t.Setenv("SUBATOMIC_APPSTREAM_DIR", t.TempDir())
-	if err := UpdateRepo(repoPath); err != nil {
+	if err := UpdateRepo(repoPath, ring); err != nil {
 		t.Fatalf("UpdateRepo() failed: %v", err)
 	}
 
@@ -68,11 +91,83 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(repomd), `type="appstream-icons"`) {
-		t.Fatal("appstream-icons entry was not removed")
+	if strings.Contains(string(repomd), `type="appstream`) {
+		t.Fatalf("appstream entries were not removed:\n%s", repomd)
 	}
-	if _, err := os.Stat(filepath.Join(repodataPath, "tetsudou.json")); err != nil {
+
+	tetsudouJson, err := os.ReadFile(filepath.Join(repodataPath, "tetsudou.json"))
+	if err != nil {
 		t.Fatalf("expected complete repository update to write tetsudou metadata: %v", err)
+	}
+	var repodata tetsudou.Repodata
+	if err := json.Unmarshal(tetsudouJson, &repodata); err != nil {
+		t.Fatal(err)
+	}
+	hashes, err := tetsudou.HashesFromReader(strings.NewReader(string(repomd)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repodata.Hashes != hashes || repodata.Size != int64(len(repomd)) {
+		t.Fatalf("tetsudou.json does not describe repomd.xml: got %+v, want %+v", repodata.Hashes, hashes)
+	}
+
+	armoredSig, err := os.ReadFile(filepath.Join(repodataPath, "repomd.xml.asc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := pgp.NewPGPSignatureFromArmored(string(armoredSig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ring.VerifyDetached(pgp.NewPlainMessage(repomd), sig, pgp.GetUnixTime()); err != nil {
+		t.Fatalf("repomd.xml.asc does not verify against repomd.xml: %v", err)
+	}
+
+	for _, leftover := range []string{
+		filepath.Join(repoPath, ".repodata"),
+		filepath.Join(filepath.Dir(repoPath), ".terrarawhide-source.staging"),
+	} {
+		if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be cleaned up: %v", leftover, err)
+		}
+	}
+}
+
+func TestUpdateRepoLeavesRepodataUntouchedOnFailure(t *testing.T) {
+	if _, err := exec.LookPath("createrepo_c"); err != nil {
+		t.Skip("createrepo_c is not installed")
+	}
+	if _, err := exec.LookPath("modifyrepo_c"); err != nil {
+		t.Skip("modifyrepo_c is not installed")
+	}
+
+	repoPath := filepath.Join(t.TempDir(), "test-repo")
+	if err := os.Mkdir(repoPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command("createrepo_c", repoPath).CombinedOutput(); err != nil {
+		t.Fatalf("createrepo_c failed: %s: %v", output, err)
+	}
+	repomdPath := filepath.Join(repoPath, "repodata", "repomd.xml")
+	before, err := os.ReadFile(repomdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An invalid groupfile makes createrepo_c fail after the existing metadata has been loaded
+	if err := os.WriteFile(filepath.Join(repoPath, "comps.xml"), []byte("not xml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateRepo(repoPath, nil); err == nil {
+		t.Fatal("expected UpdateRepo() to fail with an invalid groupfile")
+	}
+
+	after, err := os.ReadFile(repomdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("failed update modified the live repomd.xml")
 	}
 }
 
@@ -109,7 +204,8 @@ func TestMrepoCConfigOnlyIncludesExistingMetadata(t *testing.T) {
 }
 
 func TestModifyRepoAppStreamSkipsMissingMetadata(t *testing.T) {
-	modified, err := modifyRepoAppStream(filepath.Join(t.TempDir(), "source-repo"), t.TempDir())
+	repoPath := filepath.Join(t.TempDir(), "source-repo")
+	modified, err := modifyRepoAppStream(repoPath, filepath.Join(repoPath, "repodata"), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
