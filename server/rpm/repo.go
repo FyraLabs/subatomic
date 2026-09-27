@@ -84,11 +84,10 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 
 	flags := []string{"--update", "--zck", "--xz", "--local-sqlite", "--outputdir", stagingPath}
 
-	compsPath := path.Join(repoPath, "comps.xml")
-	if exists, err := fileExists(compsPath); err != nil {
+	if exists, err := fileExists(path.Join(repoPath, "comps.xml")); err != nil {
 		return err
 	} else if exists {
-		flags = append(flags, "--groupfile", compsPath)
+		flags = append(flags, "--groupfile", "comps.xml")
 	}
 
 	flags = append(flags, repoPath)
