@@ -126,11 +126,16 @@ impl ApiClient {
             if status == reqwest::StatusCode::NO_CONTENT {
                 return Ok(Self::calculate_csum(paths)?);
             }
-            let content_type =
-                res.headers().get(reqwest::header::CONTENT_TYPE).expect("can't get content-type");
-            let bound =
-                multer::parse_boundary(content_type.to_str().expect("can't parse content type"))
-                    .expect("can't parse multer boundary");
+            let content_type = res
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .context("server response is missing the multipart Content-Type header")?;
+            let content_type = content_type.to_str().map_err(|e| {
+                color_eyre::eyre::eyre!("server returned an invalid Content-Type header: {e}")
+            })?;
+            let bound = multer::parse_boundary(content_type).map_err(|e| {
+                color_eyre::eyre::eyre!("server returned an invalid multipart boundary: {e}")
+            })?;
             let mut multipart = multer::Multipart::new(res.bytes_stream(), bound);
             let mut res = vec![];
             tracing::info!("signing rpms & calculating checksums");
