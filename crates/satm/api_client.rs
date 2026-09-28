@@ -113,8 +113,9 @@ impl ApiClient {
         let mut form = multipart::Form::new();
         for path in paths {
             let rpm = libsubatomic::rpm::PackageMetadata::open(path)?;
-            let header = rpm.header_bytes().expect("cannot serialize rpmmeta");
-            form = form.part("", multipart::Part::bytes(header));
+            let mut buf = vec![];
+            rpm.write(&mut buf).unwrap();
+            form = form.part("", multipart::Part::bytes(buf));
         }
         let req = self
             .request_builder(reqwest::Method::POST, &format!("/v1/repos/{repo}/sign"))

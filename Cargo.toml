@@ -58,7 +58,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 [workspace.dependencies.tokio]
 version = "1.53.1"
 default-features = false
-features = ["rt-multi-thread"]
+features = ["rt-multi-thread", "macros"]
 
 [dev-dependencies]
 http-body-util = "0.1.5"
