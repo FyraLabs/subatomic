@@ -1,9 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
-use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
-
 use crate::db::{Key, Repo};
 use crate::error::{ApiError, Result};
+use crate::validate::{md_filename, repo_name, rpm_filename};
 use crate::{DbState, LockerState};
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
@@ -11,13 +9,15 @@ use axum::http::StatusCode;
 use futures_util::TryStreamExt;
 use libsubatomic::err::Res;
 use libsubatomic::prelude::Itertools;
+use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use tokio_util::io::StreamReader;
-
 pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<Repo>>> {
     Ok(Json(sqlx::query_as!(Repo, "SELECT * FROM repos ORDER BY name").fetch_all(&*pool).await?))
 }
 
 pub async fn create_repo(State(pool): DbState, Path(name): Path<String>) -> Result<Json<Repo>> {
+    repo_name(&name)?;
     Ok(Json(
         sqlx::query_as!(Repo, "INSERT INTO repos (name) VALUES ($1) RETURNING *", &name)
             .fetch_one(&*pool)
@@ -30,6 +30,7 @@ pub async fn sign_headers(
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl axum::response::IntoResponse> {
+    repo_name(&repo)?;
     let sig =
         locker.read(&repo, async |hdl| hdl.repo.sig.clone()).await?.ok_or(ApiError::NotFound)?;
     let Some(mgr) = sig.as_ref() else { return Ok((StatusCode::NO_CONTENT, Default::default())) };
@@ -62,6 +63,7 @@ pub async fn upload_pkgs(
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
     let r = locker.read(&repo, async |hdl| {
         (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
     });
@@ -118,7 +120,9 @@ impl UploadProcessor<'_> {
             //     .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
             self.check_csum(multipart, &csum).await?;
             let frag = Self::parse_to_frag(&path, csum)?;
-            let path = path.strip_prefix(&self.dir).expect("rpm not in repodir");
+            let path = path
+                .strip_prefix(&self.dir)
+                .map_err(|_| ApiError::BadRequest("rpm not in repodir".into()))?;
             self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
             // self.out.push(serde_json::json!({
             //     "pkg": filename_str,
@@ -149,7 +153,11 @@ impl UploadProcessor<'_> {
     ) -> Result<ReceiveRpmOut> {
         let name = (field.file_name())
             .ok_or_else(|| ApiError::BadRequest("filename should not be empty".into()))?;
+        rpm_filename(name)?;
         let path = self.dir.join(name);
+        if !path.starts_with(&self.dir) {
+            return Err(ApiError::BadRequest("filename contains illegal path".into()));
+        }
         let mut body_reader =
             std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
         let writer = try bikeshed std::io::Result<_> {
@@ -230,6 +238,7 @@ pub async fn delete_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     Ok(if locker.del(&name).await? { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -275,6 +284,7 @@ pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> 
 }
 
 pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Result<String> {
+    repo_name(&repo)?;
     locker
         .read(&repo, async |hdl| {
             let Some(mgr) = &hdl.repo.sig else {
@@ -296,6 +306,7 @@ pub async fn set_key(
     Path(repo): Path<String>,
     Json(SetKeyReq { id }): Json<SetKeyReq>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
     let q = sqlx::query_as!(Key, "SELECT * FROM keys WHERE id = $1", id);
     let Some(key) = q.fetch_optional(&*db).await? else {
         return Ok(StatusCode::NOT_FOUND);
@@ -320,6 +331,7 @@ pub async fn del_key(
     State(locker): LockerState,
     Path(repo): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
     let Some(true) = locker
         .write(&repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
             let q = sqlx::query!("UPDATE repos SET key_id = NULL WHERE name = $1", &repo);
@@ -347,6 +359,7 @@ pub async fn refresh_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(true)).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
@@ -355,6 +368,7 @@ pub async fn rebuild_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false)).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
@@ -363,6 +377,7 @@ pub async fn list_rpms(
     State(locker): LockerState,
     Path(repo): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
     let Some(keys) = locker
         .read(&repo, async |repohdl| try bikeshed Res<_> { repohdl.repo.cache.keys()? })
         .await?
@@ -386,6 +401,11 @@ pub async fn del_rpms(
     Path(repo): Path<String>,
     Json(DelRpmsReq { rpms }): Json<DelRpmsReq>,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
+    for rpm in &rpms {
+        rpm_filename(rpm)?;
+    }
+
     tracing::info!(?rpms, "deleting rpms");
     let q = locker.write(&repo, async |repohdl| try bikeshed Result<_> {
         let out =
@@ -406,10 +426,13 @@ pub async fn upl_md(
     Path((repo, md)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
+    repo_name(&md)?;
     let field = (multipart.next_field().await.expect("multipart err"))
         .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
-    let filename =
+    let filename: String =
         field.file_name().ok_or_else(|| ApiError::BadRequest("expected filename".into()))?.into();
+    md_filename(&filename)?;
     let content = (field.bytes().await)
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
@@ -417,7 +440,7 @@ pub async fn upl_md(
         tokio::fs::create_dir_all(&hdl.repo.cache.repodata_dir).await?;
         tokio::fs::create_dir_all(&hdl.repo.cache.cachedir).await?;
         hdl.repo.cache.update_custom_datatype(
-            libsubatomic::DataType::Custom(md.into(), filename),
+            libsubatomic::DataType::Custom(md.into(), filename.into()),
             &content,
         )?;
         // TODO: only generate repomd
@@ -434,6 +457,8 @@ pub async fn del_md(
     State(locker): LockerState,
     Path((repo, md)): Path<(String, String)>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
+    repo_name(&md)?;
     let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
         hdl.repo.cache.del_custom_datatype(&md)?;
         // TODO: only generate repomd
@@ -448,15 +473,15 @@ pub async fn del_md(
 
 #[cfg(test)]
 mod test {
-    use http_body_util::BodyExt;
-    use std::sync::Arc;
-    use tower::util::ServiceExt;
-
+    use crate::api::repos::StatusCode;
     use axum::extract::{Json, Path};
     use axum::{body::Body, http::Request};
+    use http_body_util::BodyExt;
     use rust_multipart_rfc7578_2::client::multipart::{
         Body as MultipartBody, Form as MultipartForm,
     };
+    use std::sync::Arc;
+    use tower::util::ServiceExt;
 
     type Pool = sqlx::Pool<sqlx::Postgres>;
 
@@ -589,7 +614,78 @@ mod test {
         assert!(!new.exists());
         assert!(ret.get("not_found").unwrap().as_array().unwrap().is_empty());
     }
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn upload_pkgs_rejects_path_traversal(pool: Pool) {
+        let states = app(pool);
+        let States { app, cfg, .. } = states;
 
+        let outside = cfg.storage_dir.join("escape-1-1.x86_64.rpm");
+        let absolute = "/tmp/pwn-1-1.x86_64.rpm";
+
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "../../escape-1-1.x86_64.rpm",
+            &b"not a real rpm"[..],
+            Some("../../escape-1-1.x86_64.rpm".into()),
+            None,
+            vec![],
+        );
+
+        let req = Request::post("/v1/repos/rpmfission")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(!outside.exists());
+
+        assert!(!std::path::Path::new(absolute).exists());
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "pwn-1-1.x86_64.rpm",
+            &b"not a real rpm"[..],
+            Some(absolute.into()),
+            None,
+            vec![],
+        );
+
+        let req = Request::post("/v1/repos/rpmfission")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(!std::path::Path::new(absolute).exists());
+
+        assert!(cfg.storage_dir.join("rpmfission").exists());
+    }
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn del_rpms_rejects_path_traversal(pool: Pool) {
+        let states = app(pool);
+        let States { locker, cfg, .. } = states;
+
+        let outside = cfg.storage_dir.join("escape.rpm");
+        std::fs::write(&outside, b"must not be deleted").unwrap();
+
+        for rpm in ["../escape.rpm", "../../escape.rpm", "/tmp/pwn.rpm", "a/../escape.rpm"] {
+            let rpms = vec![rpm.to_string()];
+
+            let result = super::del_rpms(
+                locker.clone(),
+                Path("rpmfission".into()),
+                Json(super::DelRpmsReq { rpms }),
+            )
+            .await;
+
+            assert!(result.is_err(), "path should be rejected: {rpm}");
+        }
+
+        assert!(outside.exists());
+    }
     #[sqlx::test(fixtures("keys", "repos"))]
     async fn sign_headers(pool: Pool) {
         let states = app(pool);

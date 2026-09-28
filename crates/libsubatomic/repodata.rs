@@ -74,6 +74,13 @@ impl RepoCache {
     /// An error is returned when `heed` fails to open the cache file.
     pub fn new(repo: &str, cachedir: &Path, repodata_dir: &Path) -> heed::Result<Self> {
         debug!(repo, cachedir = %cachedir.display(), repodata_dir = %repodata_dir.display(), "opening cache");
+        // basic guard: repo must not contain traversal (full validation is in server `validate::repo_name`)
+        if repo.contains('/') || repo.contains('\\') || repo.contains("..") || repo.is_empty() {
+            return Err(heed::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid repo name",
+            )));
+        }
         let path = cachedir.join(repo);
         // PERF: might be better to take in owned values?
         let cachedir = cachedir.to_owned();

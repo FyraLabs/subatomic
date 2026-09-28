@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use libsubatomic::repodata::RepoCache;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use crate::validate::repo_name;
 use crate::{config::Config, error::Result};
 
 pub struct Locker {
@@ -21,6 +22,7 @@ impl Locker {
     where
         F: AsyncFnOnce(RwLockReadGuard<'_, RepoHdl>) -> T,
     {
+        repo_name(repo)?;
         if let Some(lock) = self.repolocks.read().await.get(repo) {
             return Ok(Some(f(lock.read().await).await));
         }
@@ -34,6 +36,7 @@ impl Locker {
     where
         F: AsyncFnOnce(RwLockWriteGuard<'_, RepoHdl>) -> T,
     {
+        repo_name(repo)?;
         if let Some(lock) = self.repolocks.read().await.get(repo) {
             return Ok(Some(f(lock.write().await).await));
         }
@@ -54,6 +57,7 @@ impl Locker {
     }
     #[tracing::instrument(skip(self))]
     pub async fn del(&self, repo: &str) -> Result<bool> {
+        repo_name(repo)?;
         let hdl = self.repolocks.write().await.remove(repo);
         let hdl = if let Some(hdl) = hdl {
             hdl.into_inner()
@@ -76,6 +80,7 @@ pub struct RepoHdl {
 
 impl RepoHdl {
     async fn new(pool: &sqlx::PgPool, config: &Config, repo_name: &str) -> Result<Option<Self>> {
+        crate::validate::repo_name(repo_name)?;
         let Some(repo) =
             sqlx::query_as::<_, crate::db::Repo>("SELECT * FROM repos WHERE name = $1")
                 .bind(repo_name)
