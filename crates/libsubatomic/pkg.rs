@@ -143,7 +143,7 @@ impl Package {
                     buildhost: m.get_build_host().ok().map(Into::into),
                     sourcerpm: m.get_source_rpm().ok().map(Into::into),
                     header_range,
-                    requires: Dependencies::from(m.get_requires()?),
+                    requires: Dependencies::from_requires(m.get_requires()?),
                     provides: Dependencies::from(m.get_provides()?),
                     conflicts: Dependencies::from(m.get_conflicts()?),
                     obsoletes: Dependencies::from(m.get_obsoletes()?),
@@ -208,7 +208,7 @@ impl Package {
                     buildhost: m.get_build_host().ok().map(Into::into),
                     sourcerpm: m.get_source_rpm().ok().map(Into::into),
                     header_range: Self::get_header_byte_range(&mut f)?,
-                    requires: Dependencies::from(m.get_requires()?),
+                    requires: Dependencies::from_requires(m.get_requires()?),
                     provides: Dependencies::from(m.get_provides()?),
                     conflicts: Dependencies::from(m.get_conflicts()?),
                     obsoletes: Dependencies::from(m.get_obsoletes()?),
@@ -350,10 +350,36 @@ impl Dependencies {
     pub const fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+
+    fn from_requires(value: Vec<rpm::Dependency>) -> Self {
+        Self {
+            entries: value
+                .into_iter()
+                .filter(|dependency| !dependency.flags.contains(rpm::DependencyFlags::RPMLIB))
+                .map(Into::into)
+                .collect(),
+        }
+    }
 }
 impl From<Vec<rpm::Dependency>> for Dependencies {
     fn from(value: Vec<rpm::Dependency>) -> Self {
         Self { entries: value.into_iter().map(Into::into).collect() }
+    }
+}
+
+#[cfg(test)]
+mod dependency_tests {
+    use super::Dependencies;
+
+    #[test]
+    fn excludes_rpmlib_requirements() {
+        let dependencies = Dependencies::from_requires(vec![
+            rpm::Dependency::rpmlib("CompressedFileNames", "3.0.4-1"),
+            rpm::Dependency::greater_eq("glibc", "2.40"),
+        ]);
+
+        assert_eq!(dependencies.entries.len(), 1);
+        assert_eq!(dependencies.entries[0].name, "glibc");
     }
 }
 
