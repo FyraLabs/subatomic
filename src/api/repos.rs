@@ -5,7 +5,8 @@ use crate::validate::{md_filename, repo_name, rpm_filename};
 use crate::{DbState, LockerState};
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use futures_util::TryStreamExt;
 use libsubatomic::err::Res;
 use libsubatomic::prelude::Itertools;
@@ -29,11 +30,11 @@ pub async fn sign_headers(
     State(locker): LockerState,
     Path(repo): Path<String>,
     mut multipart: Multipart,
-) -> Result<impl axum::response::IntoResponse> {
+) -> Result<Response> {
     repo_name(&repo)?;
     let sig =
         locker.read(&repo, async |hdl| hdl.repo.sig.clone()).await?.ok_or(ApiError::NotFound)?;
-    let Some(mgr) = sig.as_ref() else { return Ok((StatusCode::NO_CONTENT, Default::default())) };
+    let Some(mgr) = sig.as_ref() else { return Ok(StatusCode::NO_CONTENT.into_response()) };
     let mut resp = rust_multipart_rfc7578_2::client::multipart::Form::default();
 
     while let Some(field) =
@@ -50,12 +51,11 @@ pub async fn sign_headers(
         // `Cursor` to feed in owned sig
         resp.add_reader_2("", std::io::Cursor::new(sig), None, None, vec![]);
     }
-    Ok((
-        StatusCode::OK,
-        axum::body::Body::from_stream(rust_multipart_rfc7578_2::client::multipart::Body::from(
-            resp,
-        )),
-    ))
+    let content_type = resp.content_type();
+    let body = axum::body::Body::from_stream(
+        rust_multipart_rfc7578_2::client::multipart::Body::from(resp),
+    );
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, content_type)], body).into_response())
 }
 
 pub async fn upload_pkgs(
@@ -710,6 +710,9 @@ mod test {
             .body(Body::from_stream(MultipartBody::from(form)))
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
+        let content_type =
+            resp.headers().get(axum::http::header::CONTENT_TYPE).unwrap().to_str().unwrap();
+        assert!(content_type.starts_with("multipart/form-data; boundary="));
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let i = body.windows(4).position(|bs| bs == b"\r\n\r\n").unwrap() + 4;
         let j = body.windows(4).rposition(|bs| bs == b"\r\n--").unwrap();
