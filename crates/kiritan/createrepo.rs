@@ -9,6 +9,12 @@ use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 use tracing::{debug, error, info, trace};
 
+/// Repo-relative href for a package, as repodata expects. Falls back to the
+/// filename when the path is not inside the repo root.
+fn href_for(path: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
+    path.strip_prefix(root).unwrap_or(path).to_path_buf()
+}
+
 pub fn run(args: Cli) -> Result<()> {
     if !args.input.is_dir() {
         bail!("input is not a directory: {}", args.input.display());
@@ -68,7 +74,8 @@ pub fn run(args: Cli) -> Result<()> {
             return Ok(());
         };
         trace!(filename = %path.display(), "process");
-        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
+        let href = href_for(&path, &args.input);
+        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, &href);
         if args.appstream {
             frag.app = libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));
         }
@@ -147,7 +154,8 @@ fn process_rpms_auto(args: &Cli) -> Result<()> {
                 return Ok(());
             };
             trace!(filename = %filename.display(), "process");
-            let mut frag = libsubatomic::repodata::FragEph::new(&pkg, p.as_os_str());
+            let href = href_for(&p, &args.input);
+            let mut frag = libsubatomic::repodata::FragEph::new(&pkg, &href);
             if args.appstream {
                 frag.app =
                     libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));

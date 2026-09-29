@@ -116,14 +116,18 @@ impl UploadProcessor<'_> {
             multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
         {
             let ReceiveRpmOut { csum, path } = self.receive_rpm(field).await?;
-            // let filename_str = (path.file_name().expect("filename").to_str())
-            //     .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
-            self.check_csum(multipart, &csum).await?;
-            let frag = Self::parse_to_frag(&path, csum)?;
-            let path = path
+            // hrefs in repodata are repo-relative, so derive it once and use it
+            // for both the primary.xml entry and the cache key.
+            let href = path
                 .strip_prefix(&self.dir)
                 .map_err(|_| ApiError::BadRequest("rpm not in repodir".into()))?;
-            self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
+            let href = href
+                .to_str()
+                .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?
+                .to_owned();
+            self.check_csum(multipart, &csum).await?;
+            let frag = Self::parse_to_frag(&path, &href, csum)?;
+            self.pkgs.push((href.as_bytes().to_owned(), frag));
             // self.out.push(serde_json::json!({
             //     "pkg": filename_str,
             //     "sig": sig,
@@ -186,12 +190,13 @@ impl UploadProcessor<'_> {
 
     fn parse_to_frag(
         path: &std::path::Path,
+        href: &str,
         csum: String,
     ) -> Result<libsubatomic::repodata::FragEph, ApiError> {
         let fd = std::fs::File::open(path)?;
         let (pkg, mut rpmreader) = libsubatomic::Package::parse(fd, csum.into())
             .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
-        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
+        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, std::path::Path::new(href));
         let appstream = libsubatomic::pkg::Package::appstream_frag(&mut rpmreader)
             .map_err(|e| ApiError::BadRequest(format!("cannot parse appstream in rpm: {e}")))?;
         if !appstream.is_empty() {

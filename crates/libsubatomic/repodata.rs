@@ -723,18 +723,20 @@ pub struct FragEph {
 }
 impl FragEph {
     #[must_use]
-    pub fn new(pkg: &crate::pkg::Package, path: &OsStr) -> Self {
+    pub fn new(pkg: &crate::pkg::Package, path: &Path) -> Self {
         trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
         let mut frag = Self::default();
-        frag.gen_pri(pkg, path.as_bytes());
+        frag.gen_pri(pkg, path);
         frag.gen_fil(pkg);
         frag.gen_oth(pkg);
         trace!(name = %pkg.name, "cache fragment complete");
         frag
     }
-    fn gen_pri(&mut self, pkg: &crate::pkg::Package, path: &[u8]) {
+
+    fn gen_pri(&mut self, pkg: &crate::pkg::Package, path: &Path) {
         trace!(name = %pkg.name, "serializing primary.xml");
-        quick_xml::se::to_writer(&mut self.pri, &primary::Package::from_pkg(pkg, path))
+        let href = path.to_str().expect("package path must be valid UTF-8");
+        quick_xml::se::to_writer(&mut self.pri, &primary::Package::from_pkg(pkg, href))
             .expect("cannot serialize");
     }
 

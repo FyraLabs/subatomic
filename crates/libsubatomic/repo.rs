@@ -85,7 +85,7 @@ impl Repo {
             }
             ret.sig = Some(sig);
         }
-        let mut frag = FragEph::new(&pkg, path.as_os_str());
+        let mut frag = FragEph::new(&pkg, &path_relative);
         if self.use_appstream {
             frag.app = Frag(Some(crate::pkg::Package::appstream_frag(&mut rpmmeta)?));
         }

@@ -95,7 +95,7 @@ pub struct PackageChecksum<'a> {
 #[derive(Clone, Debug, Serialize)]
 pub struct PackageLocation<'a> {
     #[serde(rename = "@href")]
-    pub href: &'a [u8],
+    pub href: &'a str,
 }
 
 impl<'a> Package<'a> {
@@ -115,7 +115,7 @@ impl<'a> Package<'a> {
             format,
             ..
         }: &'a crate::pkg::Package,
-        path: &'a [u8],
+        path: &'a str,
     ) -> Self {
         let files = format.files.iter().filter(|f| f.is_primary()).collect();
         Self {
