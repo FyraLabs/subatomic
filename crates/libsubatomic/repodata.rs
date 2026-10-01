@@ -752,3 +752,344 @@ impl FragEph {
             .expect("cannot serialize");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use std::fmt::Write as FmtWrite;
+    use std::io::Write as IoWrite;
+    use tempfile::TempDir;
+    fn test_frag() -> FragEph {
+        FragEph {
+            pri: Frag(Some(b"<pri/>".to_vec())),
+            fil: Frag(Some(b"<fil/>".to_vec())),
+            oth: Frag(Some(b"<oth/>".to_vec())),
+            app: Frag::default(),
+        }
+    }
+    fn make_cache() -> (TempDir, TempDir, RepoCache) {
+        let repodata_dir = TempDir::new().unwrap();
+        let cache_dir = TempDir::new().unwrap();
+
+        let cache = RepoCache::new("testrepo", cache_dir.path(), repodata_dir.path()).unwrap();
+
+        (repodata_dir, cache_dir, cache)
+    }
+
+    #[test]
+    fn cache_starts_empty() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        assert!(cache.is_empty().unwrap());
+        assert_eq!(cache.len().unwrap(), 0);
+    }
+
+    #[test]
+    fn cache_has_inserted_package() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let key = b"testpkg-1.0-1.noarch.rpm";
+
+        cache.insert_fragments(std::iter::once((key.as_slice(), FragEph::default()))).unwrap();
+
+        assert!(cache.has(key).unwrap());
+        assert_eq!(cache.len().unwrap(), 1);
+        assert!(!cache.is_empty().unwrap());
+    }
+
+    #[test]
+    fn delete_pkgs_returns_missing_keys() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let existing: &[u8] = b"existing-1.0-1.noarch.rpm";
+        let missing: &[u8] = b"missing-1.0-1.noarch.rpm";
+
+        cache.insert_fragments(std::iter::once((existing, FragEph::default()))).unwrap();
+
+        let ids = [existing, missing];
+
+        let not_found = cache.delete_pkgs(&ids).unwrap();
+
+        assert_eq!(not_found, vec![missing]);
+        assert!(!cache.has(existing).unwrap());
+        assert!(!cache.has(missing).unwrap());
+        assert!(cache.is_empty().unwrap());
+    }
+
+    #[test]
+    fn prune_removes_unexpected_packages() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let keep: &[u8] = b"keep-1.0-1.noarch.rpm";
+        let remove: &[u8] = b"remove-1.0-1.noarch.rpm";
+
+        cache.insert_fragments([(keep, FragEph::default()), (remove, FragEph::default())]).unwrap();
+
+        let expected = HashSet::from([keep]);
+
+        let removed = cache.prune(&expected).unwrap();
+
+        assert_eq!(removed, 1);
+        assert!(cache.has(keep).unwrap());
+        assert!(!cache.has(remove).unwrap());
+        assert_eq!(cache.len().unwrap(), 1);
+    }
+
+    #[test]
+    fn repo_writer_csum_sha256() {
+        let mut csum = RepoWriterCsum::Sha256(sha2::Sha256::new());
+
+        csum.write_all(b"hello world").unwrap();
+
+        assert_eq!(csum.csum(), "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+    }
+
+    #[test]
+    fn frag_write_str_appends_data() {
+        let mut frag = Frag::default();
+
+        write!(&mut frag, "hello {}", "world").unwrap();
+        write!(&mut frag, "!").unwrap();
+
+        assert_eq!(frag.0.as_deref(), Some(&b"hello world!"[..]));
+    }
+    #[test]
+    fn update_frags_removes_stale_packages() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let stale_key: &[u8] = b"stale-1.0-1.noarch.rpm";
+
+        cache.insert_fragments(std::iter::once((stale_key, test_frag()))).unwrap();
+
+        assert!(cache.has(stale_key).unwrap());
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+        drop(tx);
+
+        let (new, cached) = cache.update_frags(&rx).unwrap();
+        assert_eq!(new, 0);
+        assert_eq!(cached, 0);
+
+        assert!(!cache.has(stale_key).unwrap());
+    }
+    #[test]
+    fn update_frags_counts_new_and_cached() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        let new_key: &[u8] = b"new-1.0-1.noarch.rpm";
+        let cached_key: &[u8] = b"cached-1.0-1.noarch.rpm";
+
+        // Put the cached package in the cache first.
+        cache.insert_fragments(std::iter::once((cached_key, test_frag()))).unwrap();
+
+        // New package.
+        tx.send((PathBuf::from("new-1.0-1.noarch.rpm"), Some(test_frag()))).unwrap();
+
+        // Already cached package.
+        tx.send((PathBuf::from("cached-1.0-1.noarch.rpm"), None)).unwrap();
+
+        drop(tx);
+
+        let (new, cached) = cache.update_frags(&rx).unwrap();
+
+        assert_eq!(new, 1);
+        assert_eq!(cached, 1);
+
+        assert!(cache.has(new_key).unwrap());
+        assert!(cache.has(cached_key).unwrap());
+    }
+    #[test]
+    fn insert_fragments_stores_appstream() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let key = b"test-key";
+
+        let frag = FragEph {
+            pri: Frag(Some(b"<primary/>".to_vec())),
+            fil: Frag(Some(b"<filelists/>".to_vec())),
+            oth: Frag(Some(b"<other/>".to_vec())),
+            app: Frag(Some(b"<components/>".to_vec())),
+        };
+
+        cache.insert_fragments([(key, frag)]).unwrap();
+
+        let txn = cache.env.read_txn().unwrap();
+
+        assert_eq!(cache.db_app.get(&txn, key).unwrap(), Some(&b"<components/>"[..]));
+    }
+    #[test]
+    fn custom_datatype_lifecycle() {
+        let (_repodata_dir, _cache_dir, cache) = crate::repodata::tests::make_cache();
+
+        let dt = "group";
+        let data = crate::repodata::repomd::Data {
+            r#type: repomd::DataType::Custom(dt.into(), "comps.xml".into()),
+            checksum: repomd::Checksum { r#type: repomd::CsumType::Sha256, sha: "abc123".into() },
+            open_checksum: repomd::Checksum {
+                r#type: repomd::CsumType::Sha256,
+                sha: "def456".into(),
+            },
+            location: repomd::Location { href: "repodata/abc123-group-comps.xml.zst".into() },
+            timestamp: 123,
+            size: 100,
+            open_size: 200,
+        };
+
+        // Write
+        cache.write_custom_datatype(&data).unwrap();
+
+        // Read
+        let stored = cache.read_custom_datatype(dt).unwrap().unwrap();
+        assert_eq!(stored.checksum.sha, "abc123");
+        assert_eq!(stored.open_checksum.sha, "def456");
+        assert_eq!(stored.size, 100);
+        assert_eq!(stored.open_size, 200);
+
+        // Delete
+        let deleted = cache.del_custom_datatype(dt).unwrap().unwrap();
+        assert_eq!(deleted.checksum.sha, "abc123");
+
+        // Verify deletion
+        assert!(cache.read_custom_datatype(dt).unwrap().is_none());
+    }
+    #[test]
+    fn update_custom_datatype_writes_file_and_cache() {
+        let (repodata_dir, _cache_dir, cache) = make_cache();
+
+        let dt = repomd::DataType::Custom("group".into(), "comps.xml".into());
+        let buf = b"<comps><group/></comps>";
+
+        cache.update_custom_datatype(dt.clone(), buf).unwrap();
+
+        // The metadata should have been stored in the cache.
+        let data = cache.read_custom_datatype("group").unwrap().unwrap();
+
+        assert_eq!(data.r#type.as_type(), "group");
+        assert_eq!(data.open_size, buf.len() as u64);
+
+        // update_custom_datatype renames the temporary file to this final path.
+        let final_path =
+            repodata_dir.path().join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
+
+        assert!(final_path.exists());
+
+        // The temporary file should no longer exist.
+        let temp_path = repodata_dir.path().join(format!("{}.zst", dt.as_str()));
+
+        assert!(!temp_path.exists());
+    }
+
+    #[test]
+    fn del_custom_datatype_removes_file() {
+        let (repodata_dir, _cache_dir, cache) = make_cache();
+
+        let data = repomd::Data {
+            r#type: repomd::DataType::Custom("group".into(), "comps.xml".into()),
+            checksum: repomd::Checksum { r#type: repomd::CsumType::Sha256, sha: "abc123".into() },
+            open_checksum: repomd::Checksum {
+                r#type: repomd::CsumType::Sha256,
+                sha: "def456".into(),
+            },
+            location: repomd::Location { href: "repodata/abc123-group-comps.xml.zst".into() },
+            timestamp: 123,
+            size: 100,
+            open_size: 200,
+        };
+
+        cache.write_custom_datatype(&data).unwrap();
+
+        let path = repodata_dir.path().join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
+
+        std::fs::write(&path, b"test").unwrap();
+        assert!(path.exists());
+
+        let deleted = cache.del_custom_datatype("group").unwrap();
+
+        assert!(deleted.is_some());
+        assert!(!path.exists());
+        assert!(cache.read_custom_datatype("group").unwrap().is_none());
+    }
+
+    #[test]
+    fn update_frags_mixed_purge_removes_stale_from_all_dbs() {
+        let (_repodata_dir, _cache_dir, cache) = make_cache();
+
+        let stale_key: &[u8] = b"stale-1.0-1.noarch.rpm";
+        let cached_key: &[u8] = b"cached-1.0-1.noarch.rpm";
+        let new_key: &[u8] = b"new-1.0-1.noarch.rpm";
+
+        // Stale: inserted but will NOT be sent on channel -> must be purged.
+        // Give it distinct content including appstream so we can verify app DB purge.
+        let stale_frag = FragEph {
+            pri: Frag(Some(b"<pri-stale/>".to_vec())),
+            fil: Frag(Some(b"<fil-stale/>".to_vec())),
+            oth: Frag(Some(b"<oth-stale/>".to_vec())),
+            app: Frag(Some(b"<app-stale/>".to_vec())),
+        };
+        cache.insert_fragments(std::iter::once((stale_key, stale_frag))).unwrap();
+
+        // Cached: inserted then refreshed via None (cached path) -> must survive.
+        let cached_frag = FragEph {
+            pri: Frag(Some(b"<pri-cached/>".to_vec())),
+            fil: Frag(Some(b"<fil-cached/>".to_vec())),
+            oth: Frag(Some(b"<oth-cached/>".to_vec())),
+            app: Frag(Some(b"<app-cached/>".to_vec())),
+        };
+        cache.insert_fragments(std::iter::once((cached_key, cached_frag))).unwrap();
+
+        // Verify preconditions: all fragments present.
+        {
+            let txn = cache.env.read_txn().unwrap();
+            assert_eq!(cache.db_pri.get(&txn, stale_key).unwrap(), Some(&b"<pri-stale/>"[..]));
+            assert_eq!(cache.db_app.get(&txn, stale_key).unwrap(), Some(&b"<app-stale/>"[..]));
+            assert_eq!(cache.db_pri.get(&txn, cached_key).unwrap(), Some(&b"<pri-cached/>"[..]));
+        }
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        // New package -> Some(frag)
+        let new_frag = FragEph {
+            pri: Frag(Some(b"<pri-new/>".to_vec())),
+            fil: Frag(Some(b"<fil-new/>".to_vec())),
+            oth: Frag(Some(b"<oth-new/>".to_vec())),
+            app: Frag(Some(b"<app-new/>".to_vec())),
+        };
+        tx.send((PathBuf::from("new-1.0-1.noarch.rpm"), Some(new_frag))).unwrap();
+
+        // Cached package -> None (incremental reuse)
+        tx.send((PathBuf::from("cached-1.0-1.noarch.rpm"), None)).unwrap();
+
+        drop(tx);
+
+        let (new, cached) = cache.update_frags(&rx).unwrap();
+        assert_eq!(new, 1);
+        assert_eq!(cached, 1);
+
+        // Stale must be removed from epo AND all frag DBs.
+        assert!(!cache.has(stale_key).unwrap());
+        assert!(cache.has(cached_key).unwrap());
+        assert!(cache.has(new_key).unwrap());
+
+        let txn = cache.env.read_txn().unwrap();
+        // Stale purged from all 4 frag DBs.
+        assert_eq!(cache.db_pri.get(&txn, stale_key).unwrap(), None);
+        assert_eq!(cache.db_fil.get(&txn, stale_key).unwrap(), None);
+        assert_eq!(cache.db_oth.get(&txn, stale_key).unwrap(), None);
+        assert_eq!(cache.db_app.get(&txn, stale_key).unwrap(), None);
+
+        // Cached survived (epoch bumped, frags untouched).
+        assert_eq!(cache.db_pri.get(&txn, cached_key).unwrap(), Some(&b"<pri-cached/>"[..]));
+        assert_eq!(cache.db_app.get(&txn, cached_key).unwrap(), Some(&b"<app-cached/>"[..]));
+
+        // New stored correctly.
+        assert_eq!(cache.db_pri.get(&txn, new_key).unwrap(), Some(&b"<pri-new/>"[..]));
+        assert_eq!(cache.db_fil.get(&txn, new_key).unwrap(), Some(&b"<fil-new/>"[..]));
+        assert_eq!(cache.db_oth.get(&txn, new_key).unwrap(), Some(&b"<oth-new/>"[..]));
+        assert_eq!(cache.db_app.get(&txn, new_key).unwrap(), Some(&b"<app-new/>"[..]));
+
+        assert_eq!(cache.len().unwrap(), 2);
+    }
+}

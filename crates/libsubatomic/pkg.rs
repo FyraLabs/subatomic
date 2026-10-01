@@ -481,14 +481,7 @@ impl FileEntry {
 
         p.starts_with(b"/etc/")
             || p == b"/usr/lib/sendmail"
-            || 'b: {
-                for i in 0..p.len() - BIN.len() {
-                    if &p[i..i + BIN.len()] == BIN {
-                        break 'b true;
-                    }
-                }
-                false
-            }
+            || p.windows(BIN.len()).any(|w| w == BIN)
     }
 }
 impl<'a> From<rpm::FileEntry<'a>> for FileEntry {
@@ -549,4 +542,377 @@ pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     }
 
     Ok(hex::encode(hasher.finalize()).into())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Cursor, Write};
+
+    #[test]
+    fn parse_filename_basic() {
+        let out = parse_filename(b"bash-5.2.15-1.fc39.x86_64.rpm").unwrap();
+        assert_eq!(out.name, b"bash");
+        assert_eq!(out.epoch, 0);
+        assert_eq!(out.ver, b"5.2.15");
+        assert_eq!(out.rel, b"1.fc39");
+        assert_eq!(out.arch, b"x86_64");
+    }
+
+    #[test]
+    fn parse_filename_with_epoch() {
+        // epoch is embedded as "epoch:version" before the split
+        let out = parse_filename(b"pkgname-2:1.0-3.el9.noarch.rpm").unwrap();
+        assert_eq!(out.name, b"pkgname");
+        assert_eq!(out.epoch, 2);
+        assert_eq!(out.ver, b"1.0");
+        assert_eq!(out.rel, b"3.el9");
+        assert_eq!(out.arch, b"noarch");
+    }
+
+    #[test]
+    fn parse_filename_dashes_in_name() {
+        // rsplit_once('-') from the right means multi-dash names still work
+        // as long as version/release themselves contain no dashes
+        let out = parse_filename(b"python3-pip-23.0-1.fc39.noarch.rpm").unwrap();
+        assert_eq!(out.name, b"python3-pip");
+        assert_eq!(out.epoch, 0);
+        assert_eq!(out.ver, b"23.0");
+        assert_eq!(out.rel, b"1.fc39");
+        assert_eq!(out.arch, b"noarch");
+    }
+
+    #[test]
+    fn parse_filename_src_rpm() {
+        let out = parse_filename(b"kernel-6.5.0-1.fc39.src.rpm").unwrap();
+        assert_eq!(out.name, b"kernel");
+        assert_eq!(out.epoch, 0);
+        assert_eq!(out.ver, b"6.5.0");
+        assert_eq!(out.rel, b"1.fc39");
+        assert_eq!(out.arch, b"src");
+    }
+
+    #[test]
+    fn parse_filename_missing_rpm_suffix_returns_none() {
+        assert!(parse_filename(b"bash-5.2.15-1.fc39.x86_64").is_none());
+    }
+
+    #[test]
+    fn parse_filename_no_arch_returns_none() {
+        // needs at least one '.' to split arch off
+        assert!(parse_filename(b"bash.rpm").is_none());
+    }
+
+    #[test]
+    fn parse_filename_too_few_dashes_returns_none() {
+        // needs at least 2 '-' to split name/version/release
+        assert!(parse_filename(b"bash-5.2.15.fc39.x86_64.rpm").is_none());
+    }
+
+    #[test]
+    fn parse_filename_epoch_non_numeric_treated_as_ver() {
+        // pkg.rs:23 atoi failure falls back to epoch 0 and keeps colon in ver
+        let out = parse_filename(b"pkg-abc:1.0-1.noarch.rpm").unwrap();
+        assert_eq!(out.name, b"pkg");
+        assert_eq!(out.epoch, 0);
+        assert_eq!(out.ver, b"abc:1.0");
+        assert_eq!(out.rel, b"1");
+        assert_eq!(out.arch, b"noarch");
+    }
+
+    #[test]
+    fn parse_filename_epoch_zero_explicit() {
+        let out = parse_filename(b"pkg-0:1.0-1.noarch.rpm").unwrap();
+        assert_eq!(out.epoch, 0);
+        assert_eq!(out.ver, b"1.0");
+        assert_eq!(out.rel, b"1");
+    }
+
+    #[test]
+    fn parse_filename_same_name_arch_different_rel() {
+        // essential for repo.rs:125 dedup: same name+arch, different rel
+        let a = parse_filename(b"terra-release-44-4.noarch.rpm").unwrap();
+        let b = parse_filename(b"terra-release-44-5.noarch.rpm").unwrap();
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.arch, b.arch);
+        assert_eq!(a.ver, b.ver);
+        assert_ne!(a.rel, b.rel);
+        assert_eq!(a.name, b"terra-release");
+    }
+
+    // ── Version::parse ──────────────────────────────────────────────
+    #[test]
+    fn version_parse_simple() {
+        let v = Version::parse("1.0-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_with_epoch() {
+        let v = Version::parse("2:1.0-3.el9");
+        assert_eq!(v.epoch, 2);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "3.el9");
+    }
+
+    #[test]
+    fn version_parse_epoch_zero_explicit() {
+        let v = Version::parse("0:2.5-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "2.5");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_non_numeric_epoch_fallback() {
+        // "abc:1.0-1" -> epoch parse fails, fallback to 0 and keep colon in ver
+        let v = Version::parse("abc:1.0-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "abc:1.0");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_no_rel() {
+        let v = Version::parse("1.0");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_no_rel_with_epoch() {
+        let v = Version::parse("1:2.0");
+        assert_eq!(v.epoch, 1);
+        assert_eq!(v.ver, "2.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_empty() {
+        let v = Version::parse("");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_trailing_dash() {
+        let v = Version::parse("1.0-");
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_multiple_dashes_only_first_splits() {
+        // only first '-' after epoch splits ver/rel
+        let v = Version::parse("1.0-1-2");
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "1-2");
+    }
+
+    #[test]
+    fn version_parse_colon_only() {
+        let v = Version::parse(":");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, ":");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_large_epoch() {
+        let v = Version::parse("4294967295:1.0-1");
+        assert_eq!(v.epoch, 4294967295);
+        assert_eq!(v.ver, "1.0");
+    }
+
+    // ── FileEntry::is_primary ───────────────────────────────────────
+    #[test]
+    fn is_primary_etc() {
+        assert!(FileEntry::new("/etc/foo").is_primary());
+        assert!(FileEntry::new("/etc/").is_primary());
+        assert!(FileEntry::new("/etc/passwd").is_primary());
+        assert!(!FileEntry::new("/etc").is_primary());
+        assert!(!FileEntry::new("/etcfoo").is_primary());
+    }
+
+    #[test]
+    fn is_primary_sendmail() {
+        assert!(FileEntry::new("/usr/lib/sendmail").is_primary());
+        assert!(!FileEntry::new("/usr/lib/sendmail/foo").is_primary());
+        assert!(!FileEntry::new("/usr/lib/sendmail2").is_primary());
+    }
+
+    #[test]
+    fn is_primary_bin_variants() {
+        assert!(FileEntry::new("/usr/bin/bash").is_primary());
+        assert!(FileEntry::new("/bin/ls").is_primary());
+        assert!(FileEntry::new("/opt/bin/foo").is_primary());
+        assert!(FileEntry::new("/usr/local/bin/app").is_primary());
+        assert!(FileEntry::new("bin/foo").is_primary()); // contains bin/
+        assert!(FileEntry::new("/a/bin/b").is_primary());
+    }
+
+    #[test]
+    fn is_primary_negative() {
+        assert!(!FileEntry::new("/usr/share/doc/foo").is_primary());
+        assert!(!FileEntry::new("/var/lib/foo").is_primary());
+        assert!(!FileEntry::new("/usr/libexec/foo").is_primary());
+        assert!(!FileEntry::new("/tmp/foo").is_primary());
+        assert!(!FileEntry::new("/usr/lib/sendmailfoo").is_primary());
+        // "binary" contains "bin" but not "bin/" -> not primary
+        assert!(!FileEntry::new("/usr/binary/foo").is_primary());
+        assert!(!FileEntry::new("/usr/lib/foo").is_primary());
+        assert!(!FileEntry::new("/opt/lib/foo").is_primary());
+    }
+
+    #[test]
+    fn is_primary_sbin_is_primary() {
+        // "sbin/" contains "bin/" substring -> considered primary (createrepo_c uses strstr("bin/"))
+        assert!(FileEntry::new("/sbin/foo").is_primary());
+        assert!(FileEntry::new("/usr/sbin/foo").is_primary());
+    }
+
+    #[test]
+    fn is_primary_short_paths_no_panic() {
+        // previously impl did `0..p.len()-4` which panics on short paths
+        assert!(!FileEntry::new("/").is_primary());
+        assert!(!FileEntry::new("/a").is_primary());
+        assert!(!FileEntry::new("").is_primary());
+        assert!(!FileEntry::new("ab").is_primary());
+        assert!(!FileEntry::new("/ab").is_primary());
+        assert!(!FileEntry::new("/bin").is_primary()); // no trailing slash, no "bin/"
+    }
+
+    #[test]
+    fn is_primary_bin_at_edges() {
+        assert!(FileEntry::new("bin/").is_primary());
+        assert!(FileEntry::new("/bin/").is_primary());
+        assert!(FileEntry::new("a/bin/b").is_primary());
+    }
+
+    // ── sha256_digest ───────────────────────────────────────────────
+    #[test]
+    fn sha256_empty() {
+        let h = sha256_digest(Cursor::new(b"")).unwrap();
+        assert_eq!(h, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    }
+
+    #[test]
+    fn sha256_hello() {
+        let h = sha256_digest(Cursor::new(b"hello")).unwrap();
+        assert_eq!(h, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+    }
+
+    #[test]
+    fn sha256_abc() {
+        let h = sha256_digest(Cursor::new(b"abc")).unwrap();
+        assert_eq!(h, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn sha256_large_multi_chunk() {
+        // larger than internal 10240 buffer to exercise loop
+        let data = vec![b'a'; 25_000];
+        let h = sha256_digest(Cursor::new(&data)).unwrap();
+        // precomputed: sha256 of 25k 'a's
+        let expected = {
+            use sha2::Digest as _;
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(&data);
+            hex::encode(hasher.finalize())
+        };
+        assert_eq!(h, expected);
+    }
+
+    #[test]
+    fn sha256_reader_yields_same_as_direct() {
+        let data = b"The quick brown fox jumps over the lazy dog";
+        let h1 = sha256_digest(Cursor::new(data)).unwrap();
+        let h2 = {
+            use sha2::Digest as _;
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(data);
+            hex::encode(hasher.finalize())
+        };
+        assert_eq!(h1, h2);
+        assert_eq!(h1, "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592");
+    }
+
+    // ── get_header_byte_range ───────────────────────────────────────
+    #[test]
+    fn header_range_on_real_rpm() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../random-rpm-examples/terra-release-44-4.noarch.rpm");
+        let mut f = std::fs::File::open(&path).unwrap();
+        let range = Package::get_header_byte_range(&mut f).unwrap();
+        let meta = f.metadata().unwrap();
+        assert!(range.start >= 112);
+        assert!(range.end > range.start);
+        assert!(range.end <= meta.len());
+        // idempotent
+        let mut f2 = std::fs::File::open(&path).unwrap();
+        let range2 = Package::get_header_byte_range(&mut f2).unwrap();
+        assert_eq!(range.start, range2.start);
+        assert_eq!(range.end, range2.end);
+    }
+
+    #[test]
+    fn header_range_truncated_file_errors() {
+        let mut tmp = tempfile::tempfile().unwrap();
+        // file shorter than 106 bytes -> read_exact fails
+        tmp.write_all(&[0u8; 50]).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let res = Package::get_header_byte_range(&mut tmp);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn header_range_synthetic() {
+        // Craft minimal RPM-like header structure:
+        // at 104: sigindex=1 (0x01), sigdata=0x00 => sigsize=16, hdrstart=128
+        // at hdrstart+8 (136): hdrindex=2 (0x02), hdrdata=0x00 => hdrsize=48, hdrend=176
+        let mut tmp = tempfile::tempfile().unwrap();
+        // ensure file large enough
+        tmp.set_len(200).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[1, 0]).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
+        tmp.write_all(&[2, 0]).unwrap();
+        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 128);
+        assert_eq!(range.end, 176);
+    }
+
+    #[test]
+    fn header_range_synthetic_with_padding() {
+        // sigindex=0, sigdata=5 => sigsize=5, pad=3, hdrstart=120
+        // hdrindex=0, hdrdata=1 => hdrsize=17, hdrend=137
+        let mut tmp = tempfile::tempfile().unwrap();
+        tmp.set_len(200).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[0, 5]).unwrap();
+        // hdrstart = 112+5+3=120, so hdr fields at 128
+        tmp.seek(std::io::SeekFrom::Start(128)).unwrap();
+        tmp.write_all(&[0, 1]).unwrap();
+        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 120);
+        assert_eq!(range.end, 137);
+    }
+
+    #[test]
+    fn header_range_synthetic_no_padding() {
+        // sigsize 16 already 8-aligned => no padding
+        let mut tmp = tempfile::tempfile().unwrap();
+        tmp.set_len(300).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[1, 0]).unwrap(); // 16
+        // hdrstart 128, hdr at 136
+        tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
+        tmp.write_all(&[0, 8]).unwrap(); // hdrsize 24
+        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 128);
+        assert_eq!(range.end, 152); // 128+24
+    }
 }
