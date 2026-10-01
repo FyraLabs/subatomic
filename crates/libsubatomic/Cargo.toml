@@ -7,14 +7,17 @@ edition = "2024"
 path = "./lib.rs"
 
 [dependencies]
-atoi = "3.1.0"
+async-trait = "0.1.92"
 crossbeam-channel = { workspace = true }
+futures = "0.3.34"
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",
 ] }
 hex = { workspace = true }
 itertools = "0.15.0"
+kuchiyose = { workspace = true }
 num_cpus = "1.17.0"
+object_store = "0.14.1"
 pgp = { workspace = true }
 quick-xml = { version = "0.42.0", features = ["serialize"] }
 rand = "0.8.8" # fixed by rpm
@@ -27,6 +30,7 @@ smallvec = "1.15.2"
 smartstring = { version = "1.0.1", features = ["serde"] }
 tempfile = "3.27.0"
 thiserror = "2.0.19"
+tokio = { workspace = true }
 tracing = "0.1.44"
 zstd = { version = "0.13.3", features = ["zstdmt", "fat-lto"] }
 

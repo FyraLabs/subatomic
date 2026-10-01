@@ -6,25 +6,12 @@ use std::io::BufReader;
 
 use crate::prelude::*;
 
-#[derive(Clone, Debug, Default)]
-pub struct ParsePathOutput<'a> {
-    pub name: &'a [u8],
-    pub epoch: u64,
-    pub ver: &'a [u8],
-    pub rel: &'a [u8],
-    pub arch: &'a [u8],
-}
+pub type ParsePathOutput<'a> = kuchiyose::rpm::ParsePathOutput<'a>;
 
+#[deprecated = "use kuchiyose::rpm::parse_filename"]
 #[must_use]
 pub fn parse_filename(filename: &[u8]) -> Option<ParsePathOutput<'_>> {
-    let (nevr, arch) = filename.strip_suffix(b".rpm")?.rsplit_once(|&b| b == b'.')?;
-    let (nev, rel) = nevr.rsplit_once(|&b| b == b'-')?;
-    let (name, ev) = nev.rsplit_once(|&b| b == b'-')?;
-    let (epoch, ver) = ev
-        .rsplit_once(|&b| b == b':')
-        .and_then(|(ep, ver)| Some((atoi::atoi(ep)?, ver)))
-        .unwrap_or((0, ev));
-    Some(ParsePathOutput { name, epoch, ver, rel, arch })
+    kuchiyose::rpm::parse_filename(filename)
 }
 
 // Minimum representation for an RPM package.
@@ -477,4 +464,19 @@ pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     }
 
     Ok(hex::encode(hasher.finalize()).into())
+}
+
+pub(crate) struct MetanPkg<'b> {
+    pub rpm: rpm::PackageReader,
+    pub fmeta: std::fs::Metadata,
+    pub csum: String,
+    pub path: &'b [u8],
+    pub csum_type: &'static str,
+    pub tmppath: PathBuf,
+}
+
+impl<'b> MetanPkg<'b> {
+    fn reader(&self) -> Result<rpm::PackageReader, rpm::Error> {
+        rpm::PackageReader::open(&self.tmppath)
+    }
 }

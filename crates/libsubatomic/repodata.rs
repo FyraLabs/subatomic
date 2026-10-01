@@ -17,10 +17,79 @@ use crate::prelude::*;
 use std::os::linux::fs::MetadataExt;
 use tracing::{debug, info, trace, warn};
 
-pub type DataDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
-pub type FragDb = heed::Database<heed::types::Bytes, heed::types::Bytes>;
-pub type MarkDb =
-    heed::Database<heed::types::Bytes, heed::types::U128<heed::byteorder::NativeEndian>>;
+pub use crate::cache::{DataDb, FragDb, MarkDb};
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum MetanError {
+    #[error("heed/lmdb error: {source}")]
+    Heed {
+        #[from]
+        source: heed::Error,
+        backtrace: std::backtrace::Backtrace,
+    },
+    #[error("io error: {source}")]
+    Io {
+        #[from]
+        source: std::io::Error,
+        backtrace: std::backtrace::Backtrace,
+    },
+    #[error("rpm error: {source}")]
+    Rpm {
+        #[from]
+        source: rpm::Error,
+        backtrace: std::backtrace::Backtrace,
+    },
+    #[error("xml serialization error: {source}")]
+    XmlSe {
+        #[from]
+        source: quick_xml::SeError,
+        backtrace: std::backtrace::Backtrace,
+    },
+}
+#[derive(Clone, Debug)]
+pub(crate) struct MetanGeneration {
+    pub csum: repomd::Checksum,
+    pub osum: repomd::Checksum,
+    pub comp_ext: String,
+    pub timestamp: i64,
+    pub size: u64,
+    pub open_size: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MetanReady {
+    pub env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
+    pub generation: Option<MetanGeneration>,
+}
+
+#[async_trait::async_trait]
+pub(crate) trait Metan {
+    fn mdtype(&self) -> &str;
+    fn filename(&self) -> &str;
+    fn db_count(&self) -> usize;
+    fn db_init<'s, 't, 'db>(
+        &'s self,
+        env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
+        txn: &'t mut heed::RwTxn<'db>,
+    ) -> heed::Result<()>;
+    fn save<'t, 'db>(
+        &self,
+        txn: &'t mut heed::RwTxn<'db>,
+        pkg: &mut crate::pkg::MetanPkg<'_>,
+    ) -> Result<(), MetanError>;
+    fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()>;
+    async fn on_generate<'t, 'db>(
+        &self,
+        env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
+        w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+    ) -> Result<(), MetanError>;
+    fn on_ready<'db>(&self, ready: MetanReady) -> std::io::Result<Option<repomd::Data>>;
+    fn on_post_repomd<'db>(
+        &self,
+        env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
+        repomd: &repomd::repomd,
+    ) -> std::io::Result<()>;
+}
 
 /// Cache for repository packages.
 ///
@@ -33,7 +102,6 @@ pub type MarkDb =
 ///   [`Self::db_pri`]
 /// - [`DataDb`]: custom datatype in `repomd.xml` → xml bytes in `repomd.xml`
 /// - [`MarkDb`]: filenames of RPM packages (utf-8 bytes) → unix epoch as [`u128`]
-///
 #[derive(Debug)]
 pub struct RepoCache {
     pub repo: String,

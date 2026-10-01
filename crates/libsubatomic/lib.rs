@@ -37,7 +37,9 @@
 #![feature(slice_split_once)]
 #![feature(try_blocks)]
 #![feature(file_buffered)]
+#![feature(error_generic_member_access)]
 
+pub mod cache;
 pub mod err;
 pub mod pkg;
 pub mod prelude;

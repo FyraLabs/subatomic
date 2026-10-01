@@ -1,0 +1,24 @@
+[package]
+name = "kuchiyose"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies]
+atoi = "3.1.0"
+futures = "0.3.34"
+tokio = "1.53.1"
+tracing = { workspace = true }
+object_store = { version = "0.14.1", features = ["aws"] }
+serde = { workspace = true }
+sha2 = "0.11.0"
+preinterpret = "0.2.1"
+
+[dependencies.async-compression]
+version = "0.4.46"
+features = ["tokio", "zlib", "gzip", "bzip2", "zstdmt", "xz-parallel"]
+
+[lints]
+workspace = true

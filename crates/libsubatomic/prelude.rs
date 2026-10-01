@@ -17,5 +17,8 @@ macro_rules! epoch {
 pub use crate::epoch;
 pub use crate::err::Res;
 
+pub use futures;
 pub use pgp;
 pub use rpm;
+
+pub use object_store::ObjectStore as Store;

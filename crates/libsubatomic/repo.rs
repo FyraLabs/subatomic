@@ -1,3 +1,4 @@
+pub mod hierarchy;
 // NOTE: what features should we have in libsubatomic? Maybe this belongs to subatomic (server)?
 use std::collections::HashSet;
 

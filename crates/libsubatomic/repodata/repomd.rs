@@ -126,7 +126,7 @@ pub enum CsumType {
 #[serde(rename_all = "kebab-case")]
 pub struct Data {
     #[serde(rename = "@type")]
-    pub r#type: DataType,
+    pub r#type: String,
     pub checksum: Checksum,
     pub open_checksum: Checksum,
     // #[serde(skip_serializing_if = "Option::is_none")]
