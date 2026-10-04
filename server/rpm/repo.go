@@ -79,7 +79,7 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 		}
 	}
 
-	flags := []string{"--update", "--zck", "--xz", "--local-sqlite", "--outputdir", stagingPath}
+	flags := []string{"--update", "--xz", "--local-sqlite", "--outputdir", stagingPath}
 
 	if exists, err := fileExists(path.Join(repoPath, "comps.xml")); err != nil {
 		return err
@@ -332,7 +332,6 @@ func modifyRepoAppStream(repoPath string, repodataDir string, appstreamPath stri
 		}
 
 		flags := []string{
-			"--zck",
 			"--mdtype", item.dataType,
 			"--new-name", item.newName,
 			item.filePath,
