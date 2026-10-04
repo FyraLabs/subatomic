@@ -482,6 +482,7 @@ mod test {
     use axum::extract::{Json, Path};
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
+    use libsubatomic::pgp::composed::Deserializable;
     use rust_multipart_rfc7578_2::client::multipart::{
         Body as MultipartBody, Form as MultipartForm,
     };
@@ -495,6 +496,16 @@ mod test {
     }
 
     const AUTH: &str = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoyNzg1NTc4MDI2fQ.1t5hFfRtAcBCa68tuk4iJ9NOwZ09FttVzqmXo06oiVU";
+    const KEY1_PRIV_ARMOR: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUkEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0OrrwCb9NEYCgt/
+X+732x931pW/h8IirjscbwJ5CQcG44Z1eA6xzTFSUE0gRmlzc2lvbiA8bnVjbGVh
+cmZpc3Npb24tYnVpbGRzeXNAZXhhbXBsZS5jb20+woIEExsIAC4FAmqe7CQWIQRc
+lFlXZHT+Kt+TSSkJBsMmjObbWQIbAwIeAQELARUBFgEnAhkBAAoJEAkGwyaM5ttZ
+yZ6lF65yoaCYmmR8GwlPLYYHGiw1Y1UmANRDe2Z7s+uVWTJZLwyAQab7f1VtbAiT
+qg38sG21+aKNUiFFHynSF64O
+=lkCs
+-----END PGP PRIVATE KEY BLOCK-----";
 
     fn cfg() -> (Arc<crate::config::Config>, impl std::any::Any) {
         let storage_dir = tempfile::tempdir().expect("storage_dir");
@@ -611,6 +622,14 @@ mod test {
         assert_eq!(rpms.len(), 1);
         assert_eq!(rpms.first().unwrap().as_str().unwrap(), "terra-release-44-5.noarch.rpm");
 
+        let asc_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml.asc");
+        let content = std::fs::read_to_string(&asc_path).unwrap();
+        let mgr = libsubatomic::sig::Mgr::from_armor(KEY1_PRIV_ARMOR).unwrap();
+        let sig = libsubatomic::pgp::composed::DetachedSignature::from_string(&content);
+        let repomd = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
+        let repomd = std::fs::read(repomd).expect("repomd.xml");
+        sig.expect("bad sig").0.verify(&mgr.public(), &repomd).expect("bad sig");
+
         let rpms = vec!["terra-release-44-5.noarch.rpm".into()];
         let ret =
             super::del_rpms(locker, Path("rpmfission".into()), Json(super::DelRpmsReq { rpms }));
@@ -722,19 +741,7 @@ mod test {
         let i = body.windows(4).position(|bs| bs == b"\r\n\r\n").unwrap() + 4;
         let j = body.windows(4).rposition(|bs| bs == b"\r\n--").unwrap();
         let sig = body.slice(i..j);
-        let mgr = libsubatomic::sig::Mgr::from_armor(
-            "-----BEGIN PGP PRIVATE KEY BLOCK-----
-
-xUkEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0OrrwCb9NEYCgt/
-X+732x931pW/h8IirjscbwJ5CQcG44Z1eA6xzTFSUE0gRmlzc2lvbiA8bnVjbGVh
-cmZpc3Npb24tYnVpbGRzeXNAZXhhbXBsZS5jb20+woIEExsIAC4FAmqe7CQWIQRc
-lFlXZHT+Kt+TSSkJBsMmjObbWQIbAwIeAQELARUBFgEnAhkBAAoJEAkGwyaM5ttZ
-yZ6lF65yoaCYmmR8GwlPLYYHGiw1Y1UmANRDe2Z7s+uVWTJZLwyAQab7f1VtbAiT
-qg38sG21+aKNUiFFHynSF64O
-=lkCs
------END PGP PRIVATE KEY BLOCK-----",
-        )
-        .unwrap();
+        let mgr = libsubatomic::sig::Mgr::from_armor(KEY1_PRIV_ARMOR).unwrap();
         rpmmeta.signature =
             libsubatomic::rpm::SignatureHeaderBuilder::from_existing(&rpmmeta.signature)
                 .unwrap()
