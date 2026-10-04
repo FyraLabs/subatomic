@@ -58,14 +58,11 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 	repoPath = filepath.Clean(repoPath)
 	liveRepodata := path.Join(repoPath, "repodata")
 
-	stagingPath := path.Join(path.Dir(repoPath), "."+path.Base(repoPath)+".staging")
+	stagingPath, err := os.MkdirTemp("", "subatomic-"+path.Base(repoPath)+"-")
+	if err != nil {
+		return err
+	}
 	stagingRepodata := path.Join(stagingPath, "repodata")
-	if err := os.RemoveAll(stagingPath); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(stagingPath, os.ModePerm); err != nil {
-		return err
-	}
 	defer os.RemoveAll(stagingPath)
 
 	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
@@ -128,18 +125,34 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 		}
 	}
 
-	return swapRepodata(liveRepodata, stagingRepodata, path.Join(stagingPath, "repodata.old"))
+	return publishRepodata(repoPath, liveRepodata, stagingRepodata)
 }
 
-func swapRepodata(liveRepodata string, stagingRepodata string, oldRepodata string) error {
+func publishRepodata(repoPath string, liveRepodata string, stagingRepodata string) error {
+	newRepodata := path.Join(repoPath, ".repodata.new")
+	oldRepodata := path.Join(repoPath, ".repodata.old")
+
+	if err := os.RemoveAll(newRepodata); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(oldRepodata); err != nil {
+		return err
+	}
+
+	if err := os.CopyFS(newRepodata, os.DirFS(stagingRepodata)); err != nil {
+		return err
+	}
+
 	if err := os.Rename(liveRepodata, oldRepodata); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
-	if err := os.Rename(stagingRepodata, liveRepodata); err != nil {
+	if err := os.Rename(newRepodata, liveRepodata); err != nil {
 		_ = os.Rename(oldRepodata, liveRepodata)
 		return err
 	}
+
+	_ = os.RemoveAll(oldRepodata)
 
 	return nil
 }
