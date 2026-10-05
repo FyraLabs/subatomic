@@ -36,6 +36,7 @@ tokio-util = "0.7.19"
 tracing = { workspace = true }
 tracing-logfmt = { workspace = true }
 tracing-subscriber = { workspace = true }
+sentry = { version = "0.49.3", features = ["tower", "tower-axum-matched-path"] }
 
 [dependencies.sqlx]
 version = "0.9.0"
