@@ -30,5 +30,8 @@ thiserror = "2.0.19"
 tracing = "0.1.44"
 zstd = { version = "0.13.3", features = ["zstdmt", "fat-lto"] }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

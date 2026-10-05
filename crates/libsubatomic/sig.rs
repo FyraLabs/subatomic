@@ -107,4 +107,70 @@ mod test {
         let mgr = super::Mgr::new(String::from(USERID));
         println!("{}", mgr.to_armor());
     }
+
+    #[test]
+    fn armor_round_trip() {
+        const USERID: &str = "Test <test@example.com>";
+        let mgr = super::Mgr::new(String::from(USERID));
+        let armor = mgr.to_armor();
+        assert!(armor.contains("PGP PRIVATE KEY BLOCK"), "armor missing header");
+
+        let mgr2 = super::Mgr::from_armor(&armor).expect("from_armor should succeed");
+        // Public material must be identical after round-trip.
+        assert_eq!(
+            mgr.public_armor().expect("public_armor"),
+            mgr2.public_armor().expect("public_armor")
+        );
+        // Re-armoring should also be parseable (normalized form may differ slightly,
+        // so we compare via second parse rather than string equality).
+        let armor2 = mgr2.to_armor();
+        let mgr3 = super::Mgr::from_armor(&armor2).expect("second round-trip");
+        assert_eq!(mgr.public_armor().unwrap(), mgr3.public_armor().unwrap());
+    }
+
+    #[test]
+    fn sign_and_verify() {
+        const USERID: &str = "Test <test@example.com>";
+        let mgr = super::Mgr::new(String::from(USERID));
+        let data = b"hello world";
+
+        let sig = mgr.sign(data).expect("sign should succeed");
+        // Verifying with the correct data and the public key must succeed.
+        sig.verify(&mgr.public(), data).expect("verify should succeed");
+    }
+
+    #[test]
+    fn verify_fails_on_modified_data() {
+        const USERID: &str = "Test <test@example.com>";
+        let mgr = super::Mgr::new(String::from(USERID));
+        let data = b"hello world";
+
+        let sig = mgr.sign(data).expect("sign should succeed");
+
+        // Modified data must NOT verify.
+        let modified = b"hello world!";
+        let result = sig.verify(&mgr.public(), modified.as_slice());
+        assert!(result.is_err(), "verification of modified data should fail");
+
+        // Also verify that a different key cannot verify.
+        let other = super::Mgr::new(String::from("Other <other@example.com>"));
+        let result2 = sig.verify(&other.public(), data);
+        assert!(result2.is_err(), "verification with wrong key should fail");
+    }
+
+    #[test]
+    fn debug_redacts_private_key() {
+        const USERID: &str = "Test <test@example.com>";
+        let mgr = super::Mgr::new(String::from(USERID));
+        let debug = format!("{mgr:?}");
+        assert!(debug.contains("<private key redacted>"), "Debug must redact, got: {debug}");
+        assert!(
+            !debug.contains("PGP PRIVATE KEY"),
+            "Debug must not leak armored key, got: {debug}"
+        );
+        // Ensure the actual armor is not accidentally included.
+        let armor = mgr.to_armor();
+        // The debug string should be short and not contain the bulk of the key.
+        assert!(debug.len() < armor.len() / 2, "Debug should be much shorter than armor");
+    }
 }
