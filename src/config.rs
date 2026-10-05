@@ -16,6 +16,8 @@ pub struct Config {
     pub cache_dir: PathBuf,
     #[serde(default = "defaults::_1_073_741_824")]
     pub body_limit: usize,
+    #[serde(default)]
+    pub sentry_dsn: Option<String>,
 }
 
 impl Config {

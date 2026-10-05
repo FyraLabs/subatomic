@@ -15,11 +15,12 @@ use std::sync::atomic::Ordering;
 use crate::config::Config;
 use crate::db::create_pool;
 use axum::Router;
+use axum::extract::Request;
 use axum::extract::{DefaultBodyLimit, FromRef, State};
 use axum::routing::{delete, get, post, put};
+use sentry::integrations::tower::{NewSentryLayer, SentryHttpLayer};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, Registry};
-
 #[derive(Clone)]
 pub struct AppState {
     config: Arc<Config>,
@@ -51,12 +52,21 @@ fn main() {
 
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
+    let config = Config::from_env().expect("cannot obtain config from env");
+    config.check();
+    let config = Arc::new(config);
+
+    let _sentry_guard = config
+        .sentry_dsn
+        .as_deref()
+        .filter(|dsn| !dsn.is_empty())
+        .map(|dsn| sentry::init((dsn, sentry::ClientOptions::default())));
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("cannot build tokio");
-    let handle = runtime.spawn(inner_main());
+    let handle = runtime.spawn(inner_main(config));
     loop {
         if handle.is_finished() {
             tracing::info!("main finished");
@@ -101,13 +111,11 @@ pub fn app(
         .route_layer(axum::middleware::from_fn_with_state(Arc::clone(config), auth::jwt_auth))
         .with_state(AppState { config: Arc::clone(config), pool, locker })
         .layer(DefaultBodyLimit::max(config.body_limit))
+        .layer(SentryHttpLayer::new())
+        .layer(NewSentryLayer::<Request>::new_from_top())
 }
 
-async fn inner_main() {
-    let config = Config::from_env().expect("cannot obtain config from env");
-    config.check();
-    let config = Arc::new(config);
-
+async fn inner_main(config: Arc<Config>) {
     let pool = create_pool(&config).await.expect("cannot create pool");
     let pool = Arc::new(pool);
 
@@ -117,6 +125,7 @@ async fn inner_main() {
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     tracing::info!(addr, "starting server");
+
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
