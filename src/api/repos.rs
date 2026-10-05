@@ -521,6 +521,7 @@ qg38sG21+aKNUiFFHynSF64O
                 storage_dir: storage_dir.path().to_owned(),
                 cache_dir: cache_dir.path().to_owned(),
                 body_limit: 10_485_760, // 10 MiB
+                sentry_dsn: None,
             }),
             (storage_dir, cache_dir),
         )
