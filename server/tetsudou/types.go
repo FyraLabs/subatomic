@@ -41,18 +41,18 @@ type Repodata struct {
 	Hashes    Hashes `json:"hashes"`
 }
 
-func RepodataFromFile(f *os.File) (Repodata, error) {
+func RepodataFromFile(f *os.File) (*Repodata, error) {
 	hashes, err := HashesFromReader(f)
 	if err != nil {
-		return Repodata{}, err
+		return nil, err
 	}
 
 	fi, err := f.Stat()
 	if err != nil {
-		return Repodata{}, err
+		return nil, err
 	}
 
-	return Repodata{
+	return &Repodata{
 		// we use the last modified time as the timestamp.. at least I think that's correct for metalink?
 		fi.ModTime().Unix(),
 		fi.Size(),

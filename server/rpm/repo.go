@@ -53,20 +53,16 @@ func CreateRepo(repoPath string) error {
 		return err
 	}
 
-	if err := writeTetsudouMetadata(repoPath); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
+func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) {
 	repoPath = filepath.Clean(repoPath)
 	liveRepodata := path.Join(repoPath, "repodata")
 
 	stagingPath, err := os.MkdirTemp("", "subatomic-"+path.Base(repoPath)+"-")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stagingRepodata := path.Join(stagingPath, "repodata")
 	defer os.RemoveAll(stagingPath)
@@ -74,21 +70,21 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
 
 	if exists, err := fileExists(path.Join(liveRepodata, "repomd.xml")); err != nil {
-		return err
+		return nil, err
 	} else if exists {
 		if err := seedRepodata(liveRepodata, stagingRepodata); err != nil {
-			return err
+			return nil, err
 		}
 
 		if err := removeRepoAppStream(repoPath, stagingRepodata); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	flags := []string{"--update", "--xz", "--local-sqlite", "--outputdir", stagingPath}
 
 	if exists, err := fileExists(path.Join(repoPath, "comps.xml")); err != nil {
-		return err
+		return nil, err
 	} else if exists {
 		flags = append(flags, "--groupfile", "comps.xml")
 	}
@@ -98,10 +94,10 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 	level.Info(logger).Log("msg", "running createrepo_c", "flags", flags)
 	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
 		if err, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
+			return nil, fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
 		}
 
-		return err
+		return nil, err
 	}
 	level.Info(logger).Log("msg", "createrepo_c completed successfully")
 
@@ -110,7 +106,7 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 		level.Info(logger).Log("msg", "modifying repo appstream metadata from directory", "dir", appstreamDirEnv)
 		appstreamDir, err := filepath.Abs(appstreamDirEnv)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		modified, err := modifyRepoAppStream(repoPath, stagingRepodata, appstreamDir)
@@ -121,17 +117,22 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 		}
 	}
 
-	if err := writeTetsudouMetadata(stagingPath); err != nil {
-		return err
+	repodata, err := TetsudouRepodata(stagingPath)
+	if err != nil {
+		return nil, err
 	}
 
 	if ring != nil {
 		if err := SignRepo(stagingPath, ring); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return publishRepodata(liveRepodata, stagingRepodata)
+	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
+		return nil, err
+	}
+
+	return repodata, nil
 }
 
 func seedRepodata(liveRepodata string, stagingRepodata string) error {
@@ -319,30 +320,14 @@ func removeRepoAppStream(repoPath string, repodataDir string) error {
 	return nil
 }
 
-func writeTetsudouMetadata(repoPath string) error {
-	// We calculate and write some metadata for Tetsudou, which is our mirroring system
-	// This is not strictly necessary for the repo to function, but it's useful for our use case (and possibly others)
+func TetsudouRepodata(repoPath string) (*tetsudou.Repodata, error) {
 	repomd, err := os.Open(path.Join(repoPath, "repodata/repomd.xml"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer repomd.Close()
 
-	repodata, err := tetsudou.RepodataFromFile(repomd)
-	if err != nil {
-		return err
-	}
-
-	tetsudouJson, err := json.Marshal(repodata)
-	if err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(path.Join(repoPath, "repodata/tetsudou.json"), tetsudouJson, 0644); err != nil {
-		return err
-	}
-
-	return nil
+	return tetsudou.RepodataFromFile(repomd)
 }
 
 // use `modifyrepo_c` to update AppStream metadata in the repo

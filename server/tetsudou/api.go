@@ -1,6 +1,8 @@
 package tetsudou
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,17 +14,23 @@ type TetsudouConfig struct {
 	Token  string
 }
 
-func RefreshRepo(config *TetsudouConfig, repoid string) error {
+func RefreshRepo(config *TetsudouConfig, repoid string, repodata *Repodata) error {
 	path, err := url.JoinPath(config.Server, "/api/repos/"+repoid+"/refresh")
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, path, nil)
+	payload, err := json.Marshal(repodata)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, path, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.Token))
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)

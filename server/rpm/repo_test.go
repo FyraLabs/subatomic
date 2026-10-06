@@ -1,7 +1,6 @@
 package rpm
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,7 +83,8 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 	}
 
 	t.Setenv("SUBATOMIC_APPSTREAM_DIR", t.TempDir())
-	if err := UpdateRepo(repoPath, ring); err != nil {
+	repodata, err := UpdateRepo(repoPath, ring)
+	if err != nil {
 		t.Fatalf("UpdateRepo() failed: %v", err)
 	}
 
@@ -96,20 +96,13 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 		t.Fatalf("appstream entries were not removed:\n%s", repomd)
 	}
 
-	tetsudouJson, err := os.ReadFile(filepath.Join(repodataPath, "tetsudou.json"))
-	if err != nil {
-		t.Fatalf("expected complete repository update to write tetsudou metadata: %v", err)
-	}
-	var repodata tetsudou.Repodata
-	if err := json.Unmarshal(tetsudouJson, &repodata); err != nil {
-		t.Fatal(err)
-	}
+	assertNotExists(t, filepath.Join(repodataPath, "tetsudou.json"))
 	hashes, err := tetsudou.HashesFromReader(strings.NewReader(string(repomd)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if repodata.Hashes != hashes || repodata.Size != int64(len(repomd)) {
-		t.Fatalf("tetsudou.json does not describe repomd.xml: got %+v, want %+v", repodata.Hashes, hashes)
+		t.Fatalf("returned repodata does not describe repomd.xml: got %+v, want %+v", repodata.Hashes, hashes)
 	}
 
 	armoredSig, err := os.ReadFile(filepath.Join(repodataPath, "repomd.xml.asc"))
@@ -159,7 +152,7 @@ func TestUpdateRepoLeavesRepodataUntouchedOnFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoPath, "comps.xml"), []byte("not xml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := UpdateRepo(repoPath, nil); err == nil {
+	if _, err := UpdateRepo(repoPath, nil); err == nil {
 		t.Fatal("expected UpdateRepo() to fail with an invalid groupfile")
 	}
 

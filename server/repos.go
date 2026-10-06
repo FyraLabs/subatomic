@@ -418,7 +418,8 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
-		if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+		repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+		if err != nil {
 			panic(err)
 		}
 
@@ -426,7 +427,7 @@ func (router *reposRouter) uploadToRepo(w http.ResponseWriter, r *http.Request) 
 			if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 				Server: *re.TetsudouURL,
 				Token:  *re.TetsudouToken,
-			}, id); err != nil {
+			}, id, repodata); err != nil {
 				level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 			}
 		}
@@ -633,7 +634,8 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+	repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+	if err != nil {
 		panic(err)
 	}
 
@@ -641,7 +643,7 @@ func (router *reposRouter) bulkDeleteRPMs(w http.ResponseWriter, r *http.Request
 		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
-		}, id); err != nil {
+		}, id, repodata); err != nil {
 			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
@@ -736,7 +738,8 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+	repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+	if err != nil {
 		panic(err)
 	}
 
@@ -744,7 +747,7 @@ func (router *reposRouter) deleteRPM(w http.ResponseWriter, r *http.Request) {
 		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
-		}, id); err != nil {
+		}, id, repodata); err != nil {
 			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
@@ -980,7 +983,8 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+			repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+			if err != nil {
 				panic(err)
 			}
 
@@ -988,7 +992,7 @@ func (router *reposRouter) resign(w http.ResponseWriter, r *http.Request) {
 				if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 					Server: *re.TetsudouURL,
 					Token:  *re.TetsudouToken,
-				}, id); err != nil {
+				}, id, repodata); err != nil {
 					level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 				}
 			}
@@ -1079,7 +1083,8 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 
 	_ = compsFile.Close()
 
-	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+	repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+	if err != nil {
 		panic(err)
 	}
 
@@ -1087,7 +1092,7 @@ func (router *reposRouter) putComps(w http.ResponseWriter, r *http.Request) {
 		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 			Server: *re.TetsudouURL,
 			Token:  *re.TetsudouToken,
-		}, id); err != nil {
+		}, id, repodata); err != nil {
 			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 		}
 	}
@@ -1160,8 +1165,18 @@ func (router *reposRouter) deleteComps(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	if err := rpm.UpdateRepo(targetDirectory, ring); err != nil {
+	repodata, err := rpm.UpdateRepo(targetDirectory, ring)
+	if err != nil {
 		panic(err)
+	}
+
+	if re.TetsudouURL != nil {
+		if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+			Server: *re.TetsudouURL,
+			Token:  *re.TetsudouToken,
+		}, id, repodata); err != nil {
+			level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1213,10 +1228,12 @@ func (router *reposRouter) setTetsudouConfig(w http.ResponseWriter, r *http.Requ
 		panic(err)
 	}
 
-	if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
+	if repodata, err := rpm.TetsudouRepodata(path.Join(router.environment.StorageDirectory, id)); err != nil {
+		level.Error(repoLogger(id)).Log("msg", "error reading repodata for tetsudou", "error", err)
+	} else if err := tetsudou.RefreshRepo(&tetsudou.TetsudouConfig{
 		Server: payload.Url,
 		Token:  payload.Token,
-	}, id); err != nil {
+	}, id, repodata); err != nil {
 		level.Error(repoLogger(id)).Log("msg", "error refreshing tetsudou repo", "error", err)
 	}
 
