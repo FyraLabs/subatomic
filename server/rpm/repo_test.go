@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/tetsudou"
 	pgp "github.com/ProtonMail/gopenpgp/v2/crypto"
@@ -273,7 +274,45 @@ func TestPublishRepodataReplacesMetadataInPlace(t *testing.T) {
 	assertFileContent(t, filepath.Join(liveRepodata, "repomd.xml"), string(stagedRepomd))
 	assertFileContent(t, filepath.Join(liveRepodata, "bbb-primary.xml.xz"), "new primary")
 	assertFileContent(t, filepath.Join(liveRepodata, "ccc-other.xml.xz"), "other")
-	assertNotExists(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"))
+	// Clients holding the previous repomd.xml must still be able to fetch what it references
+	assertFileContent(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"), "old primary")
 	// The update was unsigned, so the old signature no longer matches repomd.xml
 	assertNotExists(t, filepath.Join(liveRepodata, "repomd.xml.asc"))
+}
+
+func TestPublishRepodataRemovesRetiredMetadataAfterGracePeriod(t *testing.T) {
+	liveRepodata := filepath.Join(t.TempDir(), "repodata")
+	writeTestRepodata(t, liveRepodata, map[string]string{"aaa-primary.xml.xz": "first"})
+
+	stagingRepodata := filepath.Join(t.TempDir(), "repodata")
+	writeTestRepodata(t, stagingRepodata, map[string]string{"bbb-primary.xml.xz": "second"})
+	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
+		t.Fatal(err)
+	}
+	assertFileContent(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"), "first")
+
+	// Retired files must not be carried into the next generation's staging directory
+	seeded := filepath.Join(t.TempDir(), "repodata")
+	if err := seedRepodata(liveRepodata, seeded); err != nil {
+		t.Fatal(err)
+	}
+	assertNotExists(t, filepath.Join(seeded, "aaa-primary.xml.xz"))
+	assertFileContent(t, filepath.Join(seeded, "bbb-primary.xml.xz"), "second")
+
+	// Once the grace period has passed since aaa was retired, it is removed, while bbb was only just retired and is kept
+	if err := os.WriteFile(filepath.Join(liveRepodata, "ccc-primary.xml.xz"), []byte("third"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stagedNames := map[string]bool{"repomd.xml": true, "ccc-primary.xml.xz": true}
+	if err := pruneRetiredRepodata(liveRepodata, stagedNames, time.Now().Add(retiredRepodataGracePeriod)); err != nil {
+		t.Fatal(err)
+	}
+	assertNotExists(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"))
+	assertFileContent(t, filepath.Join(liveRepodata, "bbb-primary.xml.xz"), "second")
+
+	if err := pruneRetiredRepodata(liveRepodata, stagedNames, time.Now().Add(2*retiredRepodataGracePeriod)); err != nil {
+		t.Fatal(err)
+	}
+	assertNotExists(t, filepath.Join(liveRepodata, "bbb-primary.xml.xz"))
+	assertNotExists(t, filepath.Join(filepath.Dir(liveRepodata), retiredRepodataStateFile))
 }

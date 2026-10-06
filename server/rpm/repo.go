@@ -2,6 +2,7 @@ package rpm
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/FyraLabs/subatomic/server/logging"
 	"github.com/FyraLabs/subatomic/server/tetsudou"
@@ -22,6 +24,10 @@ import (
 )
 
 var logger = log.With(logging.Logger, "module", "rpm")
+
+var retiredRepodataGracePeriod = time.Hour
+
+const retiredRepodataStateFile = ".repodata-retired.json"
 
 // TOML struct for modifyrepo_c batch scripts
 //
@@ -70,7 +76,7 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 	if exists, err := fileExists(path.Join(liveRepodata, "repomd.xml")); err != nil {
 		return err
 	} else if exists {
-		if err := os.CopyFS(stagingRepodata, os.DirFS(liveRepodata)); err != nil {
+		if err := seedRepodata(liveRepodata, stagingRepodata); err != nil {
 			return err
 		}
 
@@ -128,6 +134,56 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 	return publishRepodata(liveRepodata, stagingRepodata)
 }
 
+func seedRepodata(liveRepodata string, stagingRepodata string) error {
+	names, err := repomdFiles(path.Join(liveRepodata, "repomd.xml"))
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(stagingRepodata, os.ModePerm); err != nil {
+		return err
+	}
+
+	for _, name := range append(names, "repomd.xml") {
+		if err := copyFile(path.Join(liveRepodata, name), path.Join(stagingRepodata, name)); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func repomdFiles(repomdPath string) ([]string, error) {
+	file, err := os.Open(repomdPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var repomd struct {
+		Data []struct {
+			Location struct {
+				Href string `xml:"href,attr"`
+			} `xml:"location"`
+		} `xml:"data"`
+	}
+	if err := xml.NewDecoder(file).Decode(&repomd); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", repomdPath, err)
+	}
+
+	var names []string
+	for _, data := range repomd.Data {
+		if data.Location.Href != "" {
+			names = append(names, path.Base(data.Location.Href))
+		}
+	}
+
+	return names, nil
+}
+
 func publishRepodata(liveRepodata string, stagingRepodata string) error {
 	if err := os.MkdirAll(liveRepodata, os.ModePerm); err != nil {
 		return err
@@ -153,20 +209,62 @@ func publishRepodata(liveRepodata string, stagingRepodata string) error {
 		return err
 	}
 
+	return pruneRetiredRepodata(liveRepodata, stagedNames, time.Now())
+}
+
+func pruneRetiredRepodata(liveRepodata string, stagedNames map[string]bool, now time.Time) error {
+	statePath := path.Join(path.Dir(liveRepodata), retiredRepodataStateFile)
+
+	retired := map[string]int64{}
+	if state, err := os.ReadFile(statePath); err == nil {
+		if err := json.Unmarshal(state, &retired); err != nil {
+			level.Warn(logger).Log("msg", "ignoring corrupt retired repodata state", "path", statePath, "err", err)
+			retired = map[string]int64{}
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
 	live, err := os.ReadDir(liveRepodata)
 	if err != nil {
 		return err
 	}
+
+	stillRetired := map[string]int64{}
 	for _, entry := range live {
-		if stagedNames[entry.Name()] {
+		name := entry.Name()
+		if stagedNames[name] {
 			continue
 		}
-		if err := os.RemoveAll(path.Join(liveRepodata, entry.Name())); err != nil {
+
+		if name != "repomd.xml.asc" {
+			retiredAt, ok := retired[name]
+			if !ok {
+				retiredAt = now.Unix()
+			}
+			if now.Sub(time.Unix(retiredAt, 0)) < retiredRepodataGracePeriod {
+				stillRetired[name] = retiredAt
+				continue
+			}
+		}
+
+		if err := os.RemoveAll(path.Join(liveRepodata, name)); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	if len(stillRetired) == 0 {
+		if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+
+	state, err := json.Marshal(stillRetired)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(statePath, state, 0644)
 }
 
 func copyFile(src string, dst string) error {
