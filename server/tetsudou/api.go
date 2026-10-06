@@ -15,7 +15,7 @@ type TetsudouConfig struct {
 }
 
 func RefreshRepo(config *TetsudouConfig, repoid string, repodata *Repodata) error {
-	path, err := url.JoinPath(config.Server, "/api/repos/"+repoid+"/refresh")
+	path, err := url.JoinPath(config.Server, "/api/repos/"+repoid)
 	if err != nil {
 		return err
 	}
