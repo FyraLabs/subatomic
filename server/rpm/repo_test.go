@@ -213,3 +213,67 @@ func TestModifyRepoAppStreamSkipsMissingMetadata(t *testing.T) {
 		t.Fatal("expected missing AppStream metadata to be skipped")
 	}
 }
+
+func writeTestRepodata(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repomd := "<repomd>"
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		repomd += `<data type="` + name + `"><location href="repodata/` + name + `"/></data>`
+	}
+	repomd += "</repomd>"
+
+	if err := os.WriteFile(filepath.Join(dir, "repomd.xml"), []byte(repomd), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertFileContent(t *testing.T, filePath string, want string) {
+	t.Helper()
+	got, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Fatalf("%s = %q, want %q", filePath, got, want)
+	}
+}
+
+func assertNotExists(t *testing.T, filePath string) {
+	t.Helper()
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("expected %s to not exist: %v", filePath, err)
+	}
+}
+
+func TestPublishRepodataReplacesMetadataInPlace(t *testing.T) {
+	liveRepodata := filepath.Join(t.TempDir(), "repodata")
+	writeTestRepodata(t, liveRepodata, map[string]string{"aaa-primary.xml.xz": "old primary", "ccc-other.xml.xz": "other"})
+	if err := os.WriteFile(filepath.Join(liveRepodata, "repomd.xml.asc"), []byte("old signature"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stagingRepodata := filepath.Join(t.TempDir(), "repodata")
+	writeTestRepodata(t, stagingRepodata, map[string]string{"bbb-primary.xml.xz": "new primary", "ccc-other.xml.xz": "other"})
+	stagedRepomd, err := os.ReadFile(filepath.Join(stagingRepodata, "repomd.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
+		t.Fatal(err)
+	}
+
+	assertFileContent(t, filepath.Join(liveRepodata, "repomd.xml"), string(stagedRepomd))
+	assertFileContent(t, filepath.Join(liveRepodata, "bbb-primary.xml.xz"), "new primary")
+	assertFileContent(t, filepath.Join(liveRepodata, "ccc-other.xml.xz"), "other")
+	assertNotExists(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"))
+	// The update was unsigned, so the old signature no longer matches repomd.xml
+	assertNotExists(t, filepath.Join(liveRepodata, "repomd.xml.asc"))
+}

@@ -125,36 +125,68 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) error {
 		}
 	}
 
-	return publishRepodata(repoPath, liveRepodata, stagingRepodata)
+	return publishRepodata(liveRepodata, stagingRepodata)
 }
 
-func publishRepodata(repoPath string, liveRepodata string, stagingRepodata string) error {
-	newRepodata := path.Join(repoPath, ".repodata.new")
-	oldRepodata := path.Join(repoPath, ".repodata.old")
-
-	if err := os.RemoveAll(newRepodata); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(oldRepodata); err != nil {
+func publishRepodata(liveRepodata string, stagingRepodata string) error {
+	if err := os.MkdirAll(liveRepodata, os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := os.CopyFS(newRepodata, os.DirFS(stagingRepodata)); err != nil {
+	staged, err := os.ReadDir(stagingRepodata)
+	if err != nil {
 		return err
 	}
 
-	if err := os.Rename(liveRepodata, oldRepodata); err != nil && !os.IsNotExist(err) {
+	stagedNames := map[string]bool{}
+	for _, entry := range staged {
+		stagedNames[entry.Name()] = true
+		if entry.IsDir() || entry.Name() == "repomd.xml" {
+			continue
+		}
+		if err := copyFile(path.Join(stagingRepodata, entry.Name()), path.Join(liveRepodata, entry.Name())); err != nil {
+			return err
+		}
+	}
+
+	if err := copyFile(path.Join(stagingRepodata, "repomd.xml"), path.Join(liveRepodata, "repomd.xml")); err != nil {
 		return err
 	}
 
-	if err := os.Rename(newRepodata, liveRepodata); err != nil {
-		_ = os.Rename(oldRepodata, liveRepodata)
+	live, err := os.ReadDir(liveRepodata)
+	if err != nil {
 		return err
 	}
-
-	_ = os.RemoveAll(oldRepodata)
+	for _, entry := range live {
+		if stagedNames[entry.Name()] {
+			continue
+		}
+		if err := os.RemoveAll(path.Join(liveRepodata, entry.Name())); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func copyFile(src string, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		dstFile.Close()
+		return err
+	}
+
+	return dstFile.Close()
 }
 
 func reportAppStreamWarning(message string, repoPath string, detail string) {
