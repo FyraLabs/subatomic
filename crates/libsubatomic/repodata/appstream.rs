@@ -33,7 +33,9 @@ pub fn transform<R: std::io::BufRead>(
     panic!("unexpected io error during appstream::transform: {e}");
 }
 
-pub(crate) struct AppstreamMetan {
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct AppstreamMetan {
     /// Used as the `origin=` attribute on `<components />`.
     pub repo: String,
     db: OnceLock<Arc<super::FragDb>>,
@@ -47,7 +49,7 @@ impl super::Metan for AppstreamMetan {
     fn filename(&self) -> &str {
         "appstream"
     }
-    fn db_count(&self) -> usize {
+    fn db_count(&self) -> u32 {
         1
     }
 
@@ -63,20 +65,14 @@ impl super::Metan for AppstreamMetan {
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &mut crate::pkg::MetanPkg<'_>,
+        pkg: &crate::pkg::MetanInput,
     ) -> Result<(), super::MetanError> {
-        pkg.rpm.
-        // Consume the reader's archive stream. `appstream_frag` walks the cpio
-        // payload, skips files that aren't appstream, and returns the transformed
-        // fragment (or an empty Vec if nothing matched).
-        let frag = crate::pkg::Package::appstream_frag(&mut pkg.rpm)?;
-
-        // Packages without appstream data are simply not stored.
+        let mut reader = rpm::PackageReader::open(&pkg.path)?;
+        let frag = crate::pkg::Package::appstream_frag(&mut reader)?;
         if frag.is_empty() {
             return Ok(());
         }
-
-        self.db.get().expect("db uninit").put(txn, pkg.path, &frag)?;
+        self.db.get().expect("db uninit").put(txn, pkg.link.as_bytes(), &frag)?;
         Ok(())
     }
 
@@ -93,7 +89,7 @@ impl super::Metan for AppstreamMetan {
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-appstream.xml.{}", csum.sha, comp_ext).into();
         Ok(Some(super::repomd::Data {
-            r#type: "appstream".into(),
+            r#type: self.mdtype().into(),
             checksum: csum,
             open_checksum: osum,
             location: super::repomd::Location { href },
@@ -114,7 +110,7 @@ impl super::Metan for AppstreamMetan {
     async fn on_generate<'t, 'db>(
         &self,
         env: Arc<heed::Env<heed::WithoutTls>>,
-        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
         let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;

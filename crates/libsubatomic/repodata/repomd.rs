@@ -1,7 +1,9 @@
 use crate::prelude::*;
+use kuchiyose::ftmm::Ftmm;
+use kuchiyose::link::LinkBuf;
 
 #[derive(Clone, Debug, Serialize)]
-pub struct repomd { // FIXME: how to make roottag lowercase properly
+pub struct repomd {
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/repo",
     #[serde(rename = "@xmlns:rpm")]
@@ -11,117 +13,16 @@ pub struct repomd { // FIXME: how to make roottag lowercase properly
     pub data: Vec<Data>,
 }
 
-#[derive(Clone, Debug)]
-pub enum DataType {
-    Primary,
-    Filelists,
-    Other,
-    // PrimaryZck,
-    // FilelistsZck,
-    // OtherZck,
-    #[deprecated = "use Custom(\"group\", \"comps.xml\")"]
-    Group,
-    Appstream,
-    /// (serialized [`Data::r#type`], uncompressed filename)
-    Custom(String, String),
-}
-
-impl serde::Serialize for DataType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        if let Self::Custom(t, s) = self {
-            if s.starts_with(':') {
-                serializer.serialize_str(t)
-            } else {
-                serializer.serialize_str(&format!("{t}:{s}"))
-            }
-        } else {
-            serializer.serialize_str(self.as_type())
-        }
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for DataType {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        deserializer.deserialize_str(DataType::Primary)
-    }
-}
-
-impl<'de> serde::de::Visitor<'de> for DataType {
-    type Value = Self;
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(match v {
-            "primary" => Self::Primary,
-            "filelists" => Self::Filelists,
-            "other" => Self::Other,
-            "group" => Self::Group,
-            "appstream" => Self::Appstream,
-            any if let Some((typ, str)) = any.split_once(':') => {
-                Self::Custom(typ.into(), str.into())
-            }
-            any => return Err(E::custom(format!("unknown datatype: {any}"))),
-        })
-    }
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("any string")
-    }
-}
-
-impl DataType {
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Primary => "primary",
-            Self::Filelists => "filelists",
-            Self::Other => "other",
-            Self::Group => "comps",
-            Self::Appstream => "appstream",
-            Self::Custom(_, s) => s,
-        }
-    }
-
-    #[must_use]
-    pub fn as_type(&self) -> &str {
-        match self {
-            Self::Primary => "primary",
-            Self::Filelists => "filelists",
-            Self::Other => "other",
-            Self::Group => "group",
-            Self::Appstream => "appstream",
-            Self::Custom(k, _) => k,
-        }
-    }
-}
-impl std::fmt::Display for DataType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Checksum {
     #[serde(rename = "@type")]
-    pub r#type: CsumType = CsumType::Sha256,
+    pub r#type: Ftmm,
     #[serde(rename = "$value")]
-    pub sha: String, // NOTE: or [u8; 32] with hex-serde?
+    pub sha: String,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum CsumType {
-    Sha256,
-}
-
+#[non_exhaustive]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Data {
@@ -139,10 +40,11 @@ pub struct Data {
     // pub header_size: Option<u64>, // Only for ZCK types
 }
 
-#[derive(Clone, Debug, Serialize, serde::Deserialize)]
+#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Location {
     #[serde(rename = "@href")]
-    pub href: String,
+    pub href: LinkBuf,
 }
 
 impl repomd {

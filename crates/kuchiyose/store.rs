@@ -1,12 +1,99 @@
 //! Some helpers for [`object_store`].
+//!
+//! [`object_store::ObjectStore`] requires the input bytes to be owned (because the crate is
+//! designed for sending bytes over the network to another store), but in `kiritan`, we have very
+//! high expectations on memory efficiency.
+//!
+//! Therefore, while we implement [`AsyncWrite`] on [`MultipartUploadWriter`], we create an extra
+//! [`StoreBackend`] wrapper that takes in `&[u8]` instead, then clone for [`object_store::ObjectStore`].
 use std::io;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::FutureExt;
 use futures::stream::{FuturesUnordered, StreamExt};
-use object_store::{MultipartUpload, PutPayload, UploadPart};
+use object_store::{MultipartUpload, ObjectStoreExt, PutPayload, UploadPart};
 use tokio::io::AsyncWrite;
+
+use crate::link::Link;
+
+#[derive(Debug, thiserror::Error)]
+pub enum StoreErr {
+    #[error("io error: {source}")]
+    Io {
+        #[from]
+        source: std::io::Error,
+        backtrace: std::backtrace::Backtrace,
+    },
+    #[error("remote error: {source}")]
+    Remote {
+        #[from]
+        source: object_store::Error,
+        backtrace: std::backtrace::Backtrace,
+    },
+}
+
+/// A wrapper around [`object_store::ObjectStore`] with performance benefits when writing to the
+/// local filesystem.
+///
+/// See [`Self::writer()`] for more information.
+#[derive(Debug)]
+pub enum StoreBackend {
+    Local,
+    Remote(Arc<dyn object_store::ObjectStore>),
+}
+
+impl StoreBackend {
+    /// Create a writer. This is either [`tokio::fs::File`] or [`MultipartUploadWriter`] depending
+    /// on the actual backend.
+    ///
+    /// The `link` given must respect the actual backend. In `libsubatomic`, this should be stored
+    /// inside the hierarchy configuration.
+    ///
+    /// # Errors
+    /// If the parent directory or the local file cannot be created, [`StoreErr::Io`] is returned.
+    /// Errors from [`object_store::ObjectStoreExt::put_multipart`] are also propagated.
+    pub async fn writer(
+        &self,
+        link: &Link,
+    ) -> Result<Box<dyn AsyncWrite + Send + Unpin>, StoreErr> {
+        match self {
+            Self::Local => {
+                if let Some(parent) = link.as_path().parent() {
+                    tokio::fs::create_dir_all(parent).await?;
+                }
+                Ok(Box::new(tokio::io::BufWriter::new(
+                    tokio::fs::File::create(link.as_path()).await?,
+                )))
+            }
+            Self::Remote(store) => {
+                let upload = store.put_multipart(&link.to_storepath()).await?;
+                Ok(Box::new(MultipartUploadWriter::with_defaults(upload)))
+            }
+        }
+    }
+
+    /// Delete a file at `link`.
+    ///
+    /// Missing files are treated as success.
+    ///
+    /// # Errors
+    /// Propagates `object_store` errors other than `NotFound`.
+    pub async fn delete(&self, link: &Link) -> Result<(), StoreErr> {
+        match self {
+            Self::Local => match tokio::fs::remove_file(link).await {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.into()),
+            },
+            Self::Remote(store) => match store.delete(&link.to_storepath()).await {
+                Ok(()) | Err(object_store::Error::NotFound { .. }) => Ok(()),
+                Err(e) => Err(e.into()),
+            },
+        }
+    }
+}
 
 /// Default minimum part size.
 ///
@@ -35,7 +122,9 @@ pub enum MultipartUploadWriter {
     /// Currently the result of the future [`object_store::PutResult`] is discarded. Errors are
     /// propagated in shutdown.
     Completing {
-        fut: std::pin::Pin<Box<dyn Future<Output = object_store::Result<object_store::PutResult>>>>,
+        fut: std::pin::Pin<
+            Box<dyn Future<Output = object_store::Result<object_store::PutResult>> + Send>,
+        >,
     },
     /// The writer has completed and should be discarded.
     Done,

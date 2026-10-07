@@ -7,9 +7,10 @@ use crate::{
     prelude::*,
 };
 
+#[expect(dead_code, reason = "for reference")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "metadata")]
-pub struct PrimaryMetadata<'a> {
+struct PrimaryMetadata<'a> {
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/common",
     #[serde(rename = "@xmlns:rpm")]
@@ -22,7 +23,7 @@ pub struct PrimaryMetadata<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "package")]
-pub struct Package<'a> {
+struct Package<'a> {
     #[serde(rename = "@type")]
     pub package_type: &'static str = "rpm",
     pub name: &'a str,
@@ -48,7 +49,7 @@ pub struct Package<'a> {
 /// to filter the files. This struct borrows everything from the source `Format` to avoid that
 /// clone, while still presenting the same serialized shape to `quick_xml`.
 #[derive(Clone, Debug, Serialize)]
-pub struct PrimaryFormat<'a> {
+struct PrimaryFormat<'a> {
     #[serde(rename = "rpm:license")]
     pub license: &'a str,
     #[serde(rename = "rpm:vendor", skip_serializing_if = "Option::is_none")]
@@ -88,7 +89,7 @@ const fn deps_is_empty(d: &&Dependencies) -> bool {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct PackageChecksum<'a> {
+struct PackageChecksum<'a> {
     #[serde(rename = "@type")]
     pub checksum_type: &'static str = "sha256", // FIXME: unhardcode
     #[serde(rename = "@pkgid")]
@@ -98,66 +99,14 @@ pub struct PackageChecksum<'a> {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct PackageLocation<'a> {
+struct PackageLocation<'a> {
     #[serde(rename = "@href")]
     pub href: &'a [u8],
 }
 
-impl<'a> Package<'a> {
-    #[must_use]
-    pub fn from_pkg(
-        crate::pkg::Package {
-            name,
-            arch,
-            version,
-            checksum,
-            summary,
-            description,
-            packager,
-            url,
-            time,
-            size,
-            format,
-            ..
-        }: &'a crate::pkg::Package,
-        path: &'a [u8],
-    ) -> Self {
-        let files = format.files.iter().cloned().filter(|f| f.is_primary()).collect();
-        Self {
-            name,
-            arch,
-            version,
-            checksum: PackageChecksum { value: checksum, .. },
-            summary,
-            description,
-            packager: packager.as_deref(),
-            url: url.as_deref(),
-            time,
-            size,
-            location: PackageLocation { href: path },
-            format: PrimaryFormat {
-                license: &format.license,
-                vendor: format.vendor.as_deref(),
-                group: format.group.as_deref(),
-                buildhost: format.buildhost.as_deref(),
-                sourcerpm: format.sourcerpm.as_deref(),
-                // header_range: format.header_range.clone(),
-                requires: &format.requires,
-                provides: &format.provides,
-                conflicts: &format.conflicts,
-                obsoletes: &format.obsoletes,
-                recommends: &format.recommends,
-                suggests: &format.suggests,
-                supplements: &format.supplements,
-                enhances: &format.enhances,
-                files,
-            },
-            ..
-        }
-    }
-}
-
-pub(crate) struct PrimaryMetan {
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct PrimaryMetan {
     db: std::sync::OnceLock<Arc<super::FragDb>>,
 }
 
@@ -169,7 +118,7 @@ impl super::Metan for PrimaryMetan {
     fn filename(&self) -> &str {
         "primary"
     }
-    fn db_count(&self) -> usize {
+    fn db_count(&self) -> u32 {
         1
     }
     fn db_init<'s, 't, 'db>(
@@ -183,63 +132,65 @@ impl super::Metan for PrimaryMetan {
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &mut crate::pkg::MetanPkg<'_>,
+        pkg: &crate::pkg::MetanInput,
     ) -> Result<(), super::MetanError> {
-        let rpm = &pkg.rpm.metadata;
-        self.db.get().expect("db uninit").put(
-            txn,
-            pkg.path,
-            quick_xml::se::to_string(&Package {
-                location: PackageLocation { href: pkg.path },
-                name: rpm.get_name()?,
-                arch: rpm.get_arch()?,
-                version: &Version {
-                    epoch: rpm.get_epoch().unwrap_or(0).into(),
-                    ver: rpm.get_version()?.into(),
-                    rel: rpm.get_release()?.into(),
-                },
-                checksum: PackageChecksum { checksum_type: pkg.csum_type, value: &pkg.csum, .. },
-                summary: rpm.get_summary().unwrap_or_default().into(),
-                description: rpm.get_description().unwrap_or_default().into(),
-                packager: rpm.get_packager().ok().map(Into::into),
-                url: rpm.get_url().ok().map(Into::into),
-                time: &Time { file: epoch!(pkg.fmeta.created()?), build: rpm.get_build_time()? },
-                size: &Size {
-                    package: pkg.fmeta.size(),
-                    installed: rpm.get_installed_size()?,
-                    archive: rpm
-                        .header
-                        .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                        .or_else(|_e| {
-                            rpm.header
-                                .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                                .map(u64::from)
-                        })
-                        .ok(),
-                },
-                format: PrimaryFormat {
-                    license: rpm.get_license().unwrap_or_default().into(),
-                    vendor: rpm.get_vendor().ok().map(Into::into),
-                    group: rpm.get_group().ok().map(Into::into),
-                    buildhost: rpm.get_build_host().ok().map(Into::into),
-                    sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
-                    // header_range: Self::get_header_byte_range(&mut f)?,
-                    requires: &Dependencies::from(rpm.get_requires()?),
-                    provides: &Dependencies::from(rpm.get_provides()?),
-                    conflicts: &Dependencies::from(rpm.get_conflicts()?),
-                    obsoletes: &Dependencies::from(rpm.get_obsoletes()?),
-                    recommends: &Dependencies::from(rpm.get_recommends()?),
-                    suggests: &Dependencies::from(rpm.get_suggests()?),
-                    supplements: &Dependencies::from(rpm.get_supplements()?),
-                    enhances: &Dependencies::from(rpm.get_enhances()?),
-                    files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
-                },
+        let rpm = &pkg.metadata;
+        let p = Package {
+            location: PackageLocation { href: &pkg.link.as_bytes() },
+            name: rpm.get_name()?,
+            arch: rpm.get_arch()?,
+            version: &Version {
+                epoch: rpm.get_epoch().unwrap_or(0).into(),
+                ver: rpm.get_version()?.into(),
+                rel: rpm.get_release()?.into(),
+            },
+            checksum: PackageChecksum {
+                checksum_type: pkg.csum_type.as_str(),
+                value: &pkg.csum,
                 ..
-            })?
-            .as_bytes(),
-        )?;
+            },
+            summary: rpm.get_summary().unwrap_or_default().into(),
+            description: rpm.get_description().unwrap_or_default().into(),
+            packager: rpm.get_packager().ok().map(Into::into),
+            url: rpm.get_url().ok().map(Into::into),
+            time: &Time { file: epoch!(pkg.fmeta.created()?), build: rpm.get_build_time()? },
+            size: &Size {
+                package: pkg.fmeta.size(),
+                installed: rpm.get_installed_size()?,
+                archive: rpm
+                    .header
+                    .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                    .or_else(|_e| {
+                        rpm.header
+                            .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
+                            .map(u64::from)
+                    })
+                    .ok(),
+            },
+            format: PrimaryFormat {
+                license: rpm.get_license().unwrap_or_default().into(),
+                vendor: rpm.get_vendor().ok().map(Into::into),
+                group: rpm.get_group().ok().map(Into::into),
+                buildhost: rpm.get_build_host().ok().map(Into::into),
+                sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
+                // header_range: Self::get_header_byte_range(&mut f)?,
+                requires: &Dependencies::from(rpm.get_requires()?),
+                provides: &Dependencies::from(rpm.get_provides()?),
+                conflicts: &Dependencies::from(rpm.get_conflicts()?),
+                obsoletes: &Dependencies::from(rpm.get_obsoletes()?),
+                recommends: &Dependencies::from(rpm.get_recommends()?),
+                suggests: &Dependencies::from(rpm.get_suggests()?),
+                supplements: &Dependencies::from(rpm.get_supplements()?),
+                enhances: &Dependencies::from(rpm.get_enhances()?),
+                files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
+            },
+            ..
+        };
+        let xml = quick_xml::se::to_string(&p)?;
+        self.db.get().expect("db uninit").put(txn, &pkg.link.as_bytes(), xml.as_bytes())?;
         Ok(())
     }
+
     fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()> {
         self.db.get().expect("db uninit").delete(txn, path)?;
         Ok(())
@@ -253,7 +204,7 @@ impl super::Metan for PrimaryMetan {
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-primary.xml.{comp_ext}", csum.sha).into();
         Ok(Some(super::repomd::Data {
-            r#type: "primary".into(),
+            r#type: self.mdtype().into(),
             checksum: csum,
             open_checksum: osum,
             location: super::repomd::Location { href },
@@ -274,7 +225,7 @@ impl super::Metan for PrimaryMetan {
     async fn on_generate<'t, 'db>(
         &self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
-        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
         let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;
@@ -294,7 +245,7 @@ impl super::Metan for PrimaryMetan {
             for frag in it.map(|r| r.map(|(_, v)| v)) {
                 // PERF: need to clone here unfortunately, `txn` is !Send and the lifetime of `frag`
                 // `&'1 [u8]` is from `txn`.
-                tx.send(frag?.to_vec());
+                tx.send(frag?.to_vec()).expect("tx closed");
             }
             heed::Result::Ok(())
         });

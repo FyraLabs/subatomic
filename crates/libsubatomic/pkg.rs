@@ -466,17 +466,50 @@ pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     Ok(hex::encode(hasher.finalize()).into())
 }
 
-pub(crate) struct MetanPkg<'b> {
-    pub rpm: rpm::PackageReader,
+/// RPM Metadata to be fed into [`crate::repodata::Metan`].
+pub struct MetanInput {
+    pub metadata: rpm::PackageMetadata,
     pub fmeta: std::fs::Metadata,
     pub csum: String,
-    pub path: &'b [u8],
-    pub csum_type: &'static str,
-    pub tmppath: PathBuf,
+    /// Repository-relative path, used both as the LMDB key and as the `<location href>`.
+    pub link: kuchiyose::link::LinkBuf,
+    pub csum_type: kuchiyose::ftmm::Ftmm,
+    /// Absolute path to the RPM on disk.
+    pub path: std::path::PathBuf,
 }
 
-impl<'b> MetanPkg<'b> {
-    fn reader(&self) -> Result<rpm::PackageReader, rpm::Error> {
-        rpm::PackageReader::open(&self.tmppath)
+impl MetanInput {
+    /// Reopen the rpm archive for streaming reads (e.g. appstream).
+    ///
+    /// # Errors
+    /// Propagates IO and rpm parse errors.
+    pub fn reader(&self) -> Result<rpm::PackageReader, rpm::Error> {
+        rpm::PackageReader::open(&self.path)
+    }
+
+    /// Build a [`MetanInput`] from an absolute path and the repository-relative link.
+    ///
+    /// If `csum` is `None`, the file is hashed here. Otherwise the caller's value is trusted.
+    ///
+    /// # Errors
+    /// Propagates IO and RPM parse errors.
+    pub fn from_path(
+        abs_path: &Path,
+        link: kuchiyose::link::LinkBuf,
+        csum: Option<String>,
+    ) -> Result<Self, rpm::Error> {
+        let reader = rpm::PackageReader::open(abs_path)?;
+        let csum = match csum {
+            Some(c) => c,
+            None => sha256_digest(std::io::BufReader::new(std::fs::File::open(abs_path)?))?,
+        };
+        Ok(Self {
+            metadata: reader.metadata.clone(),
+            fmeta: std::fs::metadata(abs_path)?,
+            csum,
+            link,
+            csum_type: kuchiyose::ftmm::Ftmm::Sha256,
+            path: abs_path.to_path_buf(),
+        })
     }
 }

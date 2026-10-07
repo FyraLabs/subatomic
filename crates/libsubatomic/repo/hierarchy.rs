@@ -1,84 +1,156 @@
 //! Repo hierarchy, which determines the path to RPMs and XML metadata files.
 
 use futures::prelude::*;
+use itertools::Itertools;
+use kuchiyose::{Link, LinkBuf, store::StoreBackend};
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 // today years old when I realize many rust traits are named after English verbs
-pub trait Hierarchize: Clone + std::fmt::Debug {
-    /// The root / base directory. All files MUST reside in this directory.
+pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
+    /// The repository root.
     ///
     /// This is usually the directory that contains the `repodata/` subdirectory.
     /// This is analogous to the directory the `baseurl` field represents in `dnf`.
     ///
-    /// Returns a valid path in [`object_store::ObjectStore`].
-    fn basedir(&self) -> &str;
-
-    /// Obtain the expected relative path to an rpm package in the repository.
+    /// * [`StoreBackend::Local`] — an absolute filesystem path.
+    /// * [`StoreBackend::Remote`] — a prefix inside the object store.
     ///
-    /// The `filename` SHOULD be obtained by means analogous to [`Path::file_name`], i.e. it MUST
-    /// not contain the `/` symbol.
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<impl AsRef<OsStr>>;
+    /// Both are `Link` (UTF-8). For local, we require UTF-8 paths, which is
+    /// the same restriction we already impose on hrefs.
+    fn basedir(&self) -> &Link;
 
+    /// Path to an RPM, **relative to [`Self::basedir`]**.
+    ///
+    /// This is what ends up as the `<location href>` and as the LMDB key.
+    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf>;
+
+    /// Every `.rpm` under the repo, **relative to [`Self::basedir`]**.
+    ///
+    /// Dispatches on the store: `Local` walks the filesystem (can use `jwalk`
+    /// or `std::fs`, both much faster than `LocalFileSystem`), `Remote` lists
+    /// the object store.
     fn iter_rpms(
         &self,
-        store: &impl object_store::ObjectStore,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<object_store::ObjectMeta>>> + Send;
+        store: &StoreBackend,
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send;
 }
 
 #[derive(Clone, Debug)]
 pub struct Satm0FlatHierarchy {
-    pub base: object_store::path::Path,
+    pub base: LinkBuf,
 }
 
 impl Hierarchize for Satm0FlatHierarchy {
-    fn basedir(&self) -> &str {
-        self.base.as_ref()
+    fn basedir(&self) -> &Link {
+        self.base.as_link()
     }
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<impl AsRef<OsStr>> {
-        Some(filename)
+
+    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf> {
+        Some(LinkBuf::from(filename.as_ref()))
     }
 
     fn iter_rpms(
         &self,
-        store: &impl object_store::ObjectStore,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<object_store::ObjectMeta>>>
-    {
-        future::ready(
-            store
-                .list(Some(&self.base))
-                .try_filter(|obj| future::ready(obj.location.extension() == Some("rpm"))),
-        )
+        store: &StoreBackend,
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send {
+        let base = self.base.clone();
+        async move {
+            match store {
+                StoreBackend::Local => {
+                    Box::pin(futures::stream::iter(
+                        jwalk::WalkDir::new(base.as_str())
+                            .into_iter()
+                            .filter_ok(|e| {
+                                e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                            })
+                            .map_ok(move |e| {
+                                e.path()
+                                    .strip_prefix(base.as_path())
+                                    .map(LinkBuf::from)
+                                    // TODO: just realized we need to check everywhere this is valid utf-8, otherwise this bugs out
+                                    .unwrap_or_else(|_| LinkBuf::from(e.path()))
+                            })
+                            .map(|r| {
+                                r.map_err(|e| object_store::Error::Generic {
+                                    store: "local",
+                                    source: Box::new(e),
+                                })
+                            }),
+                    ))
+                        as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>
+                }
+                StoreBackend::Remote(obj_store) => {
+                    let prefix = base.to_storepath();
+                    let base_len = self.base.as_str().len() + 1;
+                    Box::pin(
+                        obj_store
+                            .list(Some(&prefix))
+                            .map_ok(move |m| LinkBuf::from(&m.location.as_ref()[base_len..]))
+                            .map(|r| r.map_err(Into::into)),
+                    )
+                }
+            }
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct FedoraHierarchy {
-    pub base: object_store::path::Path,
+    pub base: LinkBuf,
 }
 
 impl Hierarchize for FedoraHierarchy {
-    fn basedir(&self) -> &str {
-        self.base.as_ref()
+    fn basedir(&self) -> &Link {
+        self.base.as_link()
     }
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<impl AsRef<OsStr>> {
-        // Packages/{filename[0]}/{filename}
-        Some(
-            std::path::Path::new(self.base.as_ref())
-                .join("Packages")
-                .join(OsStr::from_bytes([*filename.as_ref().as_bytes().first()?].as_slice()))
-                .join(filename.as_ref()),
-        )
+
+    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf> {
+        let f = filename.as_ref();
+        let first = *f.as_bytes().first()?;
+        Some(LinkBuf::from(format!("Packages/{}/{}", first as char, f.to_string_lossy())))
     }
 
     fn iter_rpms(
         &self,
-        store: &impl object_store::ObjectStore,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<object_store::ObjectMeta>>>
-    {
-        future::ready(
-            store
-                .list(Some(&self.base.clone().join("Packages")))
-                .try_filter(|obj| future::ready(obj.location.extension() == Some("rpm"))),
-        )
+        store: &StoreBackend,
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send {
+        let base = self.base.join("Packages");
+        async move {
+            match store {
+                StoreBackend::Local => {
+                    Box::pin(futures::stream::iter(
+                        jwalk::WalkDir::new(base.as_str())
+                            .into_iter()
+                            .filter_ok(|e| {
+                                e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                            })
+                            .map_ok(move |e| {
+                                e.path()
+                                    .strip_prefix(base.as_path())
+                                    .map(LinkBuf::from)
+                                    // TODO: just realized we need to check everywhere this is valid utf-8, otherwise this bugs out
+                                    .unwrap_or_else(|_| LinkBuf::from(e.path()))
+                            })
+                            .map(|r| {
+                                r.map_err(|e| object_store::Error::Generic {
+                                    store: "local",
+                                    source: Box::new(e),
+                                })
+                            }),
+                    ))
+                        as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>
+                }
+                StoreBackend::Remote(obj_store) => {
+                    let prefix = base.to_storepath();
+                    let base_len = self.base.as_str().len() + 1;
+                    Box::pin(
+                        obj_store
+                            .list(Some(&prefix))
+                            .map_ok(move |m| LinkBuf::from(&m.location.as_ref()[base_len..]))
+                            .map(|r| r.map_err(Into::into)),
+                    )
+                }
+            }
+        }
     }
 }

@@ -1,9 +1,12 @@
-//! Repodata generation and XML type definitions
+//! Repodata generation and XML type definitions.
 //!
-//! This module contains repodata XML type definitions and the helper functions required to generate
-//! those XML files.
+//! This module contains the repodata XML type definitions and the [`Metan`] trait, which
+//! encapsulates everything the generator needs to know about a single repomd datatype:
+//! its `type="…"` attribute, its output filename, its LMDB database, how to serialize a
+//! package into an XML fragment, and how to write the final XML document.
 //!
-//! The entry point is [`RepoCache`].
+//! The main entry point is [`crate::cache::Cache`], which owns the LMDB environment and a
+//! vector of [`Metan`] trait objects.
 
 pub mod appstream;
 pub mod filelists;
@@ -11,16 +14,22 @@ pub mod other;
 pub mod primary;
 pub mod repomd;
 
-use sha2::Digest;
+use crate::cache::FragDb;
 
-use crate::prelude::*;
-use std::os::linux::fs::MetadataExt;
-use tracing::{debug, info, trace, warn};
+pub mod metan_prelude {
+    pub use super::Metan;
+    pub use super::MetanError;
+    pub use super::appstream::AppstreamMetan;
+    pub use super::filelists::FilelistsMetan;
+    pub use super::other::OtherMetan;
+    pub use super::primary::PrimaryMetan;
 
-pub use crate::cache::{DataDb, FragDb, MarkDb};
+    /// The list of metans passed to [`crate::cache::Cache::new`].
+    pub type Metans = Vec<std::sync::Arc<dyn Metan>>;
+}
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum MetanError {
+pub enum MetanError {
     #[error("heed/lmdb error: {source}")]
     Heed {
         #[from]
@@ -33,12 +42,8 @@ pub(crate) enum MetanError {
         source: std::io::Error,
         backtrace: std::backtrace::Backtrace,
     },
-    #[error("rpm error: {source}")]
-    Rpm {
-        #[from]
-        source: rpm::Error,
-        backtrace: std::backtrace::Backtrace,
-    },
+    #[error("rpm error: {0}")]
+    Rpm(Box<rpm::Error>), // was too big according to clippy
     #[error("xml serialization error: {source}")]
     XmlSe {
         #[from]
@@ -46,8 +51,18 @@ pub(crate) enum MetanError {
         backtrace: std::backtrace::Backtrace,
     },
 }
+impl From<rpm::Error> for MetanError {
+    fn from(value: rpm::Error) -> Self {
+        Self::Rpm(Box::new(value))
+    }
+}
+
+/// Compression + checksum results for a single metan's output.
+///
+/// Filled in by [`crate::cache::Cache::write_one`] and handed to [`Metan::on_ready`], which
+/// turns it into the `<data>` element for `repomd.xml`.
 #[derive(Clone, Debug)]
-pub(crate) struct MetanGeneration {
+pub struct MetanGeneration {
     pub csum: repomd::Checksum,
     pub osum: repomd::Checksum,
     pub comp_ext: String,
@@ -57,757 +72,70 @@ pub(crate) struct MetanGeneration {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct MetanReady {
+pub struct MetanReady {
     pub env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
     pub generation: Option<MetanGeneration>,
 }
 
+/// One repomd datatype.
+///
+/// Implementors own their own LMDB database (created in [`Metan::db_init`]) and are fully
+/// responsible for the shape of the XML they emit. The orchestrator ([`crate::cache::Cache`])
+/// only knows about the trait; it never assumes a fixed set of datatypes.
 #[async_trait::async_trait]
-pub(crate) trait Metan {
+pub trait Metan: std::fmt::Debug + Send + Sync {
+    /// The literal value emitted as `type="…"` in `repomd.xml`.
+    ///
+    /// For the standard datatypes this is `"primary"`, `"filelists"`, `"other"`, `"appstream"`.
     fn mdtype(&self) -> &str;
+
+    /// The filename stem used as `repodata/{checksum}-{filename}.xml.{ext}`.
+    ///
+    /// Usually identical to [`Metan::mdtype`], but kept separate so that e.g. a future
+    /// zchunk variant can share a filename while using a distinct `type=` value.
     fn filename(&self) -> &str;
-    fn db_count(&self) -> usize;
+
+    /// Number of LMDB databases this metan requires. Used to size `max_dbs` on the env.
+    fn db_count(&self) -> u32;
+
+    /// Open (or create) this metan's LMDB database(s) inside `txn`.
     fn db_init<'s, 't, 'db>(
         &'s self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
         txn: &'t mut heed::RwTxn<'db>,
     ) -> heed::Result<()>;
+
+    /// Serialize one package's fragment and store it under `pkg.path`.
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &mut crate::pkg::MetanPkg<'_>,
+        pkg: &crate::pkg::MetanInput,
     ) -> Result<(), MetanError>;
+
+    /// Remove the fragment keyed by `path`.
     fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()>;
+
+    /// Stream the full XML document to `w`.
+    ///
+    /// The writer is the head of a compression + hashing pipeline, so implementors should
+    /// simply `write_all` their envelope and each cached fragment in order.
     async fn on_generate<'t, 'db>(
         &self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
-        w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+        w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), MetanError>;
+
+    /// Produce the `<data>` entry for `repomd.xml`.
+    ///
+    /// Returns `Ok(None)` if the metan produced no output (e.g. an appstream file with zero
+    /// components). The default impls all return `Some(…)`.
     fn on_ready<'db>(&self, ready: MetanReady) -> std::io::Result<Option<repomd::Data>>;
+
+    /// Hook invoked after `repomd.xml` has been written. Useful to create output that depend on it
+    /// (e.g. `tetsudou.json`).
     fn on_post_repomd<'db>(
         &self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
         repomd: &repomd::repomd,
     ) -> std::io::Result<()>;
-}
-
-/// Cache for repository packages.
-///
-/// Handle for managing XML fragments of package metadata. These fragments are concatenated
-/// to form the final XMLs.
-///
-/// This internally uses a [`heed::Database`], which is an efficient KV database (not relational!).
-/// There are 3 types of databases:
-/// - [`FragDb`]: filenames of RPM packages (utf-8 bytes) → xml bytes in e.g. `primary.xml` for
-///   [`Self::db_pri`]
-/// - [`DataDb`]: custom datatype in `repomd.xml` → xml bytes in `repomd.xml`
-/// - [`MarkDb`]: filenames of RPM packages (utf-8 bytes) → unix epoch as [`u128`]
-#[derive(Debug)]
-pub struct RepoCache {
-    pub repo: String,
-    pub cachedir: std::path::PathBuf,
-    /// Path to the `repodata` directory.
-    pub repodata_dir: std::path::PathBuf,
-    /// Path prefix used in xml contents. This is usually `repodata/`.
-    pub prefix: std::path::PathBuf,
-    pub env: heed::Env<heed::WithoutTls>,
-    pub zstd_level: i32 = 0,
-    pub zstd_multi: u32 = 0,
-    pub db_pri: FragDb,
-    pub db_fil: FragDb,
-    pub db_oth: FragDb,
-    pub db_app: FragDb,
-    pub db_epo: MarkDb,
-    pub db_cus: DataDb,
-}
-
-#[allow(clippy::missing_errors_doc)]
-impl RepoCache {
-    /// Default LMDB virtual address-space reservation for the cache file.
-    ///
-    /// 10 GiB is chosen because the actual memory usage remains proportional
-    /// to the working set; this only reserves address space. Repos with
-    /// 10k+ packages can still fit easily, and the file grows sparsely.
-    const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024;
-
-    /// Initialize a repository cache for writing the final XML files.
-    ///
-    /// This uses [`heed`] to write cached xml fragments ([`RepoCacheFragment`]) to a cache file per
-    /// repository. We create separate files for different repositories to make sure subatomic can
-    /// handle multiple repositories concurrently.
-    ///
-    /// The `path` to the cache file is specified by the caller.
-    ///
-    /// # Errors
-    /// An error is returned when `heed` fails to open the cache file.
-    pub fn new(repo: &str, cachedir: &Path, repodata_dir: &Path) -> heed::Result<Self> {
-        debug!(repo, cachedir = %cachedir.display(), repodata_dir = %repodata_dir.display(), "opening cache");
-        let path = cachedir.join(repo);
-        // PERF: might be better to take in owned values?
-        let cachedir = cachedir.to_owned();
-        let repodata_dir = repodata_dir.to_owned();
-
-        // Remove any stale file sitting where LMDB wants a directory.
-        if path.is_file() {
-            warn!(path = %path.display(), "removing stale cache file");
-            std::fs::remove_file(&path)?;
-        }
-
-        // LMDB expects the parent dirs to exist. Create them upfront.
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        // Ensure the LMDB directory exists (heed creates it, but only after a successful open).
-        // Pre-creating avoids races where the directory is briefly not there.
-        std::fs::create_dir_all(&path)?;
-
-        // SAFETY: assume this file is not modified concurrently
-        let env = unsafe {
-            heed::EnvOpenOptions::new()
-                .read_txn_without_tls()
-                .max_dbs(6)
-                .map_size(Self::DEFAULT_MAP_SIZE)
-                .flags(heed::EnvFlags::WRITE_MAP | heed::EnvFlags::NO_SYNC)
-                .open(path)?
-        };
-        trace!(repo, "cache opened");
-        let mut txn = env.write_txn()?;
-
-        let db_pri = env.create_database(&mut txn, Some("pri"))?;
-        let db_fil = env.create_database(&mut txn, Some("fil"))?;
-        let db_oth = env.create_database(&mut txn, Some("oth"))?;
-        let db_app = env.create_database(&mut txn, Some("app"))?;
-        let db_epo = env.create_database(&mut txn, Some("epo"))?;
-        let db_cus = env.create_database(&mut txn, Some("cus"))?;
-        txn.commit()?;
-        Ok(Self {
-            db_pri,
-            db_fil,
-            db_oth,
-            db_app,
-            db_epo,
-            db_cus,
-            repo: repo.into(),
-            env,
-            cachedir,
-            repodata_dir,                                 // TODO: don't hardcode
-            prefix: std::path::PathBuf::from("repodata"), // TODO: don't hardcode
-            ..
-        })
-    }
-
-    // 特に意味はないけどTKBだね
-    #[inline]
-    fn write<'a, T, K, B>(
-        &'a self,
-        db: &heed::Database<K, B>,
-        wtxn: &mut heed::RwTxn<'a>,
-        f: impl Fn(&heed::Database<K, B>, &mut heed::RwTxn<'_>) -> heed::Result<T>,
-    ) -> heed::Result<T> {
-        let res = f(db, wtxn);
-        let Err(heed::Error::Mdb(heed::MdbError::MapFull)) = res else { return res };
-        info!("committing due to MapFull");
-        replace_with::replace_with_or_abort(wtxn, |wtxn| {
-            wtxn.commit().expect("cannot commit");
-            self.env.write_txn().expect("cannot obtain wtxn")
-        });
-        f(db, wtxn)
-    }
-
-    /// Store a custom datatype repomd fragment `data` into the cache.
-    #[inline]
-    pub fn write_custom_datatype(&self, data: &repomd::Data) -> heed::Result<()> {
-        let mut txn = self.env.write_txn()?;
-        self.db_cus.put(&mut txn, data.r#type.as_type(), data)?;
-        txn.commit()?;
-        Ok(())
-    }
-    /// Read a custom datatype repomd fragment by `dt`, the datatype (first key in
-    /// [`repomd::DataType::Custom`]).
-    #[inline]
-    pub fn read_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
-        let txn = self.env.read_txn()?;
-        self.db_cus.get(&txn, dt)
-    }
-
-    /// Delete from the cache and the filesystem the specified custom datatype.
-    ///
-    /// If `dt` is found in [`Self::db_cus`], we will attempt to delete the file. If the file is not
-    /// found, emit a warning. Other errors are propagated. Then, `dt` is deleted from the database.
-    #[tracing::instrument]
-    pub fn del_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
-        let mut txn = self.env.write_txn()?;
-        let Some(data) = self.db_cus.get(&txn, dt)? else { return Ok(None) };
-        let path = self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
-        if let Err(e) = std::fs::remove_file(&path) {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                warn!("can't delete custom datatype not found on fs");
-            } else {
-                return Err(e.into());
-            }
-        }
-        self.db_cus.delete(&mut txn, dt)?;
-        txn.commit()?;
-        Ok(Some(data))
-    }
-
-    #[deprecated = "use write_custom_datatype instead"]
-    pub fn write_comps(&self, data: &repomd::Data) -> heed::Result<()> {
-        self.write_custom_datatype(data)
-    }
-
-    /// Add or modify a [`repomd::DataType::Custom`]. Write `buf` to the filesystem, and save the
-    /// `repomd` fragment into the cache.
-    ///
-    /// Filename and [`repomd::Data::r#type`] are determined by `dt`.
-    ///
-    /// To only save the `repomd` fragment, use [`Self::write_custom_datatype`].
-    pub fn update_custom_datatype(&self, dt: repomd::DataType, buf: &[u8]) -> Res<()> {
-        // TODO: check if custom?
-        let temppath = self.repodata_dir.join(format!("{}.zst", dt.as_str()));
-        let mut w = self.writer(std::fs::File::create_buffered(&temppath)?)?;
-        w.write_all(buf)?;
-        let (data, _) = w.into_data(dt, &self.prefix)?;
-        self.write_custom_datatype(&data)?;
-        let path = self.repodata_dir.join(format!("{}-{}.zst", data.checksum.sha, data.r#type));
-        std::fs::rename(&temppath, &path)?;
-        Ok(())
-    }
-
-    /// Create a [`RepoWriter`] for the buffered file descriptor.
-    ///
-    /// # Errors
-    /// Errors returned by this function fully depend on the compression format.
-    pub fn writer(&self, fd: std::io::BufWriter<std::fs::File>) -> std::io::Result<RepoWriter<'_>> {
-        // TODO: custom csum/compression fmts
-        let csum = RepoWriterCsum::Sha256(sha2::Sha256::new());
-        let mut comp = zstd::Encoder::new(RepoWriterCompInner { fd, csum, .. }, self.zstd_level)?;
-        // enable multithread means we separate zstd from hashing, alleviating the bottleneck
-        #[allow(clippy::cast_possible_truncation)]
-        comp.multithread(self.zstd_multi)?;
-        let comp = RepoWriterComp::Zstd(comp);
-        let osum = RepoWriterCsum::Sha256(sha2::Sha256::new());
-        Ok(crate::repodata::RepoWriter { comp, osum, .. })
-    }
-
-    /// Insert a batch of already-serialised fragments directly into the split DBs.
-    /// No purging – intended for manual/add mode where we overwrite.
-    pub fn insert_fragments<I: IntoIterator<Item = (B, FragEph)>, B: AsRef<[u8]>>(
-        &self,
-        fragments: I,
-    ) -> heed::Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        for (key, frag) in fragments {
-            self.db_pri.put(&mut wtxn, key.as_ref(), frag.pri.0.as_deref().unwrap_or(b""))?;
-            self.db_fil.put(&mut wtxn, key.as_ref(), frag.fil.0.as_deref().unwrap_or(b""))?;
-            self.db_oth.put(&mut wtxn, key.as_ref(), frag.oth.0.as_deref().unwrap_or(b""))?;
-            if let Some(app) = &frag.app.0 {
-                self.db_app.put(&mut wtxn, key.as_ref(), app)?;
-            }
-            // Mark as present (epoch doesn't matter for non‑incremental use)
-            self.db_epo.put(&mut wtxn, key.as_ref(), &0u128)?;
-        }
-        wtxn.commit()?;
-        Ok(())
-    }
-
-    pub fn has(&self, key: &[u8]) -> Res<bool> {
-        let txn = self.env.read_txn()?;
-        Ok(self.db_epo.get(&txn, key)?.is_some())
-    }
-
-    /// Return the number of cached fragments.
-    pub fn len(&self) -> heed::Result<u64> {
-        let txn = self.env.read_txn()?;
-        self.db_epo.len(&txn)
-    }
-
-    pub fn is_empty(&self) -> heed::Result<bool> {
-        Ok(self.len()? == 0)
-    }
-
-    /// Delete a list of packages (by key), returning the keys that were NOT found.
-    ///
-    /// # Errors
-    /// An error is returned if deleting a package failed. Note that an invalid key (the package
-    /// doesn't exist) would not result in an error.
-    pub fn delete_pkgs<'a>(&self, pkgs: &[&'a [u8]]) -> heed::Result<Vec<&'a [u8]>> {
-        let mut not_found = Vec::new();
-        let mut wtxn = self.env.write_txn()?;
-        for &key in pkgs {
-            if self.db_epo.get(&wtxn, key)?.is_none() {
-                not_found.push(key);
-                continue;
-            }
-            self.db_epo.delete(&mut wtxn, key)?;
-            self.db_pri.delete(&mut wtxn, key)?;
-            self.db_fil.delete(&mut wtxn, key)?;
-            self.db_oth.delete(&mut wtxn, key)?;
-            self.db_app.delete(&mut wtxn, key)?;
-        }
-        wtxn.commit()?;
-        Ok(not_found)
-    }
-
-    /// Collect every key currently stored in the cache.
-    pub fn keys(&self) -> heed::Result<Vec<Vec<u8>>> {
-        debug!(repo = %self.repo, "listing cache keys");
-        let txn = self.env.read_txn()?;
-        let mut out = Vec::new();
-        for res in self.db_epo.iter(&txn)? {
-            let (k, _) = res?;
-            out.push(k.to_owned());
-        }
-        Ok(out)
-    }
-
-    /// Delete every key not present in `expected`. Returns number of removed entries.
-    pub fn prune(&self, expected: &std::collections::HashSet<&[u8]>) -> heed::Result<u64> {
-        let to_remove: Vec<Vec<u8>> =
-            self.keys()?.into_iter().filter(|k| !expected.contains(&k.as_slice())).collect();
-        let count = to_remove.len() as u64;
-        let mut wtxn = self.env.write_txn()?;
-        for k in &to_remove {
-            self.db_epo.delete(&mut wtxn, k)?;
-            self.db_pri.delete(&mut wtxn, k)?;
-            self.db_fil.delete(&mut wtxn, k)?;
-            self.db_oth.delete(&mut wtxn, k)?;
-            self.db_app.delete(&mut wtxn, k)?;
-        }
-        wtxn.commit()?;
-        Ok(count)
-    }
-
-    /// Compact the underlying LMDB file by writing a fresh copy and swapping it in.
-    ///
-    /// This consumes `self` so the environment can be closed before the file is replaced.
-    ///
-    /// # Errors
-    /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
-    pub fn compact(self) -> heed::Result<Self> {
-        let env_dir = self.env.path().to_path_buf();
-        let repo = self.repo.clone();
-        let cachedir = self.cachedir.clone();
-        let zstd = self.zstd_level;
-        let repodata_dir = self.repodata_dir.clone();
-
-        self.compact_close()?;
-
-        let mut new = Self::new(&repo, &cachedir, &repodata_dir)?;
-        new.zstd_level = zstd;
-        info!(dir = %env_dir.display(), "reopened cache");
-        Ok(new)
-    }
-
-    /// Compact the underlying LMDB file by writing a fresh copy.
-    ///
-    /// This consumes `self` so the environment can be closed before the file is replaced.
-    ///
-    /// # Errors
-    /// Propagates IO errors from copying/renaming, and [`heed`] errors from re-opening.
-    pub fn compact_close(self) -> heed::Result<()> {
-        let env_dir = self.env.path().to_path_buf();
-
-        let tmp_file = env_dir.join("data.compact");
-        let data_file = env_dir.join("data.mdb");
-        let old_file = env_dir.join("data.mdb.old");
-
-        info!(dir = %env_dir.display(), "compacting cache");
-        self.env.copy_to_path(&tmp_file, heed::CompactionOption::Enabled)?;
-
-        // Close the env so the mmap is released and we can rename the file
-        drop(self);
-
-        // Atomically replace data.mdb with the compacted copy
-        if data_file.exists() {
-            std::fs::rename(&data_file, &old_file)?;
-        }
-        std::fs::rename(&tmp_file, &data_file)?;
-        if let Err(e) = std::fs::remove_file(&old_file) {
-            warn!(?old_file, ?e, "cannot remove file");
-        }
-
-        info!(dir = %env_dir.display(), "cache compacted");
-        Ok(())
-    }
-
-    #[allow(clippy::unimplemented)]
-    fn write_stage1_prexml<W: Write>(
-        &self,
-        dt: &repomd::DataType,
-        mut w: W,
-        l: u64,
-    ) -> std::io::Result<()> {
-        match dt {
-            repomd::DataType::Primary => write!(
-                w,
-                r#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{l}">"#
-            ),
-            repomd::DataType::Filelists => write!(
-                w,
-                r#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{l}">"#
-            ),
-            repomd::DataType::Other => write!(
-                w,
-                r#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{l}">"#
-            ),
-            repomd::DataType::Group => unimplemented!("comps are not generated by libsubatomic"),
-            repomd::DataType::Appstream => write!(
-                w,
-                r#"<?xml version="1.0" encoding="UTF-8"?><components origin="{}" version="0.14">"#,
-                self.repo
-            ),
-            repomd::DataType::Custom(_, s) => {
-                unimplemented!("custom dt `{s}` not generated by libsubatomic")
-            }
-        }
-    }
-    #[allow(clippy::unimplemented, clippy::unused_self)]
-    fn write_stage1_postxml<W: Write>(
-        &self,
-        dt: &repomd::DataType,
-        mut w: W,
-    ) -> std::io::Result<()> {
-        match dt {
-            repomd::DataType::Primary => write!(w, "</metadata>"),
-            repomd::DataType::Filelists => write!(w, "</filelists>"),
-            repomd::DataType::Other => write!(w, "</otherdata>"),
-            repomd::DataType::Group => unimplemented!("comps are not generated by libsubatomic"),
-            repomd::DataType::Appstream => write!(w, "</components>"),
-            repomd::DataType::Custom(_, s) => {
-                unimplemented!("custom dt `{s}` not generated by libsubatomic")
-            }
-        }
-    }
-
-    fn write_stage1(&self, path: &Path, dt: repomd::DataType) -> Res<repomd::Data> {
-        let mut w = self.writer(std::fs::File::create_buffered(path)?)?;
-        let txn = self.env.read_txn()?;
-        let db = match &dt {
-            repomd::DataType::Primary => &self.db_pri,
-            repomd::DataType::Filelists => &self.db_fil,
-            repomd::DataType::Other => &self.db_oth,
-            repomd::DataType::Group => panic!("do not expect group in stage1"),
-            repomd::DataType::Appstream => &self.db_app,
-            repomd::DataType::Custom(_, _) => panic!("do not expect custom in stage1"),
-        };
-        let l = db.len(&txn)?;
-        trace!(count = l, "reading fragments from cache");
-        let frags = db.iter(&txn)?.map(|r| r.map(|(_, v)| v));
-        self.write_stage1_prexml(&dt, &mut w, l)?;
-
-        for frag in frags {
-            w.write_all(frag?)?;
-        }
-        self.write_stage1_postxml(&dt, &mut w)?;
-        Ok(w.into_data(dt, &self.prefix).map(|x| x.0)?)
-    }
-
-    /// Write all xml outputs (include repomd), then return the contents of `repomd.xml`.
-    ///
-    /// The caller should handling signing of the `repomd.xml` file.
-    ///
-    /// # Panics
-    ///
-    /// Currently, the function panics if `datatypes` contains things that subatomic does not process.
-    pub fn write_all(&self, datatypes: &[repomd::DataType]) -> Res<Vec<u8>> {
-        info!(repodata_dir = %self.repodata_dir.display(), "writing repodata");
-        std::fs::create_dir_all(&self.repodata_dir)?;
-        let files = datatypes.iter().map(|dt| self.repodata_dir.join(dt.as_str())).collect_vec();
-        let data = datatypes.par_iter().cloned().zip_eq(&files);
-        let data = data.map(|(dt, path)| self.write_stage1(path, dt));
-        let mut data = data.collect::<Res<Vec<_>>>()?;
-        for dat in &data {
-            let oldname = self.repodata_dir.join(dat.r#type.as_str());
-            let newname = format!("{}-{}.xml.zst", dat.checksum.sha, dat.r#type);
-            std::fs::rename(oldname, self.repodata_dir.join(newname))?;
-        }
-        self.extend_custom_datatypes(&mut data)?;
-
-        self.write_repomd(data)
-    }
-
-    fn extend_custom_datatypes(&self, data: &mut Vec<repomd::Data>) -> Res<()> {
-        let txn = self.env.read_txn()?;
-        self.db_cus.iter(&txn)?.map_ok(|(_, d)| d).process_results(|it| {
-            // FIXME: refactor this????
-            data.extend(it.update(|d| {
-                if let repomd::DataType::Custom(typ, filename) = &mut d.r#type {
-                    d.r#type = repomd::DataType::Custom(
-                        std::mem::take(typ),
-                        format!(":{filename}").into(),
-                    );
-                }
-            }));
-        })?;
-        Ok(())
-    }
-
-    fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
-        debug!("writing repomd");
-        let path = self.repodata_dir.join("repomd.xml");
-        let mut fd_repomd = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path)?;
-        repomd::repomd::generate(&mut fd_repomd, data)?;
-
-        let pos = fd_repomd.stream_position()?;
-        fd_repomd.seek(std::io::SeekFrom::Start(0))?;
-        #[allow(clippy::cast_possible_truncation)] // same behaviour even on 32-bit platforms
-        let mut buf = Vec::with_capacity(pos as usize);
-        fd_repomd.read_to_end(&mut buf)?;
-
-        Ok(buf)
-    }
-
-    /// Upsert fragments, and remove ones that are not inserted.
-    ///
-    /// Return numbers of (new, cached) packages.
-    ///
-    /// # Panics
-    /// Panic on time underflow and frag keys that are not found.
-    ///
-    /// # Errors
-    /// Mostly heed errors.
-    pub fn update_frags(
-        &self,
-        // TODO: should we use Vec<u8> (filename) instead of PathBuf to reduce mem?
-        recv: &crossbeam_channel::Receiver<(PathBuf, Option<FragEph>)>,
-    ) -> Res<(u64, u64)> {
-        let epoch = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .expect("time underflow")
-            .as_micros();
-        let mut wtxn = self.env.write_txn()?;
-        let mut new: u64 = 0;
-        let mut cached: u64 = 0;
-        while let Ok((p, frag)) = recv.recv() {
-            tracing::debug!(p=%p.display(), "received");
-            let key = p.as_os_str().as_encoded_bytes();
-            self.write(&self.db_epo, &mut wtxn, |db, wtxn| db.put(wtxn, key, &epoch))?;
-            let Some(frag) = frag else {
-                cached += 1;
-                continue;
-            };
-            new += 1;
-            self.write(&self.db_pri, &mut wtxn, |db, wtxn| {
-                db.put(wtxn, key, frag.pri.0.as_deref().expect("pri"))
-            })?;
-            self.write(&self.db_fil, &mut wtxn, |db, wtxn| {
-                db.put(wtxn, key, frag.fil.0.as_deref().expect("fil"))
-            })?;
-            self.write(&self.db_oth, &mut wtxn, |db, wtxn| {
-                db.put(wtxn, key, frag.oth.0.as_deref().expect("oth"))
-            })?;
-            if let Some(app) = frag.app.0 {
-                self.write(&self.db_app, &mut wtxn, |db, wtxn| db.put(wtxn, key, &app))?;
-            }
-            tracing::trace!(p=%p.display(), "finished");
-        } // until recv is closed
-        info!("purging old fragments");
-        let mut it = self.db_epo.iter_mut(&mut wtxn)?;
-        // NOTE: unfortunately we cannot delete items in different dbs in parallel, but fortunately
-        // most of the time we don't delete packages.
-        let mut purged = Vec::new();
-        while let Some(res) = it.next() {
-            let (k, v) = res?;
-            if v != epoch {
-                debug!(old_key = %OsStr::from_bytes(k).display());
-                purged.push(k.to_owned());
-                // SAFETY: we do not keep any references to any values from this db
-                assert!(unsafe { it.del_current()? }, "cannot delete item");
-            }
-        }
-        drop(it);
-        let dbs = [&self.db_pri, &self.db_fil, &self.db_oth, &self.db_app];
-        for (db, k) in dbs.into_iter().cartesian_product(&purged) {
-            db.delete(&mut wtxn, k)?;
-        }
-        wtxn.commit()?;
-        Ok((new, cached))
-    }
-}
-
-pub struct RepoWriter<'a> {
-    pub comp: RepoWriterComp<'a>,
-    pub osum: RepoWriterCsum,
-    pub osize: u64 = 0,
-}
-impl Write for RepoWriter<'_> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let len = match &mut self.comp {
-            RepoWriterComp::Zstd(encoder) => encoder.write(buf)?,
-        };
-        self.osum.write_all(&buf[..len])?;
-        self.osize += len as u64;
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match &mut self.comp {
-            RepoWriterComp::Zstd(encoder) => encoder.flush()?,
-        }
-        self.osum.flush()?;
-        Ok(())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        match &mut self.comp {
-            RepoWriterComp::Zstd(encoder) => encoder.write_all(buf)?,
-        }
-        self.osum.write_all(buf)?;
-        self.osize += buf.len() as u64;
-        Ok(())
-    }
-}
-impl RepoWriter<'_> {
-    /// Finalize, consume self and return [`repomd::Data`] and the inner file.
-    ///
-    /// # Errors
-    /// This propagates errors from the comp encoder finalizing their output.
-    pub fn into_data(
-        self,
-        mut r#type: repomd::DataType,
-        prefix: &Path,
-    ) -> std::io::Result<(repomd::Data, std::fs::File)> {
-        let inner = match self.comp {
-            RepoWriterComp::Zstd(encoder) => encoder.finish()?,
-        };
-        let sha = inner.csum.csum();
-        if let repomd::DataType::Custom(typ, filename) = r#type {
-            r#type = repomd::DataType::Custom(typ, format!("{sha}-{filename}.zst").into());
-        }
-        let fd = inner.fd.into_inner()?;
-        // TODO: don't hardcode href (esp when comp may be diff)
-        let href = prefix.join(format!("{sha}-{type}.xml.zst")).to_string_lossy().into();
-        Ok((
-            repomd::Data {
-                location: repomd::Location { href },
-                r#type,
-                checksum: repomd::Checksum { sha, .. },
-                open_checksum: repomd::Checksum { sha: self.osum.csum(), .. },
-                timestamp: fd.metadata()?.st_atime(),
-                size: inner.size,
-                open_size: self.osize,
-            },
-            fd,
-        ))
-    }
-}
-
-pub struct RepoWriterCompInner {
-    pub fd: std::io::BufWriter<std::fs::File>,
-    pub csum: RepoWriterCsum,
-    pub size: u64 = 0,
-}
-impl Write for RepoWriterCompInner {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let len = self.fd.write(buf)?;
-        self.csum.write_all(&buf[..len])?;
-        self.size += len as u64;
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.fd.flush()?;
-        self.csum.flush()?;
-        Ok(())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.fd.write_all(buf)?;
-        self.csum.write_all(buf)?;
-        self.size += buf.len() as u64;
-        Ok(())
-    }
-}
-
-pub enum RepoWriterComp<'a> {
-    Zstd(zstd::Encoder<'a, RepoWriterCompInner>),
-}
-
-pub enum RepoWriterCsum {
-    Sha256(sha2::Sha256),
-}
-impl Write for RepoWriterCsum {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Sha256(sha256) => sha256.update(buf),
-        }
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.write(buf)?;
-        Ok(())
-    }
-}
-impl RepoWriterCsum {
-    #[must_use]
-    pub fn csum(self) -> String {
-        match self {
-            Self::Sha256(sha256) => hex::encode(sha256.finalize()).into(),
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Frag(pub Option<Vec<u8>>);
-impl std::fmt::Write for Frag {
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        let buf = if let Some(buf) = &mut self.0 {
-            buf
-        } else {
-            self.0 = Some(Vec::with_capacity(256));
-            self.0.as_mut().unwrap()
-        };
-        buf.extend(s.as_bytes());
-        Ok(())
-    }
-}
-
-/// Ephemeral fragment struct for sending xml fragments
-#[derive(Debug, Default)]
-pub struct FragEph {
-    pub pri: Frag,
-    pub fil: Frag,
-    pub oth: Frag,
-    pub app: Frag,
-}
-impl FragEph {
-    #[must_use]
-    pub fn new(pkg: &crate::pkg::Package, path: &OsStr) -> Self {
-        trace!(name = %pkg.name, path = %path.display(), "building cache fragment");
-        let mut frag = Self::default();
-        frag.gen_pri(pkg, path.as_bytes());
-        frag.gen_fil(pkg);
-        frag.gen_oth(pkg);
-        trace!(name = %pkg.name, "cache fragment complete");
-        frag
-    }
-    fn gen_pri(&mut self, pkg: &crate::pkg::Package, path: &[u8]) {
-        trace!(name = %pkg.name, "serializing primary.xml");
-        quick_xml::se::to_writer(&mut self.pri, &primary::Package::from_pkg(pkg, path))
-            .expect("cannot serialize");
-    }
-
-    fn gen_fil(&mut self, pkg: &crate::pkg::Package) {
-        trace!(name = %pkg.name, "serializing filelists.xml");
-        quick_xml::se::to_writer(&mut self.fil, &filelists::FilelistsPackage::from_pkg(pkg))
-            .expect("cannot serialize");
-    }
-
-    fn gen_oth(&mut self, pkg: &crate::pkg::Package) {
-        trace!(name = %pkg.name, "serializing other.xml");
-        quick_xml::se::to_writer(&mut self.oth, &other::OtherPackage::from_pkg(pkg))
-            .expect("cannot serialize");
-    }
 }

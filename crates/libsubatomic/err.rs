@@ -10,6 +10,12 @@ pub enum Error {
     Pgp(#[from] pgp::errors::Error),
     #[error("xml serialization error: {0}")]
     XmlSe(#[from] quick_xml::SeError),
+    #[error("kuchiyose store error: {0}")]
+    Kuchiyose(#[from] kuchiyose::store::StoreErr),
+    #[error("metadata error: {0}")]
+    Metan(#[from] crate::repodata::MetanError),
+    #[error("store error: {0}")]
+    Store(#[from] object_store::Error),
 }
 
 pub type Res<T> = Result<T, Error>;

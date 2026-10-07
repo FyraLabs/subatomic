@@ -6,9 +6,10 @@ use crate::{
     prelude::*,
 };
 
+#[expect(dead_code, reason = "for reference")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "otherdata")]
-pub struct OtherMetadata<'a> {
+struct OtherMetadata<'a> {
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/other",
     #[serde(rename = "@packages")]
@@ -19,7 +20,7 @@ pub struct OtherMetadata<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "package")]
-pub struct OtherPackage<'a> {
+struct OtherPackage<'a> {
     #[serde(rename = "@pkgid")]
     pub pkgid: &'a str,
     #[serde(rename = "@name")]
@@ -31,20 +32,9 @@ pub struct OtherPackage<'a> {
     pub changelogs: &'a [Changelog],
 }
 
-impl<'a> OtherPackage<'a> {
-    #[must_use]
-    pub fn from_pkg(p: &'a crate::pkg::Package) -> Self {
-        Self {
-            pkgid: &p.checksum,
-            name: &p.name,
-            arch: &p.arch,
-            version: &p.version,
-            changelogs: &p.changelog,
-        }
-    }
-}
-
-pub(crate) struct OtherMetan {
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct OtherMetan {
     db: OnceLock<Arc<super::FragDb>>,
 }
 
@@ -56,7 +46,7 @@ impl super::Metan for OtherMetan {
     fn filename(&self) -> &str {
         "other"
     }
-    fn db_count(&self) -> usize {
+    fn db_count(&self) -> u32 {
         1
     }
 
@@ -72,9 +62,9 @@ impl super::Metan for OtherMetan {
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &mut crate::pkg::MetanPkg<'_>,
+        pkg: &crate::pkg::MetanInput,
     ) -> Result<(), super::MetanError> {
-        let rpm = &pkg.rpm.metadata;
+        let rpm = &pkg.metadata;
 
         let version = Version {
             epoch: rpm.get_epoch().unwrap_or(0).into(),
@@ -94,7 +84,7 @@ impl super::Metan for OtherMetan {
 
         self.db.get().expect("db uninit").put(
             txn,
-            pkg.path,
+            &pkg.link.as_bytes(),
             quick_xml::se::to_string(&frag)?.as_bytes(),
         )?;
         Ok(())
@@ -113,7 +103,7 @@ impl super::Metan for OtherMetan {
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-other.xml.{comp_ext}", csum.sha).into();
         Ok(Some(super::repomd::Data {
-            r#type: "other".into(),
+            r#type: self.mdtype().into(),
             checksum: csum,
             open_checksum: osum,
             location: super::repomd::Location { href },
@@ -134,7 +124,7 @@ impl super::Metan for OtherMetan {
     async fn on_generate<'t, 'db>(
         &self,
         env: Arc<heed::Env<heed::WithoutTls>>,
-        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
         let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;

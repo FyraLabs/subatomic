@@ -3,9 +3,10 @@ use tokio::io::AsyncWriteExt;
 
 use crate::prelude::*;
 
+#[expect(dead_code, reason = "for reference")]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "filelists")]
-pub struct FilelistsMetadata<'a> {
+struct FilelistsMetadata<'a> {
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/filelists",
     #[serde(rename = "@packages")]
@@ -16,7 +17,7 @@ pub struct FilelistsMetadata<'a> {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "package")]
-pub struct FilelistsPackage<'a> {
+struct FilelistsPackage<'a> {
     #[serde(rename = "@pkgid")]
     pub pkgid: &'a str,
     #[serde(rename = "@name")]
@@ -28,20 +29,9 @@ pub struct FilelistsPackage<'a> {
     pub files: &'a [crate::pkg::FileEntry],
 }
 
-impl<'a> FilelistsPackage<'a> {
-    #[must_use]
-    pub fn from_pkg(p: &'a crate::pkg::Package) -> Self {
-        Self {
-            pkgid: &p.checksum,
-            name: &p.name,
-            arch: &p.arch,
-            version: &p.version,
-            files: &p.format.files,
-        }
-    }
-}
-
-pub(crate) struct FilelistsMetan {
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct FilelistsMetan {
     db: OnceLock<Arc<super::FragDb>>,
 }
 
@@ -53,7 +43,7 @@ impl super::Metan for FilelistsMetan {
     fn filename(&self) -> &str {
         "filelists"
     }
-    fn db_count(&self) -> usize {
+    fn db_count(&self) -> u32 {
         1
     }
 
@@ -69,9 +59,9 @@ impl super::Metan for FilelistsMetan {
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &mut crate::pkg::MetanPkg<'_>,
+        pkg: &crate::pkg::MetanInput,
     ) -> Result<(), super::MetanError> {
-        let rpm = &pkg.rpm.metadata;
+        let rpm = &pkg.metadata;
 
         let version = crate::pkg::Version {
             epoch: rpm.get_epoch().unwrap_or(0).into(),
@@ -89,11 +79,8 @@ impl super::Metan for FilelistsMetan {
             files: &files,
         };
 
-        self.db.get().expect("db uninit").put(
-            txn,
-            pkg.path,
-            quick_xml::se::to_string(&frag)?.as_bytes(),
-        )?;
+        let xml = quick_xml::se::to_string(&frag)?;
+        self.db.get().expect("db uninit").put(txn, &pkg.link.as_bytes(), xml.as_bytes())?;
         Ok(())
     }
 
@@ -110,7 +97,7 @@ impl super::Metan for FilelistsMetan {
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-filelists.xml.{comp_ext}", csum.sha).into();
         Ok(Some(super::repomd::Data {
-            r#type: "filelists".into(),
+            r#type: self.mdtype().into(),
             checksum: csum,
             open_checksum: osum,
             location: super::repomd::Location { href },
@@ -131,7 +118,7 @@ impl super::Metan for FilelistsMetan {
     async fn on_generate<'t, 'db>(
         &self,
         env: Arc<heed::Env<heed::WithoutTls>>,
-        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>,
+        mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
         let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;

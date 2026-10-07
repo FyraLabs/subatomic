@@ -34,24 +34,25 @@
 //! ```
 #![warn(rust_2018_idioms)]
 #![feature(default_field_values)]
-#![feature(slice_split_once)]
 #![feature(try_blocks)]
-#![feature(file_buffered)]
 #![feature(error_generic_member_access)]
 
 pub mod cache;
-pub mod err;
+mod err;
 pub mod pkg;
 pub mod prelude;
 pub mod repo;
-pub mod repodata;
+mod repodata;
 pub mod sig;
 
-pub use err::Res;
-pub use pgp;
-pub use pkg::Package;
+pub use cache::{Cache, CacheConfig};
+pub use err::{Error, Res};
+pub use kuchiyose::ftmm::{Ftmm, FtmmDigest};
+pub use kuchiyose::link::{Link, LinkBuf};
 pub use repo::Repo;
-pub use repodata::RepoCache;
-pub use repodata::repomd::DataType;
+pub use repodata::metan_prelude;
+pub use repodata::repomd::{Checksum, Data, Location};
+
+pub use pgp;
 pub use rpm;
 pub use smartstring;
