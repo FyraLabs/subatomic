@@ -56,13 +56,13 @@ func CreateRepo(repoPath string) error {
 	return nil
 }
 
-func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) {
+func UpdateRepo(repoPath string, ring *pgp.KeyRing, repoID string, tetsudouConfig *tetsudou.TetsudouConfig) error {
 	repoPath = filepath.Clean(repoPath)
 	liveRepodata := path.Join(repoPath, "repodata")
 
 	stagingPath, err := os.MkdirTemp("", "subatomic-"+path.Base(repoPath)+"-")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	stagingRepodata := path.Join(stagingPath, "repodata")
 	defer os.RemoveAll(stagingPath)
@@ -70,21 +70,21 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) 
 	_ = os.RemoveAll(path.Join(repoPath, ".repodata"))
 
 	if exists, err := fileExists(path.Join(liveRepodata, "repomd.xml")); err != nil {
-		return nil, err
+		return err
 	} else if exists {
 		if err := seedRepodata(liveRepodata, stagingRepodata); err != nil {
-			return nil, err
+			return err
 		}
 
 		if err := removeRepoAppStream(repoPath, stagingRepodata); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	flags := []string{"--update", "--xz", "--local-sqlite", "--outputdir", stagingPath}
 
 	if exists, err := fileExists(path.Join(repoPath, "comps.xml")); err != nil {
-		return nil, err
+		return err
 	} else if exists {
 		flags = append(flags, "--groupfile", "comps.xml")
 	}
@@ -94,10 +94,10 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) 
 	level.Info(logger).Log("msg", "running createrepo_c", "flags", flags)
 	if _, err := exec.Command("createrepo_c", flags...).Output(); err != nil {
 		if err, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
+			return fmt.Errorf("createrepo_c returned non-zero exit code with output '%s': %w", string(err.Stderr), err)
 		}
 
-		return nil, err
+		return err
 	}
 	level.Info(logger).Log("msg", "createrepo_c completed successfully")
 
@@ -106,7 +106,7 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) 
 		level.Info(logger).Log("msg", "modifying repo appstream metadata from directory", "dir", appstreamDirEnv)
 		appstreamDir, err := filepath.Abs(appstreamDirEnv)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		modified, err := modifyRepoAppStream(repoPath, stagingRepodata, appstreamDir)
@@ -119,20 +119,16 @@ func UpdateRepo(repoPath string, ring *pgp.KeyRing) (*tetsudou.Repodata, error) 
 
 	repodata, err := TetsudouRepodata(stagingPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if ring != nil {
 		if err := SignRepo(stagingPath, ring); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
-		return nil, err
-	}
-
-	return repodata, nil
+	return publishRepodata(liveRepodata, stagingRepodata, repoID, tetsudouConfig, repodata)
 }
 
 func seedRepodata(liveRepodata string, stagingRepodata string) error {
@@ -185,7 +181,7 @@ func repomdFiles(repomdPath string) ([]string, error) {
 	return names, nil
 }
 
-func publishRepodata(liveRepodata string, stagingRepodata string) error {
+func publishRepodata(liveRepodata string, stagingRepodata string, repoID string, tetsudouConfig *tetsudou.TetsudouConfig, repodata *tetsudou.Repodata) error {
 	if err := os.MkdirAll(liveRepodata, os.ModePerm); err != nil {
 		return err
 	}
@@ -203,6 +199,14 @@ func publishRepodata(liveRepodata string, stagingRepodata string) error {
 		}
 		if err := copyFile(path.Join(stagingRepodata, entry.Name()), path.Join(liveRepodata, entry.Name())); err != nil {
 			return err
+		}
+	}
+
+	// We want to push Tetsudou with the new hash for the repomd before we swap out the files.
+	// Tetsudou can serve old hashes and DNF will handle those, but Tetsudou/DNF can't guess what the hash will be in the future.
+	if tetsudouConfig != nil {
+		if err := tetsudou.RefreshRepo(tetsudouConfig, repoID, repodata); err != nil {
+			level.Error(logger).Log("msg", "error refreshing tetsudou repo", "repo_id", repoID, "error", err)
 		}
 	}
 

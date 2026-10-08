@@ -1,6 +1,9 @@
 package rpm
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,10 +85,31 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var repodata *tetsudou.Repodata
+	var repomdWhenRefreshed []byte
+	tetsudouServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if want := "/api/repos/terrarawhide-source"; r.URL.Path != want {
+			t.Errorf("tetsudou refreshed %s, want %s", r.URL.Path, want)
+		}
+		repodata = &tetsudou.Repodata{}
+		if err := json.NewDecoder(r.Body).Decode(repodata); err != nil {
+			t.Error(err)
+		}
+		// The refresh has to happen before the swap, so repomd.xml is still the old one
+		repomdWhenRefreshed, err = os.ReadFile(filepath.Join(repodataPath, "repomd.xml"))
+		if err != nil {
+			t.Error(err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer tetsudouServer.Close()
+
 	t.Setenv("SUBATOMIC_APPSTREAM_DIR", t.TempDir())
-	repodata, err := UpdateRepo(repoPath, ring)
-	if err != nil {
+	if err := UpdateRepo(repoPath, ring, "terrarawhide-source", &tetsudou.TetsudouConfig{Server: tetsudouServer.URL}); err != nil {
 		t.Fatalf("UpdateRepo() failed: %v", err)
+	}
+	if repodata == nil {
+		t.Fatal("UpdateRepo() did not refresh tetsudou")
 	}
 
 	repomd, err := os.ReadFile(filepath.Join(repodataPath, "repomd.xml"))
@@ -102,7 +126,10 @@ func TestUpdateRepoRepairsMissingAppStreamPayloadForSourceRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 	if repodata.Hashes != hashes || repodata.Size != int64(len(repomd)) {
-		t.Fatalf("returned repodata does not describe repomd.xml: got %+v, want %+v", repodata.Hashes, hashes)
+		t.Fatalf("refreshed repodata does not describe repomd.xml: got %+v, want %+v", repodata.Hashes, hashes)
+	}
+	if string(repomdWhenRefreshed) == string(repomd) {
+		t.Fatal("tetsudou was refreshed after repomd.xml had already been swapped in")
 	}
 
 	armoredSig, err := os.ReadFile(filepath.Join(repodataPath, "repomd.xml.asc"))
@@ -152,7 +179,7 @@ func TestUpdateRepoLeavesRepodataUntouchedOnFailure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoPath, "comps.xml"), []byte("not xml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := UpdateRepo(repoPath, nil); err == nil {
+	if err := UpdateRepo(repoPath, nil, "test-repo", nil); err == nil {
 		t.Fatal("expected UpdateRepo() to fail with an invalid groupfile")
 	}
 
@@ -260,7 +287,7 @@ func TestPublishRepodataReplacesMetadataInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
+	if err := publishRepodata(liveRepodata, stagingRepodata, "test-repo", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -279,7 +306,7 @@ func TestPublishRepodataRemovesRetiredMetadataAfterGracePeriod(t *testing.T) {
 
 	stagingRepodata := filepath.Join(t.TempDir(), "repodata")
 	writeTestRepodata(t, stagingRepodata, map[string]string{"bbb-primary.xml.xz": "second"})
-	if err := publishRepodata(liveRepodata, stagingRepodata); err != nil {
+	if err := publishRepodata(liveRepodata, stagingRepodata, "test-repo", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, filepath.Join(liveRepodata, "aaa-primary.xml.xz"), "first")
