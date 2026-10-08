@@ -204,9 +204,10 @@ func publishRepodata(liveRepodata string, stagingRepodata string, repoID string,
 
 	// We want to push Tetsudou with the new hash for the repomd before we swap out the files.
 	// Tetsudou can serve old hashes and DNF will handle those, but Tetsudou/DNF can't guess what the hash will be in the future.
+	// It's also safe to fail hard here, worst case is we have some extra files left around until the next update.
 	if tetsudouConfig != nil {
 		if err := tetsudou.RefreshRepo(tetsudouConfig, repoID, repodata); err != nil {
-			level.Error(logger).Log("msg", "error refreshing tetsudou repo", "repo_id", repoID, "error", err)
+			return fmt.Errorf("failed to refresh tetsudou repo: %w", err)
 		}
 	}
 
