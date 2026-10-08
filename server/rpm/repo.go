@@ -194,7 +194,7 @@ func publishRepodata(liveRepodata string, stagingRepodata string, repoID string,
 	stagedNames := map[string]bool{}
 	for _, entry := range staged {
 		stagedNames[entry.Name()] = true
-		if entry.IsDir() || entry.Name() == "repomd.xml" {
+		if entry.IsDir() || entry.Name() == "repomd.xml" || entry.Name() == "repomd.xml.asc" {
 			continue
 		}
 		if err := copyFile(path.Join(stagingRepodata, entry.Name()), path.Join(liveRepodata, entry.Name())); err != nil {
@@ -208,6 +208,12 @@ func publishRepodata(liveRepodata string, stagingRepodata string, repoID string,
 	if tetsudouConfig != nil {
 		if err := tetsudou.RefreshRepo(tetsudouConfig, repoID, repodata); err != nil {
 			return fmt.Errorf("failed to refresh tetsudou repo: %w", err)
+		}
+	}
+
+	if stagedNames["repomd.xml.asc"] {
+		if err := copyFile(path.Join(stagingRepodata, "repomd.xml.asc"), path.Join(liveRepodata, "repomd.xml.asc")); err != nil {
+			return err
 		}
 	}
 
