@@ -13,46 +13,35 @@ use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
-pub fn run(args: Cli) -> Result<()> {
-    if !args.input.is_dir() {
-        bail!("input is not a directory: {}", args.input.display());
-    }
-
-    std::fs::create_dir_all(args.output())?;
-
+fn configure(
+    args: &Cli,
+) -> Result<(CompConfig, Cache<libsubatomic::repo::hierarchy::Satm0FlatHierarchy>)> {
     let hier = libsubatomic::repo::hierarchy::Satm0FlatHierarchy {
         base: args.output().display().to_string().into(),
     };
-
-    let metans: Metans = {
-        let mut v: Metans = vec![
-            Arc::new(PrimaryMetan::default()) as Arc<dyn Metan>,
-            Arc::new(FilelistsMetan::default()),
-            Arc::new(OtherMetan::default()),
-        ];
-        if args.appstream {
-            let mut metan = AppstreamMetan::default();
-            metan.repo = args.repo_name.clone().into();
-            v.push(Arc::new(metan) as Arc<dyn Metan>);
-        }
-        v
-    };
-
+    let mut metans: Metans = vec![
+        Arc::new(PrimaryMetan::default()),
+        Arc::new(FilelistsMetan::default()),
+        Arc::new(OtherMetan::default()),
+    ];
+    if args.appstream {
+        let mut metan = AppstreamMetan::default();
+        metan.repo = args.repo_name.clone().into();
+        metans.push(Arc::new(metan) as Arc<dyn Metan>);
+    }
     let cfg = CacheConfig {
         repo: args.repo_name.clone().into(),
         cache_dir: args.cache.clone(),
-        hier: hier.clone(),
+        hier,
         store: Arc::new(StoreBackend::Local),
         lmdb_map_size: libsubatomic::cache::DEFAULT_MAP_SIZE,
         ftmm: Ftmm::Sha256,
         ..
     };
-
     let comp_cfg = CompConfig::Zstd(kuchiyose::comp::zstd::Cfg {
         level: args.zstd_level,
         multi: args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32),
     });
-
     if let CreaterepoMode::Auto { no_cache: true } = args.mode
         && args.cache.exists()
     {
@@ -60,8 +49,18 @@ pub fn run(args: Cli) -> Result<()> {
         std::fs::remove_dir_all(&args.cache)?;
     }
     std::fs::create_dir_all(&args.cache)?;
+    let cache = Cache::new(cfg, metans)?;
+    Ok((comp_cfg, cache))
+}
 
-    let cache = Cache::new(cfg.clone(), metans)?;
+pub fn run(args: Cli) -> Result<()> {
+    if !args.input.is_dir() {
+        bail!("input is not a directory: {}", args.input.display());
+    }
+
+    std::fs::create_dir_all(args.output())?;
+
+    let (comp_cfg, cache) = configure(&args)?;
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
 
     let (add, remove, comps) = match args.mode {
@@ -82,7 +81,7 @@ pub fn run(args: Cli) -> Result<()> {
             let Some(filename) = f.file_name().expect("bad filename").to_str() else {
                 bail!("invalid utf-8: {}", f.display())
             };
-            rt.block_on(repo.write_custom(&key, &filename, content))?;
+            rt.block_on(repo.write_custom(&key, filename, content))?;
             return Ok(());
         }
     };
@@ -96,7 +95,7 @@ pub fn run(args: Cli) -> Result<()> {
     });
 
     let len = add.len();
-    add.into_iter().enumerate().par_bridge().for_each(|(i, p)| {
+    add.iter().enumerate().par_bridge().for_each(|(i, p)| {
         info!(progress = format!("[{}/{len}]", i + 1), path = %p.display(), "queued");
         let Ok(computed) = cache
             .compute(p, libsubatomic::cache::ComputeInput::default())
@@ -120,16 +119,15 @@ pub fn run(args: Cli) -> Result<()> {
     }
 
     let cache = Arc::into_inner(cache).expect("cache arc should be single");
-
+    let repo = libsubatomic::Repo { cache, comp_cfg: comp_cfg.clone(), .. };
     if let Some(comps_path) = comps {
         let fd = rt.block_on(tokio::fs::File::open(comps_path))?;
-        let repo = libsubatomic::Repo { cache, comp_cfg: comp_cfg.clone(), .. };
         rt.block_on(repo.write_custom("group", "comps.xml", fd))?;
     }
     info!("writing repodata");
-    rt.block_on(cache.write_all(&comp_cfg))?;
+    rt.block_on(repo.cache.write_all(&comp_cfg))?;
     if args.compact {
-        cache.compact_close()?;
+        repo.cache.compact_close()?;
     }
 
     info!(dir = %args.output().display(), "repodata written");
@@ -191,7 +189,7 @@ fn process_rpms_auto(
 
     info!("writing repodata");
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
-    rt.block_on(cache.write_all(&comp_cfg))?;
+    rt.block_on(cache.write_all(comp_cfg))?;
 
     if args.compact {
         Arc::into_inner(cache).expect("cache arc should be single").compact_close()?;

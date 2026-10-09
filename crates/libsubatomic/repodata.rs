@@ -104,10 +104,10 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     fn db_count(&self) -> u32;
 
     /// Open (or create) this metan's LMDB database(s) inside `txn`.
-    fn db_init<'s, 't, 'db>(
-        &'s self,
+    fn db_init(
+        &self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
     ) -> heed::Result<()>;
 
     /// Compute the fragment. The output will be sent to [`Self::save()`].
@@ -117,9 +117,9 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     ///
     /// Implementations must be _idempotent_: calling it once is no different from calling it
     /// several times successively (there are no side effects).
-    fn save<'t, 'db>(
+    fn save(
         &self,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
         computed: &MetanComputed,
     ) -> Result<(), MetanError>;
 
@@ -127,7 +127,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     ///
     /// Implementations must be _idempotent_: calling it once is no different from calling it
     /// several times successively (there are no side effects).
-    fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()>;
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()>;
 
     /// Stream the full XML document to `w`.
     ///
@@ -181,7 +181,7 @@ impl MetanInput {
 
 /// Helper for accessing databases used in [`Metan`] modules.
 #[derive(Debug)]
-pub(crate) struct MetanDb<T> {
+pub struct MetanDb<T> {
     id: std::borrow::Cow<'static, str>,
     db: std::sync::OnceLock<std::sync::Arc<T>>,
 }

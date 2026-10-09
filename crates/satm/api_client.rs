@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Digest;
 use std::io::Write;
 use std::path::Path;
-use tokio::{fs::File, io::AsyncReadExt};
+use tokio::fs::File;
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -30,11 +30,6 @@ pub struct KeySummary {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateKeyResp {
     pub id: String,
-    pub public_armor: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GetKeyResp {
     pub public_armor: String,
 }
 
@@ -162,7 +157,9 @@ impl ApiClient {
         repo: &str,
         paths: &[P],
     ) -> Result<()> {
-        let csums = self.sign_header(repo, &paths.iter().map(|p| p.as_ref()).collect_vec()).await?;
+        let csums = self
+            .sign_header(repo, &paths.iter().map(std::convert::AsRef::as_ref).collect_vec())
+            .await?;
 
         let mut form = multipart::Form::new();
         for (path, csum) in paths.iter().zip_eq(csums) {
@@ -291,28 +288,13 @@ impl<W: Write> Write for HashingWriter<W> {
 fn sha256_file_sync(path: &Path) -> std::io::Result<String> {
     let mut f = std::fs::File::open(path)?;
     let mut hasher = sha2::Sha256::new();
-    let mut buf = [0u8; 65536];
+    let mut buf = vec![0_u8; 64 * 1024].into_boxed_slice();
     loop {
         let n = std::io::Read::read(&mut f, &mut buf)?;
         if n == 0 {
             break;
         }
         hasher.update(&buf[..n]);
-    }
-    Ok(hex::encode(hasher.finalize()))
-}
-
-#[allow(dead_code)]
-async fn sha256_file(path: &Path) -> Result<String> {
-    let mut file = File::open(path).await?;
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = [0_u8; 64 * 1024];
-    loop {
-        let bytes_read = file.read(&mut buffer).await?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
     }
     Ok(hex::encode(hasher.finalize()))
 }

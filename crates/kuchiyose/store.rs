@@ -90,12 +90,16 @@ impl StoreBackend {
         }
     }
 
+    /// Rename `a` to `b`.
+    ///
+    /// # Errors
+    /// Propagate [`std::io::Error`] and [`object_store::Error`].
     pub async fn rename(&self, a: &Link, b: &Link) -> Result<(), StoreErr> {
         match self {
-            StoreBackend::Local => {
+            Self::Local => {
                 tokio::fs::rename(a, b).await?;
             }
-            StoreBackend::Remote(store) => {
+            Self::Remote(store) => {
                 store.rename(&a.to_storepath(), &b.to_storepath()).await?;
             }
         }

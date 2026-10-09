@@ -29,7 +29,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 sha2 = "0.11.0"
 smallvec = "1.15.2"
 smartstring = { version = "1.0.1", features = ["serde"] }
-tempfile = "3.27.0"
 thiserror = "2.0.19"
 tokio = { workspace = true }
 tokio-util = { version = "0.7.19", features = ["io-util", "io"] }

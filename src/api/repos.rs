@@ -254,7 +254,7 @@ async fn double_write(
     let mut multi_writer = srmw::MultiWriter::default();
     multi_writer.insert(store_fd.compat_write());
     multi_writer.insert((Box::new(writer) as Box<dyn kuchiyose::store::StoreWrite>).compat_write());
-    let buf = &mut [0u8; 64 * 1024];
+    let buf = &mut vec![0u8; 64 * 1024].into_boxed_slice();
     let mut generator = multi_writer.copy(&mut body_reader, buf);
     while let Some(event) = generator.next().await {
         match event {

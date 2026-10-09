@@ -180,20 +180,20 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let link = link
             .or_else(|| self.cfg.hier.locate_relative(filename))
             .ok_or(Error::HierRejectPath)?;
-        let reader = rpm::PackageReader::open(&path)?;
+        let reader = rpm::PackageReader::open(path)?;
         let csum = match csum {
             Some(c) => c,
-            None => digest(self.cfg.ftmm, &path)?,
+            None => digest(self.cfg.ftmm, path)?,
         };
-        let filename = (&path).file_name().expect("bad filename").as_bytes().to_owned();
+        let filename = path.file_name().expect("bad filename").as_bytes().to_owned();
         let input = MetanInput {
-            metadata: reader.metadata.clone(),
-            fmeta: std::fs::metadata(&path)?,
+            metadata: reader.metadata,
+            fmeta: std::fs::metadata(path)?,
             csum,
             link,
             filename,
             csum_type: self.cfg.ftmm,
-            path: (&path).to_path_buf(),
+            path: path.to_path_buf(),
         };
         self.metans
             .par_iter()
@@ -362,7 +362,6 @@ impl<H: Hierarchize + Sync> Cache<H> {
     ///
     /// # Panics
     /// Panics if [`SystemTime::now`] is before the unix epoch.
-    #[must_use]
     pub async fn write_all(&self, comp_cfg: &CompConfig) -> Res<Vec<u8>> {
         tracing::info!("writing repodata");
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
@@ -408,7 +407,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let size = inner_mochi.size;
         let sha = hex::encode(inner_mochi.ftmm.finalize()).into();
         let (filename, ext) = (metan.filename(), comp_cfg.ext());
-        let newlink = repodata_dir.join(format!("repodata/{sha}-{filename}.{ext}",));
+        let newlink = repodata_dir.join(format!("repodata/{sha}-{filename}.{ext}"));
         self.cfg.store.rename(&link, &newlink).await?;
 
         let generation = MetanGeneration {

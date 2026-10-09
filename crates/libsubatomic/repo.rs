@@ -135,9 +135,9 @@ impl<H: Hierarchize> Repo<H> {
 
         while let Some(rel) = stream.next().await {
             let rel = rel?;
-            if let None = try {
+            if try {
                 expected_keys.insert(rel.as_path().file_name()?.as_bytes().to_owned());
-            } {
+            }.is_none() {
                 tracing::error!(?rel, "iter_rpms gave bad filename");
                 continue;
             }

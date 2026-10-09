@@ -41,20 +41,20 @@ type Msg = (Vec<u8>, std::string::String);
 
 #[async_trait::async_trait]
 impl super::Metan for OtherMetan {
-    fn mdtype(&self) -> &str {
+    fn mdtype(&self) -> &'static str {
         "other"
     }
-    fn filename(&self) -> &str {
+    fn filename(&self) -> &'static str {
         "other.xml"
     }
     fn db_count(&self) -> u32 {
         1
     }
 
-    fn db_init<'s, 't, 'db>(
-        &'s self,
+    fn db_init(
+        &self,
         env: Arc<heed::Env<heed::WithoutTls>>,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
     ) -> heed::Result<()> {
         self.db.init(env, txn)?;
         Ok(())
@@ -86,9 +86,9 @@ impl super::Metan for OtherMetan {
         Ok(Box::new(msg))
     }
 
-    fn save<'t, 'db>(
+    fn save(
         &self,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
         computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
         let computed: &Msg = computed.downcast_ref().expect("bad cast");
@@ -96,7 +96,7 @@ impl super::Metan for OtherMetan {
         Ok(())
     }
 
-    fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()> {
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()> {
         self.db.delete(txn, path)?;
         Ok(())
     }
@@ -136,7 +136,7 @@ impl super::Metan for OtherMetan {
         w.write_all(
             br#"<?xml version="1.0" encoding="UTF-8"?><otherdata xmlns="http://linux.duke.edu/metadata/other" packages=""#,
         ).await?;
-        w.write_all(self.db.len(&*txn)?.to_string().as_bytes()).await?;
+        w.write_all(self.db.len(&txn)?.to_string().as_bytes()).await?;
         w.write_all(b"\">").await?;
 
         let (tx, rx) = crossbeam_channel::bounded(16);

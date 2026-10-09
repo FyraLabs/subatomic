@@ -1,119 +1,9 @@
-//! Module that contains shared struct implementations used in [`crate::repodata`] and a minimal
-//! [`Package`] struct.
-
-use sha2::Digest;
+//! Module that contains shared struct implementations used in [`crate::repodata`].
 
 use crate::prelude::*;
-pub(crate) use crate::repodata::MetanInput;
+pub use crate::repodata::MetanInput;
 
 pub type ParsePathOutput<'a> = kuchiyose::rpm::ParsePathOutput<'a>;
-
-#[deprecated = "use kuchiyose::rpm::parse_filename"]
-#[must_use]
-pub fn parse_filename(filename: &[u8]) -> Option<ParsePathOutput<'_>> {
-    kuchiyose::rpm::parse_filename(filename)
-}
-
-// Minimum representation for an RPM package.
-#[derive(Clone, Debug)]
-pub struct Package {
-    pub name: String,
-    pub arch: String,
-    pub version: Version,
-    pub checksum: String,
-    pub summary: String,
-    pub description: String,
-    pub packager: Option<String>,
-    pub url: Option<String>,
-    pub time: Time,
-    pub size: Size,
-    /// Other metadata
-    ///
-    /// WARN: we are using `format.files` to store all files, but in
-    /// [`crate::repodata::primary::PrimaryMetadata`] they are stored only if
-    /// [`FileEntry::is_primary()`].
-    pub format: Format,
-    pub changelog: Vec<Changelog>,
-    pub appstream_frag: Vec<u8> = Vec::new(),
-}
-impl Package {
-    #[must_use]
-    pub fn is_appstream_file(path: &Path) -> bool {
-        path.starts_with("/usr/share/metainfo/") && path.extension().is_some_and(|ext| ext == "xml")
-    }
-
-    /// Generate appstream fragment for this rpm package using [`crate::repodata::appstream::transform`].
-    ///
-    /// # Performance
-    /// This operation is slightly expensive and requires decompressing specific files in the archive.
-    /// This requires a linear search against the full list of files in the rpm. Documentation from
-    /// [`rpm::PackageReader::next_file`] suggests only wanted files are decompressed.
-    ///
-    /// # Errors
-    /// RPM errors are propagated. If parsing an appstream xml file failed, no errors will be
-    /// returned and a warning ([`tracing::warn!`]) will be issued instead.
-    pub fn appstream_frag(rpm: &mut rpm::PackageReader) -> Result<Vec<u8>, rpm::Error> {
-        // PERF: do we need this search beforehand?
-        if !rpm.metadata.get_file_entries()?.into_iter().any(|f| Self::is_appstream_file(&f.path()))
-        {
-            return Ok(Vec::new());
-        }
-        let mut appstream_frag = Vec::new();
-        let pkgname = rpm.metadata.get_name()?.to_owned();
-        while let Some(mut f) = rpm.next_file()? {
-            if Self::is_appstream_file(&f.metadata.path()) {
-                let size = f.metadata.size();
-                if let Err(e) = crate::repodata::appstream::transform(
-                    &pkgname,
-                    std::io::BufReader::new(&mut f),
-                    // TODO: what to do if size too large in mem?
-                    Some(size),
-                    &mut appstream_frag,
-                ) {
-                    tracing::warn!(
-                        pkgname,
-                        path = %f.metadata.path().display(),
-                        ?e,
-                        "cannot parse appstream xml"
-                    );
-                }
-            }
-            f.finish()?;
-        }
-        Ok(appstream_frag)
-    }
-
-    // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
-    // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.c#L248
-    fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> {
-        f.seek(std::io::SeekFrom::Start(104))?;
-        let mut bytes = [0u8; 2];
-        f.read_exact(&mut bytes)?;
-        let sigindex = bytes[0].to_be();
-        let sigdata = bytes[1].to_be();
-        let sigindexsize = sigindex * 16;
-        let sigsize = u64::from(sigdata) + u64::from(sigindexsize);
-        let mut disttoboundary = sigsize % 8;
-        if disttoboundary != 0 {
-            disttoboundary = 8 - disttoboundary;
-        }
-        let hdrstart: u64 = 112 + sigsize + disttoboundary;
-
-        f.seek(std::io::SeekFrom::Start(hdrstart + 8))?;
-        f.read_exact(&mut bytes)?;
-        let hdrindex = u64::from(bytes[0].to_be());
-        let hdrdata = u64::from(bytes[1].to_be());
-        let hdrindexsize = hdrindex * 16;
-        let hdrsize = hdrdata + hdrindexsize + 16;
-        let hdrend = hdrstart + hdrsize;
-        if hdrend < hdrstart {
-            return Err(std::io::Error::other(format!(
-                "sanity check fail (hdrend {hdrend} < hdrstart {hdrstart})"
-            )));
-        }
-        Ok(HeaderRange { start: hdrstart, end: hdrend })
-    }
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Version {
@@ -155,40 +45,6 @@ pub struct Size {
     // so we can avoid serializing it if it's not present
     #[serde(rename = "@archive", skip_serializing_if = "Option::is_none")]
     pub archive: Option<u64>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Format {
-    #[serde(rename = "rpm:license")]
-    pub license: String,
-    #[serde(rename = "rpm:vendor", skip_serializing_if = "Option::is_none")]
-    pub vendor: Option<String>,
-    #[serde(rename = "rpm:group", skip_serializing_if = "Option::is_none")]
-    pub group: Option<String>,
-    #[serde(rename = "rpm:buildhost", skip_serializing_if = "Option::is_none")]
-    pub buildhost: Option<String>,
-    #[serde(rename = "rpm:sourcerpm", skip_serializing_if = "Option::is_none")]
-    pub sourcerpm: Option<String>,
-    #[serde(rename = "rpm:header-range")]
-    pub header_range: HeaderRange,
-    #[serde(rename = "rpm:requires", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub requires: Dependencies,
-    #[serde(rename = "rpm:provides", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub provides: Dependencies,
-    #[serde(rename = "rpm:conflicts", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub conflicts: Dependencies,
-    #[serde(rename = "rpm:obsoletes", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub obsoletes: Dependencies,
-    #[serde(rename = "rpm:recommends", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub recommends: Dependencies,
-    #[serde(rename = "rpm:suggests", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub suggests: Dependencies,
-    #[serde(rename = "rpm:supplements", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub supplements: Dependencies,
-    #[serde(rename = "rpm:enhances", default, skip_serializing_if = "Dependencies::is_empty")]
-    pub enhances: Dependencies,
-    #[serde(rename = "file", default)]
-    pub files: Vec<FileEntry>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -373,20 +229,4 @@ impl From<rpm::ChangelogEntry> for Changelog {
     fn from(rpm::ChangelogEntry { name, timestamp, description }: rpm::ChangelogEntry) -> Self {
         Self { author: name.into(), date: timestamp, text: description.into() }
     }
-}
-
-#[deprecated]
-pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = [0; 10240];
-
-    loop {
-        let count = reader.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-
-    Ok(hex::encode(hasher.finalize()).into())
 }

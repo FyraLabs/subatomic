@@ -64,9 +64,7 @@ impl Hierarchize for Satm0FlatHierarchy {
                         })
                         .map_ok(move |e| {
                             e.path()
-                                .strip_prefix(base.as_path())
-                                .map(LinkBuf::from)
-                                .unwrap_or_else(|_| LinkBuf::from(e.path()))
+                                .strip_prefix(base.as_path()).map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
                         })
                         .map(|r| {
                             r.map_err(|e| object_store::Error::Generic {
@@ -83,7 +81,7 @@ impl Hierarchize for Satm0FlatHierarchy {
                         obj_store
                             .list(Some(&prefix))
                             .map_ok(move |m| LinkBuf::from(&m.location.as_ref()[base_len..]))
-                            .map(|r| r.map_err(Into::into)),
+                            .map(|r| r),
                     )
                 }
             }
@@ -124,10 +122,7 @@ impl Hierarchize for FedoraHierarchy {
                             })
                             .map_ok(move |e| {
                                 e.path()
-                                    .strip_prefix(base.as_path())
-                                    .map(LinkBuf::from)
-                                    // TODO: just realized we need to check everywhere this is valid utf-8, otherwise this bugs out
-                                    .unwrap_or_else(|_| LinkBuf::from(e.path()))
+                                    .strip_prefix(base.as_path()).map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
                             })
                             .map(|r| {
                                 r.map_err(|e| object_store::Error::Generic {
@@ -147,7 +142,7 @@ impl Hierarchize for FedoraHierarchy {
                         obj_store
                             .list(Some(&prefix))
                             .map_ok(move |m| LinkBuf::from(&m.location.as_ref()[base_len..]))
-                            .map(|r| r.map_err(Into::into)),
+                            .map(|r| r),
                     )
                 }
             }

@@ -247,7 +247,7 @@ impl AsRef<OsStr> for LinkBuf {
 }
 impl AsRef<Link> for String {
     fn as_ref(&self) -> &Link {
-        Link::new(&self)
+        Link::new(self)
     }
 }
 impl AsRef<Link> for str {
@@ -310,7 +310,7 @@ impl From<&OsStr> for LinkBuf {
 }
 impl From<&[u8]> for LinkBuf {
     fn from(s: &[u8]) -> Self {
-        Self(core::str::from_utf8(s).expect("invalid utf-8").to_string())
+        Self(core::str::from_utf8(s).expect("invalid utf-8").to_owned())
     }
 }
 impl From<&Path> for LinkBuf {

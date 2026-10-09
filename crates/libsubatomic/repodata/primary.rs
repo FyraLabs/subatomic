@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    pkg::{Dependencies, FileEntry, Size, Time, Version},
+    pkg::{Dependencies, FileEntry, HeaderRange, Size, Time, Version},
     prelude::*,
 };
 
@@ -60,7 +60,6 @@ struct PrimaryFormat<'a> {
     pub buildhost: Option<&'a str>,
     #[serde(rename = "rpm:sourcerpm", skip_serializing_if = "Option::is_none")]
     pub sourcerpm: Option<&'a str>,
-    // TODO: impl, and tbh do we really need this
     // #[serde(rename = "rpm:header-range")]
     // pub header_range: HeaderRange,
     #[serde(rename = "rpm:requires", default, skip_serializing_if = "deps_is_empty")]
@@ -104,6 +103,37 @@ struct PackageLocation<'a> {
     pub href: &'a str,
 }
 
+// https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
+// https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.c#L248
+fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> {
+    f.seek(std::io::SeekFrom::Start(104))?;
+    let mut bytes = [0u8; 2];
+    f.read_exact(&mut bytes)?;
+    let sigindex = bytes[0].to_be();
+    let sigdata = bytes[1].to_be();
+    let sigindexsize = sigindex * 16;
+    let sigsize = u64::from(sigdata) + u64::from(sigindexsize);
+    let mut disttoboundary = sigsize % 8;
+    if disttoboundary != 0 {
+        disttoboundary = 8 - disttoboundary;
+    }
+    let hdrstart: u64 = 112 + sigsize + disttoboundary;
+
+    f.seek(std::io::SeekFrom::Start(hdrstart + 8))?;
+    f.read_exact(&mut bytes)?;
+    let hdrindex = u64::from(bytes[0].to_be());
+    let hdrdata = u64::from(bytes[1].to_be());
+    let hdrindexsize = hdrindex * 16;
+    let hdrsize = hdrdata + hdrindexsize + 16;
+    let hdrend = hdrstart + hdrsize;
+    if hdrend < hdrstart {
+        return Err(std::io::Error::other(format!(
+            "sanity check fail (hdrend {hdrend} < hdrstart {hdrstart})"
+        )));
+    }
+    Ok(HeaderRange { start: hdrstart, end: hdrend })
+}
+
 #[derive(Debug, Default)]
 pub struct PrimaryMetan {
     db: super::MetanDb<super::FragDb> = super::MetanDb::new("pri"),
@@ -113,19 +143,19 @@ type Msg = (Vec<u8>, std::string::String);
 
 #[async_trait::async_trait]
 impl super::Metan for PrimaryMetan {
-    fn mdtype(&self) -> &str {
+    fn mdtype(&self) -> &'static str {
         "primary"
     }
-    fn filename(&self) -> &str {
+    fn filename(&self) -> &'static str {
         "primary.xml"
     }
     fn db_count(&self) -> u32 {
         1
     }
-    fn db_init<'s, 't, 'db>(
-        &'s self,
+    fn db_init(
+        &self,
         env: Arc<heed::Env<heed::WithoutTls>>,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
     ) -> heed::Result<()> {
         self.db.init(env, txn)?;
         Ok(())
@@ -149,10 +179,10 @@ impl super::Metan for PrimaryMetan {
                 value: &pkg.csum,
                 ..
             },
-            summary: rpm.get_summary().unwrap_or_default().into(),
-            description: rpm.get_description().unwrap_or_default().into(),
-            packager: rpm.get_packager().ok().map(Into::into),
-            url: rpm.get_url().ok().map(Into::into),
+            summary: rpm.get_summary().unwrap_or_default(),
+            description: rpm.get_description().unwrap_or_default(),
+            packager: rpm.get_packager().ok(),
+            url: rpm.get_url().ok(),
             time: &Time { file: epoch!(pkg.fmeta.created()?), build: rpm.get_build_time()? },
             size: &Size {
                 package: pkg.fmeta.size(),
@@ -168,12 +198,12 @@ impl super::Metan for PrimaryMetan {
                     .ok(),
             },
             format: PrimaryFormat {
-                license: rpm.get_license().unwrap_or_default().into(),
-                vendor: rpm.get_vendor().ok().map(Into::into),
-                group: rpm.get_group().ok().map(Into::into),
-                buildhost: rpm.get_build_host().ok().map(Into::into),
-                sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
-                // header_range: Self::get_header_byte_range(&mut f)?,
+                license: rpm.get_license().unwrap_or_default(),
+                vendor: rpm.get_vendor().ok(),
+                group: rpm.get_group().ok(),
+                buildhost: rpm.get_build_host().ok(),
+                sourcerpm: rpm.get_source_rpm().ok(),
+                // header_range: get_header_byte_range(&mut f)?,
                 requires: &Dependencies::from_requires(rpm.get_requires()?),
                 provides: &Dependencies::from(rpm.get_provides()?),
                 conflicts: &Dependencies::from(rpm.get_conflicts()?),
@@ -196,9 +226,9 @@ impl super::Metan for PrimaryMetan {
         Ok(Box::new(msg))
     }
 
-    fn save<'t, 'db>(
+    fn save(
         &self,
-        txn: &'t mut heed::RwTxn<'db>,
+        txn: &mut heed::RwTxn<'_>,
         computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
         let computed: &Msg = computed.downcast_ref().expect("bad cast");
@@ -206,7 +236,7 @@ impl super::Metan for PrimaryMetan {
         Ok(())
     }
 
-    fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()> {
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()> {
         self.db.delete(txn, path)?;
         Ok(())
     }
@@ -246,7 +276,7 @@ impl super::Metan for PrimaryMetan {
         w.write_all(
                 br#"<?xml version="1.0" encoding="UTF-8"?><metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages=""#
             ).await?;
-        w.write_all(self.db.len(&*txn)?.to_string().as_bytes()).await?;
+        w.write_all(self.db.len(&txn)?.to_string().as_bytes()).await?;
         w.write_all(b"\">").await?;
 
         let (tx, rx) = crossbeam_channel::bounded(16);
