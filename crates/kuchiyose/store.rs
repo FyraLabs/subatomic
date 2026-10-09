@@ -44,6 +44,25 @@ pub enum StoreBackend {
     Remote(Arc<dyn object_store::ObjectStore>),
 }
 
+pub trait StoreWrite: AsyncWrite + Send + Unpin + std::any::Any {
+    fn as_any_ref(&self) -> &dyn std::any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    fn into_box_any(self) -> Box<dyn std::any::Any>;
+}
+// impl StoreWrite for tokio::io::BufWriter<tokio::fs::File> {}
+// impl StoreWrite for MultipartUploadWriter {}
+impl<W: AsyncWrite + Send + Unpin + std::any::Any> StoreWrite for W {
+    fn as_any_ref(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+    fn into_box_any(self) -> Box<dyn std::any::Any> {
+        Box::new(self)
+    }
+}
+
 impl StoreBackend {
     /// Create a writer. This is either [`tokio::fs::File`] or [`MultipartUploadWriter`] depending
     /// on the actual backend.
@@ -54,10 +73,7 @@ impl StoreBackend {
     /// # Errors
     /// If the parent directory or the local file cannot be created, [`StoreErr::Io`] is returned.
     /// Errors from [`object_store::ObjectStoreExt::put_multipart`] are also propagated.
-    pub async fn writer(
-        &self,
-        link: &Link,
-    ) -> Result<Box<dyn AsyncWrite + Send + Unpin>, StoreErr> {
+    pub async fn writer(&self, link: &Link) -> Result<Box<dyn StoreWrite>, StoreErr> {
         match self {
             Self::Local => {
                 if let Some(parent) = link.as_path().parent() {

@@ -1,9 +1,16 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use libsubatomic::repodata::RepoCache;
+use kuchiyose::ftmm::Ftmm;
+use kuchiyose::store::StoreBackend;
+use libsubatomic::metan_prelude::*;
+use libsubatomic::repo::hierarchy::Satm0FlatHierarchy;
+use libsubatomic::{Cache, CacheConfig};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::{config::Config, error::Result};
+
+// TODO: unhardcode
+pub type Repo = libsubatomic::Repo<Satm0FlatHierarchy>;
 
 pub struct Locker {
     repolocks: RwLock<HashMap<String, RwLock<RepoHdl>>>,
@@ -44,11 +51,9 @@ impl Locker {
         // TODO: handle error properly
         let mut w = self.repolocks.write().await;
         let (_ /* key */, repohdl) = w.remove_entry(repo).unwrap();
-        let mut repohdl = repohdl.into_inner();
-        repohdl.repo = repohdl.repo.compact_cache().expect("cannot compact cache");
-        // NOTE: I feel like always keeping this in the cache makes chances for corruption higher…
-        // need second opinion
-        // w.insert(key, RwLock::new(repohdl));
+        let repohdl = repohdl.into_inner();
+        // Compaction is deferred: the next `RepoHdl::new` will reopen the env.
+        drop(repohdl);
         drop(w);
         Ok(Some(ret))
     }
@@ -71,7 +76,7 @@ impl Locker {
 
 /// Thin wrapper around [`libsubatomic::Repo`].
 pub struct RepoHdl {
-    pub repo: libsubatomic::Repo,
+    pub repo: Repo,
 }
 
 impl RepoHdl {
@@ -86,29 +91,52 @@ impl RepoHdl {
         };
 
         let repodir = config.storage_dir.join(repo_name);
-        let cache = RepoCache::new(repo_name, &config.cache_dir, &repodir.join("repodata"))
-            .map_err(libsubatomic::err::Error::from)?;
+
+        let hier = Satm0FlatHierarchy { base: repodir.into() };
+
+        let cfg = CacheConfig {
+            repo: repo_name.into(),
+            cache_dir: config.cache_dir.clone(),
+            hier,
+            store: Arc::new(StoreBackend::Local),
+            lmdb_map_size: libsubatomic::cache::DEFAULT_MAP_SIZE,
+            ftmm: Ftmm::Sha256,
+        };
+
+        let metans: Metans = vec![
+            Arc::new(PrimaryMetan::default()) as Arc<dyn Metan>,
+            Arc::new(FilelistsMetan::default()),
+            Arc::new(OtherMetan::default()),
+            // TODO: unhardcode?
+            {
+                let mut m = AppstreamMetan::default();
+                m.repo = repo_name.into();
+                Arc::new(m)
+            },
+        ];
+
+        let cache = Cache::new(cfg, metans).map_err(libsubatomic::Error::from)?;
 
         let sig = if let Some(key_id) = repo.key_id {
-            let key = sqlx::query_as::<_, crate::db::Key>("SELECT * FROM keys WHERE id = $1")
-                .bind(key_id)
-                .fetch_one(pool)
-                .await?;
-            Some(
-                libsubatomic::sig::Mgr::from_armor(&key.pri)
-                    .map_err(libsubatomic::err::Error::from)?,
-            )
+            let q = sqlx::query_as!(crate::db::Key, "SELECT * FROM keys WHERE id = $1", key_id);
+            let key = q.fetch_one(pool).await?;
+            Some(libsubatomic::sig::Mgr::from_armor(&key.pri).map_err(libsubatomic::Error::from)?)
         } else {
             None
         };
 
-        let repo = libsubatomic::Repo { cache, sig, use_appstream: true, dir: repodir };
+        let repo = libsubatomic::Repo {
+            tempdir: None,
+            cache,
+            sig,
+            comp_cfg: kuchiyose::comp::CompConfig::default(),
+        };
 
         Ok(Some(Self { repo }))
     }
 
     pub async fn delete_physical(&self, config: Arc<Config>) -> Result<()> {
-        let path = config.storage_dir.join(&*self.repo.cache.repo);
+        let path: PathBuf = config.storage_dir.join(&*self.repo.cache.cfg.repo);
         if path.exists() {
             tokio::fs::remove_dir_all(path).await?;
         }

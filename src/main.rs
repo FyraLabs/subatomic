@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![feature(try_blocks_heterogeneous)]
+#![feature(try_blocks)]
+#![feature(default_field_values)]
 
 pub mod api;
 pub mod auth;

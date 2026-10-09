@@ -1,25 +1,31 @@
 #![allow(clippy::missing_errors_doc)]
-use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
+use std::sync::Arc;
 
-use crate::db::{Key, Repo};
+use crate::db::{Key, Repo as DbRepo};
 use crate::error::{ApiError, Result};
 use crate::{DbState, LockerState};
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
-use axum::http::StatusCode;
-use futures_util::TryStreamExt;
-use libsubatomic::err::Res;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
+use futures_util::{StreamExt, TryStreamExt};
+use libsubatomic::metan_prelude::*;
 use libsubatomic::prelude::Itertools;
+use libsubatomic::repo::{FragRequest, hierarchy::Hierarchize};
+use rayon::prelude::*;
+use tokio::io::AsyncWriteExt;
+use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tokio_util::io::StreamReader;
 
-pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<Repo>>> {
-    Ok(Json(sqlx::query_as!(Repo, "SELECT * FROM repos ORDER BY name").fetch_all(&*pool).await?))
+pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<DbRepo>>> {
+    Ok(Json(sqlx::query_as!(DbRepo, "SELECT * FROM repos ORDER BY name").fetch_all(&*pool).await?))
 }
 
-pub async fn create_repo(State(pool): DbState, Path(name): Path<String>) -> Result<Json<Repo>> {
+pub async fn create_repo(State(pool): DbState, Path(name): Path<String>) -> Result<Json<DbRepo>> {
     Ok(Json(
-        sqlx::query_as!(Repo, "INSERT INTO repos (name) VALUES ($1) RETURNING *", &name)
+        sqlx::query_as!(DbRepo, "INSERT INTO repos (name) VALUES ($1) RETURNING *", &name)
             .fetch_one(&*pool)
             .await?,
     ))
@@ -29,10 +35,12 @@ pub async fn sign_headers(
     State(locker): LockerState,
     Path(repo): Path<String>,
     mut multipart: Multipart,
-) -> Result<impl axum::response::IntoResponse> {
+) -> Result<Response> {
     let sig =
         locker.read(&repo, async |hdl| hdl.repo.sig.clone()).await?.ok_or(ApiError::NotFound)?;
-    let Some(mgr) = sig.as_ref() else { return Ok((StatusCode::NO_CONTENT, Default::default())) };
+    let Some(mgr) = sig.as_ref() else {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    };
     let mut resp = rust_multipart_rfc7578_2::client::multipart::Form::default();
 
     while let Some(field) =
@@ -46,15 +54,14 @@ pub async fn sign_headers(
 
         let sig = (mgr.sign_rpm(&mut metadata))
             .map_err(|e| ApiError::Internal(format!("cannot sign: {e}")))?;
-        // `Cursor` to feed in owned sig
         resp.add_reader_2("", std::io::Cursor::new(sig), None, None, vec![]);
     }
-    Ok((
-        StatusCode::OK,
-        axum::body::Body::from_stream(rust_multipart_rfc7578_2::client::multipart::Body::from(
-            resp,
-        )),
-    ))
+
+    let content_type = resp.content_type();
+    let body = axum::body::Body::from_stream(
+        rust_multipart_rfc7578_2::client::multipart::Body::from(resp),
+    );
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, content_type)], body).into_response())
 }
 
 pub async fn upload_pkgs(
@@ -63,67 +70,98 @@ pub async fn upload_pkgs(
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
     let r = locker.read(&repo, async |hdl| {
-        (hdl.repo.dir.clone(), hdl.repo.cache.keys(), hdl.repo.sig.clone())
+        let cfg = &hdl.repo.cache.cfg;
+        (cfg.cache_dir.clone(), hdl.repo.cache.keys(), cfg.hier.clone(), Arc::clone(&cfg.store))
     });
-    let (dir, keys, _sig) = r.await?.ok_or(ApiError::NotFound)?;
+    let (cache_dir, keys, hier, store) = r.await?.ok_or(ApiError::NotFound)?;
     let keys = keys.map_err(|e| ApiError::Internal(format!("can't get cache keys: {e}")))?;
-    tokio::fs::create_dir_all(&dir).await?;
 
-    let parsed_keys = keys
-        .iter()
-        .map(|k| {
-            Result::<_, ApiError>::Ok((
-                k,
-                libsubatomic::pkg::parse_filename(k)
-                    .ok_or_else(|| ApiError::Internal("can't parse cache keys".to_owned()))?,
-            ))
-        })
-        .try_collect()?;
-    let mut processor = UploadProcessor { dir, parsed_keys, ..UploadProcessor::default() };
+    let tempdir = tempfile::Builder::new().prefix("upload-").tempdir_in(&cache_dir);
+    let tempdir =
+        tempdir.map_err(|e| ApiError::Internal(format!("cannot create upload tempdir: {e}")))?;
+
+    let parsed_keys: Vec<_> =
+        keys.iter().filter_map(|k| Some((k.clone(), kuchiyose::rpm::parse_filename(k)?))).collect();
+
+    let mut processor =
+        UploadProcessor { dir: tempdir.path().to_path_buf(), hier, store, parsed_keys, .. };
     processor.receive_rpms(&mut multipart).await?;
-    let w = locker.write(&repo, async |hdl| try bikeshed Res<_> {
-        hdl.repo.del(&processor.removed)?;
-        hdl.repo.cache.insert_fragments(processor.pkgs)?;
-        hdl.repo.generate()?;
+    let UploadProcessor { removed, received, .. } = processor;
+
+    let frags: Vec<(PathBuf, Vec<MetanComputed>)> = {
+        let staged = received.clone();
+        let r = locker.read(&repo, async move |hdl| {
+            staged
+                .into_par_iter()
+                .map(|ReceiveRpmOut { csum, path }| {
+                    let mut input = libsubatomic::cache::ComputeInput::default();
+                    input.csum = Some(csum.into());
+                    let computed = hdl.repo.cache.compute(&path, input)?;
+                    Ok::<_, libsubatomic::Error>((path, computed))
+                })
+                .collect::<Result<Vec<_>, _>>()
+        });
+        r.await?.ok_or(ApiError::NotFound)??
+    };
+
+    let removed_out = removed.clone();
+    let w = locker.write(&repo, async move |hdl| {
+        if !removed.is_empty() {
+            let not_found = hdl.repo.del(&removed).await?;
+            if !not_found.is_empty() {
+                tracing::error!(?not_found, "superseded packages missing from cache");
+            }
+        }
+
+        let cache = &hdl.repo.cache;
+        std::thread::scope(|s| {
+            let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
+            let h = s.spawn(move || cache.update_frags(&rx));
+            for (p, computed) in frags {
+                tx.send((p, FragRequest::Put(computed))).expect("writer thread died");
+            }
+            drop(tx);
+            h.join().expect("writer thread panicked")
+        })?;
+        hdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(())
     });
-    w.await?.ok_or_else(|| ApiError::NotFound)??;
+    w.await?.ok_or(ApiError::NotFound)??;
+
+    drop(tempdir);
+
     Ok(Json(serde_json::json!({
-        // "added": processor.out,
-        "removed": processor.removed.into_iter().map(|bs| String::from_utf8_lossy(bs).to_string()).collect_vec(),
+        "removed": removed_out
+            .iter()
+            .map(|bs| String::from_utf8_lossy(bs).to_string())
+            .collect_vec(),
     })))
 }
 
-#[derive(Default)]
-struct UploadProcessor<'k> {
-    dir: std::path::PathBuf,
-    parsed_keys: Vec<(&'k Vec<u8>, libsubatomic::pkg::ParsePathOutput<'k>)>,
-    removed: Vec<&'k [u8]>,
-    // out: Vec<serde_json::Value>,
-    pkgs: Vec<(Vec<u8>, libsubatomic::repodata::FragEph)>,
-    // sig: Option<libsubatomic::sig::Mgr>,
+struct UploadProcessor<'k, H: Hierarchize> {
+    dir: PathBuf,
+    hier: H,
+    store: Arc<kuchiyose::store::StoreBackend>,
+    parsed_keys: Vec<(Vec<u8>, kuchiyose::rpm::ParsePathOutput<'k>)>,
+    removed: Vec<Vec<u8>> = Vec::new(),
+    received: Vec<ReceiveRpmOut> = Vec::new(),
 }
 
+#[derive(Clone)]
 struct ReceiveRpmOut {
     csum: String,
-    path: std::path::PathBuf,
+    path: PathBuf,
 }
 
-impl UploadProcessor<'_> {
+impl<H: Hierarchize> UploadProcessor<'_, H> {
     async fn receive_rpms(&mut self, multipart: &mut Multipart) -> Result<()> {
         while let Some(field) =
             multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
         {
-            let ReceiveRpmOut { csum, path } = self.receive_rpm(field).await?;
-            // let filename_str = (path.file_name().expect("filename").to_str())
-            //     .ok_or_else(|| ApiError::BadRequest("invalid utf8 filename".to_owned()))?;
-            self.check_csum(multipart, &csum).await?;
-            let frag = Self::parse_to_frag(&path, csum)?;
-            let path = path.strip_prefix(&self.dir).expect("rpm not in repodir");
-            self.pkgs.push((path.as_os_str().as_bytes().to_owned(), frag));
-            // self.out.push(serde_json::json!({
-            //     "pkg": filename_str,
-            //     "sig": sig,
-            // }));
+            let received = self.receive_rpm(field).await?;
+            let ReceiveRpmOut { csum, .. } = &received;
+            self.check_csum(multipart, csum).await?;
+            self.received.push(received);
         }
         Ok(())
     }
@@ -142,88 +180,104 @@ impl UploadProcessor<'_> {
         }
         Ok(())
     }
-
     async fn receive_rpm(
         &mut self,
         field: axum::extract::multipart::Field<'_>,
     ) -> Result<ReceiveRpmOut> {
-        let name = (field.file_name())
-            .ok_or_else(|| ApiError::BadRequest("filename should not be empty".into()))?;
-        let path = self.dir.join(name);
-        let mut body_reader =
-            std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
-        let writer = try bikeshed std::io::Result<_> {
+        let name = field
+            .file_name()
+            .ok_or_else(|| ApiError::BadRequest("filename should not be empty".into()))?
+            .to_owned();
+        if name.is_empty()
+            || name.contains('/')
+            || name.contains('\\')
+            || name.contains("..")
+            || !name.ends_with(".rpm")
+        {
+            return Err(ApiError::BadRequest("invalid rpm filename".to_owned()));
+        }
+        let path = self.dir.join(&name);
+
+        let link = self
+            .hier
+            .locate_relative(name.as_str())
+            .ok_or_else(|| ApiError::BadRequest("hierarchy rejected filename".into()))?;
+        let link = self.hier.basedir().join(&link);
+
+        let body_reader = std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
+        let body_reader = body_reader.compat();
+
+        let csum = try {
+            let store_fd = self.store.writer(&link).await.map_err(std::io::Error::other)?;
             let fd = tokio::fs::File::create(&path).await?;
             let fd = tokio::io::BufWriter::new(fd);
-            let csum = libsubatomic::repodata::RepoWriterCsum::Sha256(Default::default());
-            let mut writer = UploadWriter { fd, csum };
-            tokio::io::copy(&mut body_reader, &mut writer).await?;
-            writer
+            let writer: MochiWriter =
+                kuchiyose::comp::Mochi::new(fd, kuchiyose::ftmm::Ftmm::Sha256);
+            let (mut store_fd, mut writer) = match double_write(body_reader, store_fd, writer).await
+            {
+                Ok(res) => res,
+                Err(err) => return Err(err),
+            };
+            store_fd.shutdown().await?;
+            writer.shutdown().await?;
+            let writer =
+                writer.as_any_mut().downcast_mut::<MochiWriter>().expect("can't downcast mochi");
+            let dummy = kuchiyose::FtmmDigest::Sha512(Default::default());
+            hex::encode(std::mem::replace(&mut writer.ftmm, dummy).finalize())
         }
         .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
 
         let filename = path.file_name().expect("expected file").as_bytes();
-        let Some(libsubatomic::pkg::ParsePathOutput { name, arch, .. }) =
-            libsubatomic::pkg::parse_filename(filename)
+        let Some(kuchiyose::rpm::ParsePathOutput { name, arch, .. }) =
+            kuchiyose::rpm::parse_filename(filename)
         else {
             return Err(ApiError::BadRequest("invalid rpm filename format".to_owned()));
         };
-        let prev_versions = (self.parsed_keys.iter())
+        let prev_versions = self
+            .parsed_keys
+            .iter()
             .filter(|(_, k)| k.name == name && k.arch == arch)
-            .filter(|(k, _)| *k != filename);
-        self.removed.extend(prev_versions.map(|(k, _)| k.as_slice()));
-        let csum = writer.csum.csum().into();
+            .filter(|(k, _)| k.as_slice() != filename);
+        self.removed.extend(prev_versions.map(|(k, _)| k.clone()));
         Ok(ReceiveRpmOut { csum, path })
     }
-
-    fn parse_to_frag(
-        path: &std::path::Path,
-        csum: String,
-    ) -> Result<libsubatomic::repodata::FragEph, ApiError> {
-        let fd = std::fs::File::open(path)?;
-        let (pkg, mut rpmreader) = libsubatomic::Package::parse(fd, csum.into())
-            .map_err(|e| ApiError::BadRequest(format!("cannot parse rpm: {e}")))?;
-        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, path.as_os_str());
-        let appstream = libsubatomic::pkg::Package::appstream_frag(&mut rpmreader)
-            .map_err(|e| ApiError::BadRequest(format!("cannot parse appstream in rpm: {e}")))?;
-        if !appstream.is_empty() {
-            frag.app = libsubatomic::repodata::Frag(Some(appstream));
-        }
-        Ok(frag)
-    }
 }
 
-struct UploadWriter {
-    fd: tokio::io::BufWriter<tokio::fs::File>,
-    csum: libsubatomic::repodata::RepoWriterCsum,
-}
+type MochiWriter = kuchiyose::comp::Mochi<tokio::io::BufWriter<tokio::fs::File>>;
 
-impl tokio::io::AsyncWrite for UploadWriter {
-    fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        let ret = tokio::io::AsyncWrite::poll_write(std::pin::pin!(&mut self.as_mut().fd), cx, buf);
-        if let std::task::Poll::Ready(Ok(len)) = &ret {
-            self.csum.write_all(&buf[..*len]).expect("hashing should not fail");
+async fn double_write(
+    mut body_reader: impl futures_util::AsyncRead + Unpin + Send,
+    store_fd: Box<dyn kuchiyose::store::StoreWrite>,
+    writer: MochiWriter,
+) -> Result<(Box<dyn kuchiyose::store::StoreWrite>, Box<dyn kuchiyose::store::StoreWrite>)> {
+    let mut multi_writer = srmw::MultiWriter::default();
+    multi_writer.insert(store_fd.compat_write());
+    multi_writer.insert((Box::new(writer) as Box<dyn kuchiyose::store::StoreWrite>).compat_write());
+    let buf = &mut [0u8; 64 * 1024];
+    let mut generator = multi_writer.copy(&mut body_reader, buf);
+    while let Some(event) = generator.next().await {
+        match event {
+            srmw::CopyEvent::Progress(_) => {}
+            srmw::CopyEvent::Failure(0, err) => {
+                tracing::error!(?err, "cannot write to store");
+                return Err(ApiError::Internal(format!("cannot write to store: {err}")));
+            }
+            srmw::CopyEvent::Failure(1, err) => {
+                tracing::error!(?err, "cannot write to tmpdir");
+                return Err(ApiError::Internal(format!("cannot write to tmpdir: {err}")));
+            }
+            srmw::CopyEvent::Failure(i, _) => unreachable!("unknown writer idx {i}"),
+            srmw::CopyEvent::NoWriters => unreachable!("no writers"),
+            srmw::CopyEvent::SourceFailure(error) => {
+                tracing::warn!(?error, "source failure");
+                return Err(ApiError::BadRequest(format!("multipart: {error}")));
+            }
         }
-        ret
     }
-
-    fn poll_flush(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        tokio::io::AsyncWrite::poll_flush(std::pin::pin!(&mut self.as_mut().fd), cx)
-    }
-
-    fn poll_shutdown(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        tokio::io::AsyncWrite::poll_shutdown(std::pin::pin!(&mut self.as_mut().fd), cx)
-    }
+    drop(generator);
+    let left = multi_writer.remove(0).into_inner();
+    let right = multi_writer.remove(1).into_inner();
+    Ok((left, right))
 }
 
 pub async fn delete_repo(
@@ -233,39 +287,34 @@ pub async fn delete_repo(
     Ok(if locker.del(&name).await? { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
-#[deprecated]
 pub async fn push_comps(
     State(locker): LockerState,
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
-    let field = (multipart.next_field().await.expect("multipart err"))
+    let field = (multipart.next_field().await)
+        .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
     let comps = (field.bytes().await)
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
-    if locker
-        .write(&repo, async |hdl| try bikeshed Res<()> {
-            hdl.repo.add_comps(&comps)?;
-            // TODO: only generate repomd
-            hdl.repo.generate()?;
-        })
-        .await?
-        .transpose()?
-        .is_some()
-    {
+    let w = locker.write(&repo, async move |hdl| {
+        hdl.repo.write_custom("group", "comps.xml", &comps[..]).await?;
+        hdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(())
+    });
+    if w.await?.transpose()?.is_some() {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Ok(StatusCode::NOT_FOUND)
     }
 }
 
-#[deprecated]
 pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
-    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
-        hdl.repo.del_comps()?;
-        // TODO: only generate repomd
-        hdl.repo.generate()?;
+    let w = locker.write(&repo, async |hdl| {
+        hdl.repo.del_custom("group").await?;
+        hdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(())
     });
     if w.await?.transpose()?.is_some() {
         Ok(StatusCode::NO_CONTENT)
@@ -300,19 +349,21 @@ pub async fn set_key(
     let Some(key) = q.fetch_optional(&*db).await? else {
         return Ok(StatusCode::NOT_FOUND);
     };
-    let mgr =
-        libsubatomic::sig::Mgr::from_armor(&key.pri).map_err(libsubatomic::err::Error::from)?;
+    let mgr = libsubatomic::sig::Mgr::from_armor(&key.pri).map_err(libsubatomic::Error::from)?;
 
-    let w = locker.write(&repo, async |mut hdl| try bikeshed sqlx::Result<StatusCode> {
+    let w = locker.write(&repo, async |mut hdl| try {
         let q = sqlx::query!("UPDATE repos SET key_id = $1 WHERE name = $2", key.id, &repo);
         let ra = q.execute(&*db).await?.rows_affected();
         if ra == 0 {
-            return Ok(StatusCode::NOT_FOUND);
+            return Ok::<_, sqlx::Error>(StatusCode::NOT_FOUND);
         }
         hdl.repo.sig = Some(mgr);
         StatusCode::NO_CONTENT
     });
-    w.await?.transpose()?.ok_or(ApiError::NotFound)
+    match w.await?.ok_or(ApiError::NotFound)? {
+        Ok(s) => Ok(s),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub async fn del_key(
@@ -320,34 +371,26 @@ pub async fn del_key(
     State(locker): LockerState,
     Path(repo): Path<String>,
 ) -> Result<StatusCode> {
-    let Some(true) = locker
-        .write(&repo, async |mut hdl| try bikeshed sqlx::Result<bool> {
-            let q = sqlx::query!("UPDATE repos SET key_id = NULL WHERE name = $1", &repo);
-            let ra = q.execute(&*db).await?.rows_affected();
-            if ra == 0 {
-                return Ok(false);
-            }
-            hdl.repo.sig = None;
-            true
-        })
-        .await?
-        .transpose()?
-    else {
+    let w = locker.write(&repo, async |mut hdl| try {
+        let q = sqlx::query!("UPDATE repos SET key_id = NULL WHERE name = $1", &repo);
+        let ra = q.execute(&*db).await?.rows_affected();
+        if ra == 0 {
+            return Ok::<_, sqlx::Error>(false);
+        }
+        hdl.repo.sig = None;
+        true
+    });
+    let Some(true) = w.await?.map(|r| r.map_err(ApiError::from)).transpose()? else {
         return Ok(StatusCode::NOT_FOUND);
     };
     Ok(StatusCode::NO_CONTENT)
 }
 
-// pub async fn resign(State(locker): LockerState, Path(repo): Path<String>) -> Result<StatusCode> {
-//     let q = locker.write(&repo, async |repohdl| repohdl.repo.resign_all()).await?;
-//     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
-// }
-
 pub async fn refresh_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
-    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(true)).await?;
+    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(true).await).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -355,7 +398,7 @@ pub async fn rebuild_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
-    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false)).await?;
+    let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false).await).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -364,9 +407,10 @@ pub async fn list_rpms(
     Path(repo): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
     let Some(keys) = locker
-        .read(&repo, async |repohdl| try bikeshed Res<_> { repohdl.repo.cache.keys()? })
+        .read(&repo, async |repohdl| repohdl.repo.cache.keys())
         .await?
-        .transpose()?
+        .transpose()
+        .map_err(|e| ApiError::Internal(format!("cannot list keys: {e}")))?
     else {
         return Err(ApiError::NotFound);
     };
@@ -387,17 +431,17 @@ pub async fn del_rpms(
     Json(DelRpmsReq { rpms }): Json<DelRpmsReq>,
 ) -> Result<Json<serde_json::Value>> {
     tracing::info!(?rpms, "deleting rpms");
-    let q = locker.write(&repo, async |repohdl| try bikeshed Result<_> {
-        let out =
-            repohdl.repo.del(&rpms.iter().map(std::string::String::as_bytes).collect_vec()).map(
-                |v| v.into_iter().map(|s| String::from_utf8_lossy(s).to_string()).collect_vec(),
-            )?;
-        repohdl.repo.generate()?;
-        out
+    let rpms_bytes: Vec<Vec<u8>> = rpms.iter().map(|s| s.as_bytes().to_vec()).collect();
+    let w = locker.write(&repo, async move |repohdl| {
+        let out = repohdl.repo.del(&rpms_bytes).await?;
+        repohdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(out)
     });
-    let Some(not_found) = q.await?.transpose()? else {
+    let Some(not_found) = w.await?.transpose()? else {
         return Err(ApiError::NotFound);
     };
+    let not_found: Vec<String> =
+        not_found.iter().map(|s| String::from_utf8_lossy(s).to_string()).collect();
     Ok(Json(serde_json::json!({ "not_found": not_found })))
 }
 
@@ -406,22 +450,20 @@ pub async fn upl_md(
     Path((repo, md)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
-    let field = (multipart.next_field().await.expect("multipart err"))
+    let field = (multipart.next_field().await)
+        .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
-    let filename =
-        field.file_name().ok_or_else(|| ApiError::BadRequest("expected filename".into()))?.into();
+    let filename = field
+        .file_name()
+        .ok_or_else(|| ApiError::BadRequest("expected filename".into()))?
+        .to_owned();
     let content = (field.bytes().await)
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
-    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
-        tokio::fs::create_dir_all(&hdl.repo.cache.repodata_dir).await?;
-        tokio::fs::create_dir_all(&hdl.repo.cache.cachedir).await?;
-        hdl.repo.cache.update_custom_datatype(
-            libsubatomic::DataType::Custom(md.into(), filename),
-            &content,
-        )?;
-        // TODO: only generate repomd
-        hdl.repo.generate()?;
+    let w = locker.write(&repo, async move |hdl| {
+        hdl.repo.write_custom(&md, &filename, &content[..]).await?;
+        hdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(())
     });
     if w.await?.transpose()?.is_some() {
         Ok(StatusCode::NO_CONTENT)
@@ -434,10 +476,10 @@ pub async fn del_md(
     State(locker): LockerState,
     Path((repo, md)): Path<(String, String)>,
 ) -> Result<StatusCode> {
-    let w = locker.write(&repo, async |hdl| try bikeshed Res<()> {
-        hdl.repo.cache.del_custom_datatype(&md)?;
-        // TODO: only generate repomd
-        hdl.repo.generate()?;
+    let w = locker.write(&repo, async move |hdl| {
+        hdl.repo.del_custom(&md).await?;
+        hdl.repo.generate().await?;
+        Ok::<_, libsubatomic::Error>(())
     });
     if w.await?.transpose()?.is_some() {
         Ok(StatusCode::NO_CONTENT)
@@ -479,7 +521,7 @@ mod test {
                     .into(),
                 storage_dir: storage_dir.path().to_owned(),
                 cache_dir: cache_dir.path().to_owned(),
-                body_limit: 10_485_760, // 10 MiB
+                body_limit: 10_485_760,
             }),
             (storage_dir, cache_dir),
         )
@@ -706,8 +748,7 @@ qg38sG21+aKNUiFFHynSF64O
             .body(Body::from_stream(MultipartBody::from(form)))
             .unwrap();
         let resp = app.clone().oneshot(req).await.unwrap();
-        let status = resp.status();
-        assert_eq!(status, 204);
+        assert_eq!(resp.status(), 204);
 
         let repomd_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
         let content = std::fs::read_to_string(&repomd_path).unwrap();
@@ -731,7 +772,7 @@ qg38sG21+aKNUiFFHynSF64O
         std::fs::create_dir_all(cfg.storage_dir.join("rpmball")).unwrap();
         assert_eq!(
             super::delete_repo(locker.clone(), Path("rpmball".into())).await.unwrap(),
-            super::StatusCode::NO_CONTENT
+            axum::http::StatusCode::NO_CONTENT
         );
         assert!(!cfg.storage_dir.join("rpmball").exists());
         assert!(locker.read("rpmball", async |_| unreachable!()).await.unwrap().is_none());

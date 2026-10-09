@@ -32,7 +32,7 @@ pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
     fn iter_rpms(
         &self,
         store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send;
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send;
 }
 
 #[derive(Clone, Debug)]
@@ -52,7 +52,7 @@ impl Hierarchize for Satm0FlatHierarchy {
     fn iter_rpms(
         &self,
         store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send {
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send {
         let base = self.base.clone();
         async move {
             match store {
@@ -75,7 +75,7 @@ impl Hierarchize for Satm0FlatHierarchy {
                             })
                         }),
                 ))
-                    as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>,
+                    as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>> + Send>>,
                 StoreBackend::Remote(obj_store) => {
                     let prefix = base.to_storepath();
                     let base_len = self.base.as_str().len() + 1;
@@ -111,7 +111,7 @@ impl Hierarchize for FedoraHierarchy {
     fn iter_rpms(
         &self,
         store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>>> + Send {
+    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send {
         let base = self.base.join("Packages");
         async move {
             match store {
@@ -136,7 +136,9 @@ impl Hierarchize for FedoraHierarchy {
                                 })
                             }),
                     ))
-                        as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>
+                        as std::pin::Pin<
+                            Box<dyn Stream<Item = object_store::Result<LinkBuf>> + Send>,
+                        >
                 }
                 StoreBackend::Remote(obj_store) => {
                     let prefix = base.to_storepath();

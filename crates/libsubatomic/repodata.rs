@@ -20,6 +20,7 @@ use crate::cache::FragDb;
 
 pub mod metan_prelude {
     pub use super::Metan;
+    pub use super::MetanComputed;
     pub use super::MetanError;
     pub use super::appstream::AppstreamMetan;
     pub use super::filelists::FilelistsMetan;
@@ -144,6 +145,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     /// components). The default impls all return `Some(…)`.
     fn on_ready<'db>(&self, ready: MetanReady) -> std::io::Result<Option<repomd::Data>>;
 
+    // TODO: actually invoke this hook
     /// Hook invoked after `repomd.xml` has been written. Useful to create output that depend on it
     /// (e.g. `tetsudou.json`).
     fn on_post_repomd<'db>(

@@ -229,7 +229,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
                 continue;
             };
 
-            self.epo.put(&mut wtxn, filename.as_bytes(), &epoch)?;
+            self.wtxn(&mut wtxn, |wtxn| self.epo.put(wtxn, filename.as_bytes(), &epoch))?;
 
             match req {
                 FragRequest::Cached => cached += 1,
@@ -363,7 +363,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
     /// # Panics
     /// Panics if [`SystemTime::now`] is before the unix epoch.
     #[must_use]
-    pub fn write_all(&self, comp_cfg: &CompConfig) -> Res<Vec<u8>> {
+    pub async fn write_all(&self, comp_cfg: &CompConfig) -> Res<Vec<u8>> {
         tracing::info!("writing repodata");
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
         std::fs::create_dir_all(&repodata_dir)?;
@@ -371,21 +371,16 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let timestamp =
             SystemTime::now().duration_since(UNIX_EPOCH).expect("time underflow").as_secs() as i64;
 
-        // PERF: don't collect here?'
-        let mut data: Vec<repomd::Data> = self
-            .metans
-            .par_iter()
-            .map(|metan| self.write_one(metan, comp_cfg, timestamp))
-            .collect::<Res<Vec<Option<repomd::Data>>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let futs = self.metans.iter().map(|metan| self.write_one(metan, comp_cfg, timestamp));
+        let data = futures::future::try_join_all(futs).await?;
+        let mut data = data.into_iter().flatten().collect();
 
         self.extend_custom_datatypes(&mut data)?;
-        self.write_repomd(data)
+        self.write_repomd(data).await
     }
 
-    fn write_one(
+    /// Generate and write the xml for one [`Metan`].
+    async fn write_one(
         &self,
         metan: &Arc<dyn Metan>,
         comp_cfg: &CompConfig,
@@ -394,13 +389,9 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
         let link = repodata_dir.join(metan.filename());
 
-        let hdl = tokio::runtime::Handle::current();
-
         // `StoreBackend::writer` is async because a remote backend must open a multipart upload.
         // For local files, this resolves immediately.
-        let writer = tokio::task::block_in_place(|| {
-            hdl.block_on(self.cfg.store.writer(&link)).map_err(crate::err::Error::from)
-        })?;
+        let writer = self.cfg.store.writer(&link).await.map_err(crate::err::Error::from)?;
 
         // Pipeline: metan → open-checksum → compression → checksum → store.
         let ftmm = self.cfg.ftmm;
@@ -409,15 +400,13 @@ impl<H: Hierarchize + Sync> Cache<H> {
             let mut w = comp_cfg.to_mochi(&mut inner_mochi, ftmm);
 
             let env = Arc::clone(&self.env);
-            tokio::task::block_in_place(|| {
-                hdl.block_on(metan.on_generate(env, Box::pin(&mut w)))
-                    .map_err(crate::err::Error::from)
-            })?;
+            metan.on_generate(env, Box::pin(&mut w)).await.map_err(crate::err::Error::from)?;
 
             (w.size, w.ftmm.finalize())
         };
         let size = inner_mochi.size;
         let checksum = inner_mochi.ftmm.finalize();
+        inner_mochi.inner.shutdown().await?;
 
         let generation = MetanGeneration {
             csum: repomd::Checksum { r#type: ftmm, sha: hex::encode(checksum).into() },
@@ -440,13 +429,11 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(())
     }
 
-    fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
+    async fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
         let link = repodata_dir.join("repomd.xml");
-        let hdl = tokio::runtime::Handle::current();
-        let mut async_writer = tokio::task::block_in_place(|| {
-            hdl.block_on(self.cfg.store.writer(&link)).map_err(crate::err::Error::from)
-        })?;
+        let mut async_writer =
+            self.cfg.store.writer(&link).await.map_err(crate::err::Error::from)?;
 
         let mut buf = Vec::new();
         let repomd = repomd::repomd {
@@ -458,9 +445,8 @@ impl<H: Hierarchize + Sync> Cache<H> {
             ..
         };
         quick_xml::se::to_utf8_io_writer(&mut buf, &repomd)?;
-        tokio::task::block_in_place(|| {
-            hdl.block_on(async_writer.write_all(&buf)).map_err(crate::err::Error::from)
-        })?;
+        async_writer.write_all(&buf).await.map_err(crate::err::Error::from)?;
+        async_writer.shutdown().await?;
         Ok(buf)
     }
 

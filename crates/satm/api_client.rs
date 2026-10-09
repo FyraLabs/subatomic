@@ -3,7 +3,8 @@ use libsubatomic::prelude::Itertools;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sha2::{Digest, Sha256};
+use sha2::Digest;
+use std::io::Write;
 use std::path::Path;
 use tokio::{fs::File, io::AsyncReadExt};
 
@@ -96,19 +97,12 @@ impl ApiClient {
         self.json(self.request_builder(reqwest::Method::PUT, &format!("/v1/repos/{name}"))).await
     }
 
-    fn calculate_csum(paths: &[&Path]) -> Result<Vec<libsubatomic::smartstring::alias::String>> {
+    fn calculate_csum(paths: &[&Path]) -> Result<Vec<String>> {
         tracing::info!("calculating checksums");
-        Ok(paths
-            .par_iter()
-            .map(|path| libsubatomic::pkg::sha256_digest(std::fs::File::open(path)?))
-            .collect::<std::io::Result<_>>()?)
+        Ok(paths.par_iter().map(|path| sha256_file_sync(path)).collect::<std::io::Result<_>>()?)
     }
 
-    async fn sign_header(
-        &self,
-        repo: &str,
-        paths: &[&Path],
-    ) -> Result<Vec<libsubatomic::smartstring::alias::String>> {
+    async fn sign_header(&self, repo: &str, paths: &[&Path]) -> Result<Vec<String>> {
         tracing::info!("requesting signatures");
         let mut form = multipart::Form::new();
         for path in paths {
@@ -124,7 +118,7 @@ impl ApiClient {
         let status = res.status();
         if status.is_success() {
             if status == reqwest::StatusCode::NO_CONTENT {
-                return Ok(Self::calculate_csum(paths)?);
+                return Self::calculate_csum(paths);
             }
             let content_type =
                 res.headers().get(reqwest::header::CONTENT_TYPE).expect("can't get content-type");
@@ -144,12 +138,11 @@ impl ApiClient {
                 let mut rpm = libsubatomic::rpm::Package::open(path).expect("cannot reopen rpm");
                 rpm.apply_signature(sig)?;
 
-                let fd = std::fs::File::create(&path)?;
-                let fd = std::io::BufWriter::new(fd);
-                let csum = libsubatomic::repodata::RepoWriterCsum::Sha256(Default::default());
-                let mut w = libsubatomic::repodata::RepoWriterCompInner { fd, csum, size: 0 };
+                let file = std::fs::File::create(path)?;
+                let mut w = HashingWriter::new(std::io::BufWriter::new(file));
                 rpm.write(&mut w)?;
-                res.push(w.csum.csum());
+                w.flush()?;
+                res.push(w.finish());
             }
             Ok(res)
         } else {
@@ -170,7 +163,7 @@ impl ApiClient {
         for (path, csum) in paths.iter().zip_eq(csums) {
             let filename = path.as_ref().file_name().expect("expect filename").to_string_lossy();
             form = form.file(filename.to_string(), path).await?;
-            form = form.text("csum", csum.to_string());
+            form = form.text("csum", csum);
         }
 
         let req = self
@@ -183,7 +176,6 @@ impl ApiClient {
         self.void(self.request_builder(reqwest::Method::DELETE, &format!("/v1/repos/{name}"))).await
     }
 
-    // FIXME: use new endpoint & support more datatypes
     pub async fn upload_comps<P: AsRef<Path> + Send + Sync>(
         &self,
         name: &str,
@@ -265,9 +257,50 @@ impl ApiClient {
     }
 }
 
+/// A writer that forwards to `inner` while hashing everything written.
+struct HashingWriter<W> {
+    inner: W,
+    hasher: sha2::Sha256,
+}
+
+impl<W> HashingWriter<W> {
+    fn new(inner: W) -> Self {
+        Self { inner, hasher: sha2::Sha256::new() }
+    }
+    fn finish(self) -> String {
+        hex::encode(self.hasher.finalize())
+    }
+}
+
+impl<W: Write> Write for HashingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let n = self.inner.write(buf)?;
+        self.hasher.update(&buf[..n]);
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn sha256_file_sync(path: &Path) -> std::io::Result<String> {
+    let mut f = std::fs::File::open(path)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = std::io::Read::read(&mut f, &mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+#[allow(dead_code)]
 async fn sha256_file(path: &Path) -> Result<String> {
     let mut file = File::open(path).await?;
-    let mut hasher = Sha256::new();
+    let mut hasher = sha2::Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {
         let bytes_read = file.read(&mut buffer).await?;

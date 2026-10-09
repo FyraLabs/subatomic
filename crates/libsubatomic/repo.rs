@@ -105,13 +105,14 @@ impl<H: Hierarchize> Repo<H> {
     /// Propagates IO, cache, and possibly [`pgp`] errors.
     #[doc(alias = "createrepo")]
     pub async fn generate(&self) -> Res<Vec<u8>> {
-        let repomd = self.cache.write_all(&self.comp_cfg)?;
+        let repomd = self.cache.write_all(&self.comp_cfg).await?;
         if let Some(sig) = &self.sig {
             let asc_link = self.cache.cfg.hier.basedir().join("repodata/repomd.xml.asc");
-            let async_write = self.cache.cfg.store.writer(&asc_link).await?;
-            let mut asc_fd = tokio_util::io::SyncIoBridge::new(async_write);
+            let mut writer = self.cache.cfg.store.writer(&asc_link).await?;
+            let mut buf = Vec::new();
             sig.sign(&repomd)?
-                .to_armored_writer(&mut asc_fd, pgp::composed::ArmorOptions::default())?;
+                .to_armored_writer(&mut buf, pgp::composed::ArmorOptions::default())?;
+            writer.write_all(&buf).await?;
         }
         Ok(repomd)
     }
@@ -151,7 +152,7 @@ impl<H: Hierarchize> Repo<H> {
             self.add_replace(&paths_to_add).await?;
         }
 
-        ret.repomd = self.cache.write_all(&self.comp_cfg)?;
+        ret.repomd = self.cache.write_all(&self.comp_cfg).await?;
 
         if incremental {
             let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
@@ -162,6 +163,8 @@ impl<H: Hierarchize> Repo<H> {
     }
 
     /// Delete a list of packages by filename.
+    ///
+    /// Return a list of packages not found in the cache.
     ///
     /// # Errors
     /// Propagates cache and store errors.
@@ -178,7 +181,8 @@ impl<H: Hierarchize> Repo<H> {
             else {
                 continue;
             };
-            self.cache.cfg.store.delete(link.as_link()).await?;
+            let link = self.cache.cfg.hier.basedir().join(&link);
+            self.cache.cfg.store.delete(&link).await?;
         }
         Ok(not_found)
     }
@@ -204,7 +208,7 @@ impl<H: Hierarchize> Repo<H> {
     {
         let tmp_link = self.cache.cfg.hier.basedir().join("repodata").join(dt);
         let ftmm = self.cache.cfg.ftmm;
-        let writer = self.cache.cfg.store.writer(tmp_link.as_link()).await?;
+        let writer = self.cache.cfg.store.writer(&tmp_link).await?;
 
         let mut inner_mochi = kuchiyose::comp::Mochi::new(writer, ftmm);
         let (open_size, open_checksum) = {
@@ -253,7 +257,8 @@ impl<H: Hierarchize> Repo<H> {
         let Some(data) = self.cache.del_custom_datatype(dt)? else {
             return Ok(None);
         };
-        self.cache.cfg.store.delete(data.location.href.as_link()).await?;
+        let link = self.cache.cfg.hier.basedir().join(&data.location.href);
+        self.cache.cfg.store.delete(&link).await?;
         Ok(Some(data))
     }
 }

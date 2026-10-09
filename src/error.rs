@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("libsubatomic error: {0}")]
-    Libsubatomic(#[from] libsubatomic::err::Error),
+    Libsubatomic(#[from] libsubatomic::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]

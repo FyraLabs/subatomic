@@ -127,7 +127,7 @@ pub fn run(args: Cli) -> Result<()> {
         rt.block_on(repo.write_custom("group", "comps.xml", fd))?;
     } else {
         info!("writing repodata");
-        cache.write_all(&comp_cfg)?;
+        rt.block_on(cache.write_all(&comp_cfg))?;
         if args.compact {
             cache.compact_close()?;
         }
@@ -190,7 +190,8 @@ fn process_rpms_auto(
     info!(?n_new, ?n_cached, "all rpms processed");
 
     info!("writing repodata");
-    _ = cache.write_all(&comp_cfg)?;
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    rt.block_on(cache.write_all(&comp_cfg))?;
 
     if args.compact {
         Arc::into_inner(cache).expect("cache arc should be single").compact_close()?;
