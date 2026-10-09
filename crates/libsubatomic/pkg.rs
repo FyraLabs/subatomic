@@ -328,32 +328,6 @@ pub struct FileEntry {
     #[serde(rename = "$text")]
     pub path: PathBuf,
 }
-
-impl FileEntry {
-    #[must_use]
-    pub fn new<I: Into<PathBuf>>(path: I) -> Self {
-        Self { path: path.into(), .. }
-    }
-    // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.h#L111
-    #[must_use]
-    pub fn is_primary(&self) -> bool {
-        const BIN: &[u8] = b"bin/";
-
-        let p = self.path.as_os_str().as_bytes();
-
-        p.starts_with(b"/etc/")
-            || p == b"/usr/lib/sendmail"
-            || 'b: {
-                for i in 0..p.len() - BIN.len() {
-                    if &p[i..i + BIN.len()] == BIN {
-                        break 'b true;
-                    }
-                }
-                false
-            }
-    }
-}
-
 impl<'a> From<rpm::FileEntry<'a>> for FileEntry {
     fn from(value: rpm::FileEntry<'a>) -> Self {
         Self {

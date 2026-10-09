@@ -401,17 +401,20 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
             let env = Arc::clone(&self.env);
             metan.on_generate(env, Box::pin(&mut w)).await.map_err(crate::err::Error::from)?;
+            w.shutdown().await?;
 
             (w.size, w.ftmm.finalize())
         };
         let size = inner_mochi.size;
-        let checksum = inner_mochi.ftmm.finalize();
-        inner_mochi.inner.shutdown().await?;
+        let sha = hex::encode(inner_mochi.ftmm.finalize()).into();
+        let (filename, ext) = (metan.filename(), comp_cfg.ext());
+        let newlink = repodata_dir.join(format!("repodata/{sha}-{filename}.{ext}",));
+        self.cfg.store.rename(&link, &newlink).await?;
 
         let generation = MetanGeneration {
-            csum: repomd::Checksum { r#type: ftmm, sha: hex::encode(checksum).into() },
+            csum: repomd::Checksum { r#type: ftmm, sha },
             osum: repomd::Checksum { r#type: ftmm, sha: hex::encode(open_checksum).into() },
-            comp_ext: "xml.zst".into(),
+            comp_ext: ext.into(),
             timestamp,
             size,
             open_size,

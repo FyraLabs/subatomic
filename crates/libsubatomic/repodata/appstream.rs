@@ -1,10 +1,23 @@
+//! Handle appstream xml serialization & deserialization.
 use quick_xml::events::{BytesText, Event};
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 use crate::prelude::*;
 
-// Keep the existing `transform` function as is.
+/// Transform package appstream xml to repodata appstream fragment.
+///
+/// Current implementation only adds the `<pkgname />` tag.
+///
+/// If `filesize` is given, allocate a buffer with that size. The caller is responsible for making
+/// sure `filesize` is an acceptable size.
+///
+/// # Errors
+/// Return errors when the given xml (`reader`) cannot be parsed.
+///
+/// # Panics
+///
+/// Panic when [`std::io::Error`] is raised by writing to `out`.
 pub fn transform<R: std::io::BufRead>(
     pkgname: &str,
     reader: R,
@@ -48,7 +61,7 @@ impl super::Metan for AppstreamMetan {
         "appstream"
     }
     fn filename(&self) -> &str {
-        "appstream"
+        "appstream.xml"
     }
     fn db_count(&self) -> u32 {
         1

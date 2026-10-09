@@ -42,7 +42,7 @@ impl super::Metan for FilelistsMetan {
         "filelists"
     }
     fn filename(&self) -> &str {
-        "filelists"
+        "filelists.xml"
     }
     fn db_count(&self) -> u32 {
         1

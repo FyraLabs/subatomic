@@ -125,12 +125,11 @@ pub fn run(args: Cli) -> Result<()> {
         let fd = rt.block_on(tokio::fs::File::open(comps_path))?;
         let repo = libsubatomic::Repo { cache, comp_cfg: comp_cfg.clone(), .. };
         rt.block_on(repo.write_custom("group", "comps.xml", fd))?;
-    } else {
-        info!("writing repodata");
-        rt.block_on(cache.write_all(&comp_cfg))?;
-        if args.compact {
-            cache.compact_close()?;
-        }
+    }
+    info!("writing repodata");
+    rt.block_on(cache.write_all(&comp_cfg))?;
+    if args.compact {
+        cache.compact_close()?;
     }
 
     info!(dir = %args.output().display(), "repodata written");

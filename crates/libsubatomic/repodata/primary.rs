@@ -117,7 +117,7 @@ impl super::Metan for PrimaryMetan {
         "primary"
     }
     fn filename(&self) -> &str {
-        "primary"
+        "primary.xml"
     }
     fn db_count(&self) -> u32 {
         1
@@ -136,7 +136,7 @@ impl super::Metan for PrimaryMetan {
     ) -> Result<super::MetanComputed, super::MetanError> {
         let rpm = &pkg.metadata;
         let p = Package {
-            location: PackageLocation { href: &pkg.link.as_bytes() },
+            location: PackageLocation { href: pkg.link.as_str() },
             name: rpm.get_name()?,
             arch: rpm.get_arch()?,
             version: &Version {
@@ -182,7 +182,12 @@ impl super::Metan for PrimaryMetan {
                 suggests: &Dependencies::from(rpm.get_suggests()?),
                 supplements: &Dependencies::from(rpm.get_supplements()?),
                 enhances: &Dependencies::from(rpm.get_enhances()?),
-                files: rpm.get_file_entries()?.into_iter().map(Into::into).collect(),
+                files: rpm
+                    .get_file_entries()?
+                    .into_iter()
+                    .filter(is_primary)
+                    .map(Into::into)
+                    .collect(),
             },
             ..
         };
@@ -267,4 +272,22 @@ impl super::Metan for PrimaryMetan {
         w.write_all(b"</metadata>").await?;
         Ok(())
     }
+}
+
+pub fn is_primary(f: &rpm::FileEntry<'_>) -> bool {
+    const BIN: &[u8] = b"bin/";
+
+    let p = f.path();
+    let p = p.as_os_str().as_bytes();
+
+    p.starts_with(b"/etc/")
+        || p == b"/usr/lib/sendmail"
+        || 'b: {
+            for i in 0..p.len() - BIN.len() {
+                if &p[i..i + BIN.len()] == BIN {
+                    break 'b true;
+                }
+            }
+            false
+        }
 }

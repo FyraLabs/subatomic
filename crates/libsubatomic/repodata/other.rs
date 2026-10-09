@@ -45,7 +45,7 @@ impl super::Metan for OtherMetan {
         "other"
     }
     fn filename(&self) -> &str {
-        "other"
+        "other.xml"
     }
     fn db_count(&self) -> u32 {
         1

@@ -53,11 +53,10 @@ impl Locker {
         let ret = f(self.repolocks.read().await.get(repo).unwrap().write().await).await;
         // TODO: handle error properly
         let mut w = self.repolocks.write().await;
-        let (_ /* key */, repohdl) = w.remove_entry(repo).unwrap();
-        let repohdl = repohdl.into_inner();
-        // Compaction is deferred: the next `RepoHdl::new` will reopen the env.
-        drop(repohdl);
+        let (_, repohdl) = w.remove_entry(repo).unwrap();
         drop(w);
+        let repohdl = repohdl.into_inner();
+        repohdl.repo.cache.compact_close()?;
         Ok(Some(ret))
     }
     #[tracing::instrument(skip(self))]
