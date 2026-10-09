@@ -36,6 +36,7 @@
 #![feature(default_field_values)]
 #![feature(try_blocks)]
 #![feature(error_generic_member_access)]
+#![feature(file_buffered)]
 
 pub mod cache;
 mod err;

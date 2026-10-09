@@ -1,5 +1,5 @@
 use quick_xml::events::{BytesText, Event};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 use crate::prelude::*;
@@ -34,12 +34,13 @@ pub fn transform<R: std::io::BufRead>(
 }
 
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct AppstreamMetan {
     /// Used as the `origin=` attribute on `<components />`.
     pub repo: String,
-    db: OnceLock<Arc<super::FragDb>>,
+    db: super::MetanDb<crate::cache::FragDb> = super::MetanDb::new("app"),
 }
+
+type Msg = Option<(Vec<u8>, Vec<u8>)>;
 
 #[async_trait::async_trait]
 impl super::Metan for AppstreamMetan {
@@ -58,26 +59,34 @@ impl super::Metan for AppstreamMetan {
         env: Arc<heed::Env<heed::WithoutTls>>,
         txn: &'t mut heed::RwTxn<'db>,
     ) -> heed::Result<()> {
-        self.db.set(Arc::new(env.create_database(txn, Some("app"))?)).expect("double db_init");
+        self.db.init(env, txn)?;
         Ok(())
+    }
+
+    fn compute(
+        &self,
+        pkg: &crate::pkg::MetanInput,
+    ) -> Result<super::MetanComputed, super::MetanError> {
+        let mut reader = rpm::PackageReader::open(&pkg.path)?;
+        let frag = crate::pkg::Package::appstream_frag(&mut reader)?;
+        let msg: Msg = (!frag.is_empty()).then_some((pkg.filename.clone(), frag));
+        Ok(Box::new(msg))
     }
 
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &crate::pkg::MetanInput,
+        computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
-        let mut reader = rpm::PackageReader::open(&pkg.path)?;
-        let frag = crate::pkg::Package::appstream_frag(&mut reader)?;
-        if frag.is_empty() {
-            return Ok(());
+        let computed: &Msg = computed.downcast_ref().expect("bad cast");
+        if let Some((filename, frag)) = computed {
+            self.db.put(txn, &filename, &frag)?;
         }
-        self.db.get().expect("db uninit").put(txn, pkg.link.as_bytes(), &frag)?;
         Ok(())
     }
 
     fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()> {
-        self.db.get().expect("db uninit").delete(txn, path)?;
+        self.db.delete(txn, path)?;
         Ok(())
     }
 
@@ -112,7 +121,6 @@ impl super::Metan for AppstreamMetan {
         env: Arc<heed::Env<heed::WithoutTls>>,
         mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
-        let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;
 
         // Note: no `packages=` count on the appstream envelope — just `origin`.
@@ -127,7 +135,7 @@ impl super::Metan for AppstreamMetan {
 
         let (tx, rx) = crossbeam_channel::bounded(16);
         let env2 = Arc::clone(&env);
-        let db2 = Arc::clone(db);
+        let db2 = self.db.arc();
 
         let task = tokio::task::spawn_blocking(move || {
             let txn = env2.read_txn()?;

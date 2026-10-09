@@ -21,4 +21,8 @@ impl super::CompConfigure for Cfg {
             None => async_compression::tokio::write::XzEncoder::with_quality(inner, level),
         }
     }
+
+    fn ext(&self) -> &'static str {
+        "xz"
+    }
 }

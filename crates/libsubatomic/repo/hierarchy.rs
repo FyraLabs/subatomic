@@ -56,29 +56,26 @@ impl Hierarchize for Satm0FlatHierarchy {
         let base = self.base.clone();
         async move {
             match store {
-                StoreBackend::Local => {
-                    Box::pin(futures::stream::iter(
-                        jwalk::WalkDir::new(base.as_str())
-                            .into_iter()
-                            .filter_ok(|e| {
-                                e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                StoreBackend::Local => Box::pin(futures::stream::iter(
+                    jwalk::WalkDir::new(base.as_str())
+                        .into_iter()
+                        .filter_ok(|e| {
+                            e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                        })
+                        .map_ok(move |e| {
+                            e.path()
+                                .strip_prefix(base.as_path())
+                                .map(LinkBuf::from)
+                                .unwrap_or_else(|_| LinkBuf::from(e.path()))
+                        })
+                        .map(|r| {
+                            r.map_err(|e| object_store::Error::Generic {
+                                store: "local",
+                                source: Box::new(e),
                             })
-                            .map_ok(move |e| {
-                                e.path()
-                                    .strip_prefix(base.as_path())
-                                    .map(LinkBuf::from)
-                                    // TODO: just realized we need to check everywhere this is valid utf-8, otherwise this bugs out
-                                    .unwrap_or_else(|_| LinkBuf::from(e.path()))
-                            })
-                            .map(|r| {
-                                r.map_err(|e| object_store::Error::Generic {
-                                    store: "local",
-                                    source: Box::new(e),
-                                })
-                            }),
-                    ))
-                        as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>
-                }
+                        }),
+                ))
+                    as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>>>>,
                 StoreBackend::Remote(obj_store) => {
                     let prefix = base.to_storepath();
                     let base_len = self.base.as_str().len() + 1;
@@ -106,8 +103,9 @@ impl Hierarchize for FedoraHierarchy {
 
     fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf> {
         let f = filename.as_ref();
-        let first = *f.as_bytes().first()?;
-        Some(LinkBuf::from(format!("Packages/{}/{}", first as char, f.to_string_lossy())))
+        let s = f.to_str()?;
+        let first = *f.as_bytes().first()? as char;
+        Some(LinkBuf::from(format!("Packages/{first}/{s}")))
     }
 
     fn iter_rpms(

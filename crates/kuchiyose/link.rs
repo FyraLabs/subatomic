@@ -75,8 +75,7 @@ impl LinkBuf {
         Self(p.as_ref().to_owned())
     }
 
-    #[deprecated = "[instable] breaking changes may be introduced in the same major version"]
-    pub fn push<L: AsRef<Link>>(&mut self, path: L) {
+    pub(crate) fn push<L: AsRef<Link>>(&mut self, path: L) {
         // PERF: char is slower than bytes but if you ask me whether this matters…
         while self.0.ends_with('/') {
             self.0.pop();
@@ -86,16 +85,15 @@ impl LinkBuf {
         self.0.push_str(path.as_ref().as_str());
     }
 
-    #[deprecated = "[instable] breaking changes may be introduced in the same major version"]
-    pub fn pop(&mut self) {
-        // PERF: feels stupid
-        while self.0.ends_with('/') {
-            self.0.pop();
-        }
-        while !self.0.ends_with('/') {
-            self.0.pop();
-        }
-    }
+    // pub(crate) fn pop(&mut self) {
+    //     // PERF: feels stupid
+    //     while self.0.ends_with('/') {
+    //         self.0.pop();
+    //     }
+    //     while !self.0.ends_with('/') {
+    //         self.0.pop();
+    //     }
+    // }
 }
 
 impl Link {
@@ -138,7 +136,6 @@ impl Link {
     pub fn join<L: AsRef<Self>>(&self, path: L) -> LinkBuf {
         let path = path.as_ref();
         let mut buf = self.to_linkbuf();
-        #[expect(deprecated)]
         buf.push(path);
         buf
     }
@@ -208,12 +205,6 @@ impl AsRef<Link> for LinkBuf {
         self.as_link()
     }
 }
-impl AsRef<Link> for &str {
-    fn as_ref(&self) -> &Link {
-        Link::new(self)
-    }
-}
-
 impl AsRef<str> for Link {
     fn as_ref(&self) -> &str {
         &self.0
@@ -252,6 +243,16 @@ impl AsRef<OsStr> for Link {
 impl AsRef<OsStr> for LinkBuf {
     fn as_ref(&self) -> &OsStr {
         OsStr::new(&self.0)
+    }
+}
+impl AsRef<Link> for String {
+    fn as_ref(&self) -> &Link {
+        Link::new(&self)
+    }
+}
+impl AsRef<Link> for str {
+    fn as_ref(&self) -> &Link {
+        Link::new(self)
     }
 }
 
@@ -304,22 +305,22 @@ impl From<&Link> for LinkBuf {
 }
 impl From<&OsStr> for LinkBuf {
     fn from(s: &OsStr) -> Self {
-        Self(s.to_string_lossy().into_owned())
+        Self(s.to_str().expect("invalid utf-8").to_owned())
     }
 }
 impl From<&[u8]> for LinkBuf {
     fn from(s: &[u8]) -> Self {
-        Self(std::string::String::from_utf8_lossy(s).to_string())
+        Self(core::str::from_utf8(s).expect("invalid utf-8").to_string())
     }
 }
 impl From<&Path> for LinkBuf {
     fn from(p: &Path) -> Self {
-        Self(p.to_string_lossy().into_owned())
+        Self(p.to_str().expect("invalid utf-8").to_owned())
     }
 }
 impl From<PathBuf> for LinkBuf {
     fn from(p: PathBuf) -> Self {
-        Self(p.to_string_lossy().into_owned())
+        Self(p.to_str().expect("invalid utf-8").to_owned())
     }
 }
 impl From<&object_store::path::Path> for LinkBuf {

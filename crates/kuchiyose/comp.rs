@@ -4,6 +4,7 @@ use tokio::io::AsyncWrite;
 /// A configuration trait that supports turning into [`AsyncWrite`].
 pub trait CompConfigure {
     fn to_async_write<'a, W: AsyncWrite + 'a>(&'a self, inner: W) -> impl AsyncWrite;
+    fn ext(&self) -> &'static str;
 }
 
 macro_rules! comp_algs {
@@ -24,6 +25,12 @@ macro_rules! comp_algs {
                         $(Self::[!ident_camel! $alg](cfg) => {
                             Box::pin(cfg.to_async_write(inner)) as std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send>>
                         })*
+                    }
+                }
+
+                pub fn ext(&self) -> &'static str {
+                    match self {
+                        $(Self::[!ident_camel! $alg](cfg) => cfg.ext(),)*
                     }
                 }
             }

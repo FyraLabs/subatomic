@@ -16,6 +16,8 @@ pub enum Error {
     Metan(#[from] crate::repodata::MetanError),
     #[error("store error: {0}")]
     Store(#[from] object_store::Error),
+    #[error("cache error: {0}")]
+    Cache(#[from] crate::cache::Error),
 }
 
 pub type Res<T> = Result<T, Error>;

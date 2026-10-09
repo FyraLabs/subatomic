@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 
 use crate::prelude::*;
@@ -30,10 +30,11 @@ struct FilelistsPackage<'a> {
 }
 
 #[derive(Debug, Default)]
-#[non_exhaustive]
 pub struct FilelistsMetan {
-    db: OnceLock<Arc<super::FragDb>>,
+    db: super::MetanDb<super::FragDb> = super::MetanDb::new("fil"),
 }
+
+type Msg = (Vec<u8>, std::string::String);
 
 #[async_trait::async_trait]
 impl super::Metan for FilelistsMetan {
@@ -52,15 +53,14 @@ impl super::Metan for FilelistsMetan {
         env: Arc<heed::Env<heed::WithoutTls>>,
         txn: &'t mut heed::RwTxn<'db>,
     ) -> heed::Result<()> {
-        self.db.set(Arc::new(env.create_database(txn, Some("fil"))?)).expect("double db_init");
+        self.db.init(env, txn)?;
         Ok(())
     }
 
-    fn save<'t, 'db>(
+    fn compute(
         &self,
-        txn: &'t mut heed::RwTxn<'db>,
         pkg: &crate::pkg::MetanInput,
-    ) -> Result<(), super::MetanError> {
+    ) -> Result<super::MetanComputed, super::MetanError> {
         let rpm = &pkg.metadata;
 
         let version = crate::pkg::Version {
@@ -80,12 +80,22 @@ impl super::Metan for FilelistsMetan {
         };
 
         let xml = quick_xml::se::to_string(&frag)?;
-        self.db.get().expect("db uninit").put(txn, &pkg.link.as_bytes(), xml.as_bytes())?;
+        let msg: Msg = (pkg.filename.clone(), xml);
+        Ok(Box::new(msg))
+    }
+
+    fn save<'t, 'db>(
+        &self,
+        txn: &'t mut heed::RwTxn<'db>,
+        computed: &super::MetanComputed,
+    ) -> Result<(), super::MetanError> {
+        let computed: &Msg = computed.downcast_ref().expect("bad cast");
+        self.db.put(txn, &computed.0, computed.1.as_bytes())?;
         Ok(())
     }
 
     fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()> {
-        self.db.get().expect("db uninit").delete(txn, path)?;
+        self.db.delete(txn, path)?;
         Ok(())
     }
 
@@ -120,17 +130,16 @@ impl super::Metan for FilelistsMetan {
         env: Arc<heed::Env<heed::WithoutTls>>,
         mut w: std::pin::Pin<Box<dyn tokio::io::AsyncWrite + Send + 't>>,
     ) -> Result<(), super::MetanError> {
-        let db = self.db.get().expect("db uninit");
         let txn = env.read_txn()?;
         w.write_all(
             br#"<?xml version="1.0" encoding="UTF-8"?><filelists xmlns="http://linux.duke.edu/metadata/filelists" packages=""#,
         ).await?;
-        w.write_all(db.len(&*txn)?.to_string().as_bytes()).await?;
+        w.write_all(self.db.len(&*txn)?.to_string().as_bytes()).await?;
         w.write_all(b"\">").await?;
 
         let (tx, rx) = crossbeam_channel::bounded(16);
         let env2 = Arc::clone(&env);
-        let db2 = Arc::clone(db);
+        let db2 = self.db.arc();
 
         let task = tokio::task::spawn_blocking(move || {
             let txn = env2.read_txn()?;

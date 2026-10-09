@@ -16,4 +16,8 @@ impl super::CompConfigure for Cfg {
         let params = [async_compression::zstd::CParameter::nb_workers(self.multi)];
         async_compression::tokio::write::ZstdEncoder::with_quality_and_params(inner, level, &params)
     }
+
+    fn ext(&self) -> &'static str {
+        "zst"
+    }
 }

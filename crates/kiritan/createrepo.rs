@@ -79,7 +79,10 @@ pub fn run(args: Cli) -> Result<()> {
             }
             let f = file.expect("filename should be provided unless with --delete");
             let content = rt.block_on(tokio::fs::File::open(&f))?;
-            rt.block_on(repo.write_custom(&key, content))?;
+            let Some(filename) = f.file_name().expect("bad filename").to_str() else {
+                bail!("invalid utf-8: {}", f.display())
+            };
+            rt.block_on(repo.write_custom(&key, &filename, content))?;
             return Ok(());
         }
     };
@@ -93,11 +96,16 @@ pub fn run(args: Cli) -> Result<()> {
     });
 
     let len = add.len();
-    add.into_iter().enumerate().par_bridge().try_for_each(|(i, p)| {
+    add.into_iter().enumerate().par_bridge().for_each(|(i, p)| {
         info!(progress = format!("[{}/{len}]", i + 1), path = %p.display(), "queued");
-        tx.send((p.into(), FragRequest::parse()))?;
-        Ok::<_, color_eyre::Report>(())
-    })?;
+        let Ok(computed) = cache
+            .compute(p, libsubatomic::cache::ComputeInput::default())
+            .inspect_err(|err| tracing::error!(?err, "cannot compute frag"))
+        else {
+            return;
+        };
+        tx.send((p.into(), FragRequest::Put(computed))).expect("can't send");
+    });
     drop(tx);
     joinhdl.join().expect("can't join")?;
 
@@ -116,7 +124,7 @@ pub fn run(args: Cli) -> Result<()> {
     if let Some(comps_path) = comps {
         let fd = rt.block_on(tokio::fs::File::open(comps_path))?;
         let repo = libsubatomic::Repo { cache, comp_cfg: comp_cfg.clone(), .. };
-        rt.block_on(repo.write_custom("group", fd))?;
+        rt.block_on(repo.write_custom("group", "comps.xml", fd))?;
     } else {
         info!("writing repodata");
         cache.write_all(&comp_cfg)?;
@@ -151,16 +159,27 @@ fn process_rpms_auto(
             let Some(filename) = p.file_name() else {
                 return Ok(());
             };
+            if cache.cfg.hier.locate_relative(filename).is_none() {
+                return Ok(());
+            };
             let Some(link) = cache.cfg.hier.locate_relative(filename) else {
                 return Ok(());
             };
+            let mut input = libsubatomic::cache::ComputeInput::default();
+            input.link = Some(link);
 
-            let req = if cache.epo.get(txn, link.as_bytes())?.is_some() {
-                FragRequest::cached()
+            let req = if cache.epo.get(txn, filename.as_bytes())?.is_some() {
+                FragRequest::Cached
             } else {
-                FragRequest::parse()
+                let Ok(computed) = cache
+                    .compute(&p, input)
+                    .inspect_err(|err| tracing::error!(?err, "cannot compute frag"))
+                else {
+                    return Ok(());
+                };
+                FragRequest::Put(computed)
             };
-            tx.send((p, req))?;
+            tx.send((p, req)).expect("can't send");
             Ok(())
         },
     )?;

@@ -74,12 +74,24 @@ impl StoreBackend {
         }
     }
 
+    pub async fn rename(&self, a: &Link, b: &Link) -> Result<(), StoreErr> {
+        match self {
+            StoreBackend::Local => {
+                tokio::fs::rename(a, b).await?;
+            }
+            StoreBackend::Remote(store) => {
+                store.rename(&a.to_storepath(), &b.to_storepath()).await?;
+            }
+        }
+        Ok(())
+    }
+
     /// Delete a file at `link`.
     ///
     /// Missing files are treated as success.
     ///
     /// # Errors
-    /// Propagates `object_store` errors other than `NotFound`.
+    /// Propagates io and `object_store` errors other than `NotFound`.
     pub async fn delete(&self, link: &Link) -> Result<(), StoreErr> {
         match self {
             Self::Local => match tokio::fs::remove_file(link).await {

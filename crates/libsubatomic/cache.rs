@@ -10,13 +10,14 @@ use crate::pkg::MetanInput;
 use crate::prelude::*;
 use crate::repo::FragRequest;
 use crate::repo::hierarchy::Hierarchize;
-use crate::repodata::{Metan, MetanGeneration, MetanReady, repomd};
+use crate::repodata::{MetanGeneration, MetanReady, repomd};
 use kuchiyose::comp::{CompConfig, Mochi};
 use kuchiyose::ftmm::Ftmm;
 use kuchiyose::store::StoreBackend;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::io::AsyncWriteExt;
 
 pub(crate) type DataDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
 pub(crate) type FragDb = heed::Database<heed::types::Bytes, heed::types::Bytes>;
@@ -97,6 +98,22 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(Self { cfg, env, epo, cus, metans })
     }
 
+    #[inline]
+    fn wtxn<'a, T>(
+        &'a self,
+        wtxn: &mut heed::RwTxn<'a>,
+        f: impl Fn(&mut heed::RwTxn<'_>) -> heed::Result<T>,
+    ) -> heed::Result<T> {
+        let res = f(wtxn);
+        let Err(heed::Error::Mdb(heed::MdbError::MapFull)) = res else { return res };
+        tracing::info!("committing due to MapFull");
+        replace_with::replace_with_or_abort(wtxn, |wtxn| {
+            wtxn.commit().expect("cannot commit");
+            self.env.write_txn().expect("cannot obtain wtxn")
+        });
+        f(wtxn)
+    }
+
     #[must_use]
     pub fn metans(&self) -> &[Arc<dyn Metan>] {
         &self.metans
@@ -138,15 +155,50 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(out)
     }
 
-    /// Check whether the RPM at `abs_path` is cached, using the hierarchy to
-    /// derive its repository-relative key.
+    /// Check whether the RPM at `abs_path` is cached.
+    ///
+    /// The hierarchy is consulted to validate that the file can live in the
+    /// repo, but the cache key is always the filename.
     ///
     /// # Errors
     /// Propagates LMDB errors.
     pub fn has_rpm(&self, abs_path: &Path) -> Res<bool> {
         let Some(filename) = abs_path.file_name() else { return Ok(false) };
-        let Some(rel) = self.cfg.hier.locate_relative(filename) else { return Ok(false) };
-        self.has(rel.as_bytes())
+        if self.cfg.hier.locate_relative(filename).is_none() {
+            return Ok(false);
+        }
+        self.has(filename.as_bytes())
+    }
+
+    pub fn compute(
+        &self,
+        path: &Path,
+        input: ComputeInput,
+    ) -> Res<Vec<Box<dyn std::any::Any + Send>>> {
+        let ComputeInput { csum, link, .. } = input;
+        let filename = path.file_name().ok_or(Error::BadFileName)?;
+        let link = link
+            .or_else(|| self.cfg.hier.locate_relative(filename))
+            .ok_or(Error::HierRejectPath)?;
+        let reader = rpm::PackageReader::open(&path)?;
+        let csum = match csum {
+            Some(c) => c,
+            None => digest(self.cfg.ftmm, &path)?,
+        };
+        let filename = (&path).file_name().expect("bad filename").as_bytes().to_owned();
+        let input = MetanInput {
+            metadata: reader.metadata.clone(),
+            fmeta: std::fs::metadata(&path)?,
+            csum,
+            link,
+            filename,
+            csum_type: self.cfg.ftmm,
+            path: (&path).to_path_buf(),
+        };
+        self.metans
+            .par_iter()
+            .map(|metan| Res::Ok(metan.compute(&input)?))
+            .collect::<Res<Vec<Box<dyn std::any::Any + Send>>>>()
     }
 
     /// Consume `recv` until the channel closes, saving every package it receives.
@@ -171,26 +223,18 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let mut new: u64 = 0;
         let mut cached: u64 = 0;
 
-        while let Ok((abs_path, req)) = recv.recv() {
+        for (abs_path, req) in recv {
             let Some(filename) = abs_path.file_name() else {
-                tracing::warn!(p = %abs_path.display(), "path has no filename; skipping");
-                continue;
-            };
-            let Some(rel) = self.cfg.hier.locate_relative(filename) else {
-                tracing::warn!(p = %abs_path.display(), "hierarchy cannot locate file; skipping");
+                tracing::error!(p = %abs_path.display(), "path has no filename; skipping");
                 continue;
             };
 
-            self.epo.put(&mut wtxn, rel.as_bytes(), &epoch)?;
+            self.epo.put(&mut wtxn, filename.as_bytes(), &epoch)?;
 
             match req {
                 FragRequest::Cached => cached += 1,
-                FragRequest::Parse { csum } => {
-                    new += 1;
-                    let input = MetanInput::from_path(&abs_path, rel, csum)?;
-                    for metan in &self.metans {
-                        metan.save(&mut wtxn, &input)?;
-                    }
+                FragRequest::Put(computed_results) => {
+                    self.save_computed_result(&mut wtxn, &mut new, computed_results)?;
                 }
             }
         }
@@ -216,6 +260,23 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok((new, cached))
     }
 
+    fn save_computed_result<'a>(
+        &'a self,
+        wtxn: &mut heed::RwTxn<'a>,
+        new: &mut u64,
+        computed_results: Vec<crate::repodata::MetanComputed>,
+    ) -> Res<()> {
+        *new += 1;
+        for (metan, computed) in self.metans.iter().zip_eq(computed_results) {
+            self.wtxn(wtxn, |wtxn| match metan.save(wtxn, &computed) {
+                Ok(r) => Ok(Ok(r)),
+                Err(MetanError::Heed { source, .. }) => Err(source),
+                Err(e) => Ok(Err(e)),
+            })??;
+        }
+        Ok(())
+    }
+
     /// Delete the given packages from every metan database.
     ///
     /// Returns the subset of `pkgs` that were not present.
@@ -239,7 +300,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(not_found)
     }
 
-    /// Remove every key not present in `expected`. Returns the number removed.
+    /// Remove every key not present in `expected`. Return the number removed.
     ///
     /// # Errors
     /// Propagates LMDB errors.
@@ -258,15 +319,16 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(count)
     }
 
-    /// Store a custom datatype's `repomd` fragment.
+    /// Store a custom datatype's `repomd` fragment, and return the old instance.
     ///
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn write_custom_datatype(&self, data: &repomd::Data) -> heed::Result<()> {
+    pub fn write_custom_datatype(&self, data: &repomd::Data) -> heed::Result<Option<repomd::Data>> {
         let mut txn = self.env.write_txn()?;
+        let ret = self.cus.get(&txn, &data.r#type)?;
         self.cus.put(&mut txn, &data.r#type, data)?;
         txn.commit()?;
-        Ok(())
+        Ok(ret)
     }
 
     /// # Errors
@@ -332,12 +394,12 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
         let link = repodata_dir.join(metan.filename());
 
+        let hdl = tokio::runtime::Handle::current();
+
         // `StoreBackend::writer` is async because a remote backend must open a multipart upload.
         // For local files, this resolves immediately.
         let writer = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(self.cfg.store.writer(&link))
-                .map_err(crate::err::Error::from)
+            hdl.block_on(self.cfg.store.writer(&link)).map_err(crate::err::Error::from)
         })?;
 
         // Pipeline: metan → open-checksum → compression → checksum → store.
@@ -348,8 +410,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
             let env = Arc::clone(&self.env);
             tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current()
-                    .block_on(metan.on_generate(env, Box::pin(&mut w)))
+                hdl.block_on(metan.on_generate(env, Box::pin(&mut w)))
                     .map_err(crate::err::Error::from)
             })?;
 
@@ -358,7 +419,6 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let size = inner_mochi.size;
         let checksum = inner_mochi.ftmm.finalize();
 
-        // Build the repomd `<data>` via the metan itself.
         let generation = MetanGeneration {
             csum: repomd::Checksum { r#type: ftmm, sha: hex::encode(checksum).into() },
             osum: repomd::Checksum { r#type: ftmm, sha: hex::encode(open_checksum).into() },
@@ -381,21 +441,26 @@ impl<H: Hierarchize + Sync> Cache<H> {
     }
 
     fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
-        let repodata_dir = Path::new(self.cfg.hier.basedir()).join("repodata");
-        let path = repodata_dir.join("repomd.xml");
-        let mut fd = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path)?;
-        repomd::repomd::generate(&mut fd, data)?;
+        let repodata_dir = self.cfg.hier.basedir().join("repodata");
+        let link = repodata_dir.join("repomd.xml");
+        let hdl = tokio::runtime::Handle::current();
+        let mut async_writer = tokio::task::block_in_place(|| {
+            hdl.block_on(self.cfg.store.writer(&link)).map_err(crate::err::Error::from)
+        })?;
 
-        let pos = fd.stream_position()?;
-        fd.seek(std::io::SeekFrom::Start(0))?;
-        #[allow(clippy::cast_possible_truncation)]
-        let mut buf = Vec::with_capacity(pos as usize);
-        fd.read_to_end(&mut buf)?;
+        let mut buf = Vec::new();
+        let repomd = repomd::repomd {
+            data,
+            revision: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time underflow")
+                .as_secs(),
+            ..
+        };
+        quick_xml::se::to_utf8_io_writer(&mut buf, &repomd)?;
+        tokio::task::block_in_place(|| {
+            hdl.block_on(async_writer.write_all(&buf)).map_err(crate::err::Error::from)
+        })?;
         Ok(buf)
     }
 
@@ -430,4 +495,38 @@ impl<H: Hierarchize + Sync> Cache<H> {
         tracing::info!(dir = %env_dir.display(), "cache compacted");
         Ok(())
     }
+}
+
+// TODO: we should also make something like (nim) type CacheKey = distinct &[u8]
+// or call it Filename?
+
+fn digest(ftmm: Ftmm, path: &Path) -> std::io::Result<String> {
+    let mut reader = std::fs::File::open_buffered(path)?;
+    let mut hasher = ftmm.to_digest();
+    let mut buffer = [0; 10240];
+
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+
+    Ok(hex::encode(hasher.finalize()).into())
+}
+
+#[non_exhaustive]
+#[derive(Clone, Debug, Default)]
+pub struct ComputeInput {
+    pub csum: Option<String>,
+    pub link: Option<kuchiyose::LinkBuf>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("hierarchy reject path")]
+    HierRejectPath,
+    #[error("expect Path::file_name")]
+    BadFileName,
 }

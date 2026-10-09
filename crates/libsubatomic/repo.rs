@@ -6,28 +6,11 @@ use futures::StreamExt;
 use kuchiyose::link::LinkBuf;
 use tokio::io::{AsyncRead, AsyncWriteExt};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum FragRequest {
     Cached,
-    /// Request a new (cache-miss) package to be inserted. The checksum can be given if precomputed.
-    Parse {
-        csum: Option<String>,
-    },
-}
-
-impl FragRequest {
-    #[must_use]
-    pub const fn parse() -> Self {
-        Self::Parse { csum: None }
-    }
-    #[must_use]
-    pub fn parse_with_csum(csum: String) -> Self {
-        Self::Parse { csum: Some(csum) }
-    }
-    #[must_use]
-    pub const fn cached() -> Self {
-        Self::Cached
-    }
+    /// Request a new (cache-miss) package to be inserted.
+    Put(Vec<crate::repodata::MetanComputed>),
 }
 
 #[derive(Debug)]
@@ -58,7 +41,13 @@ impl<H: Hierarchize> Repo<H> {
         std::thread::scope(|s| {
             let handle = s.spawn(|| cache.update_frags(&rx));
             paths.par_iter().for_each(|p| {
-                _ = tx.send((p.clone(), FragRequest::parse()));
+                let Ok(computed) = cache
+                    .compute(p, crate::cache::ComputeInput::default())
+                    .inspect_err(|err| tracing::error!(?err, "cannot compute frag"))
+                else {
+                    return;
+                };
+                _ = tx.send((p.clone(), FragRequest::Put(computed)));
             });
             drop(tx);
             let (_, _) = handle.join().expect("worker thread panicked")?;
@@ -71,25 +60,21 @@ impl<H: Hierarchize> Repo<H> {
     /// # Errors
     /// Propagates cache and store errors.
     async fn add_replace(&self, paths: &[PathBuf]) -> Res<AddReplaceOutput> {
-        // FIXME: paths should be owned
-        // PERF: feels pretty inefficient
         let mut bad_filenames: Vec<PathBuf> = Vec::new();
-        let mut removed: Vec<LinkBuf> = Vec::new();
+        let mut removed: Vec<Vec<u8>> = Vec::new();
 
-        let keys = self.cache.keys()?;
+        let keys = self.cache.keys()?; // keys are filenames
         let parsed: Vec<_> = keys
             .iter()
             .filter_map(|k| {
-                let os = OsStr::from_bytes(k);
-                let filename = std::path::Path::new(os).file_name()?;
-                let p = kuchiyose::rpm::parse_filename(filename.as_bytes())?;
-                Some((LinkBuf::from(k.as_slice()), p))
+                let p = kuchiyose::rpm::parse_filename(k)?;
+                Some((k.clone(), p))
             })
             .collect();
 
         for path in paths {
             let filename = path.file_name().expect("bad filename");
-            let Some(link) = self.cache.cfg.hier.locate_relative(filename) else {
+            let Some(_link) = self.cache.cfg.hier.locate_relative(filename) else {
                 bad_filenames.push(path.clone());
                 continue;
             };
@@ -103,8 +88,8 @@ impl<H: Hierarchize> Repo<H> {
                 parsed
                     .iter()
                     .filter(|(_, k)| k.name == name && k.arch == arch)
-                    .filter(|(l, _)| *l != link)
-                    .map(|(l, _)| l.clone()),
+                    .filter(|(k, _)| k.as_slice() != filename.as_bytes())
+                    .map(|(k, _)| k.clone()),
             );
         }
 
@@ -114,7 +99,6 @@ impl<H: Hierarchize> Repo<H> {
         self.add(paths)?;
         Ok(AddReplaceOutput { bad_filenames, removed })
     }
-
     /// Trigger repository generation.
     ///
     /// # Errors
@@ -125,7 +109,6 @@ impl<H: Hierarchize> Repo<H> {
         if let Some(sig) = &self.sig {
             let asc_link = self.cache.cfg.hier.basedir().join("repodata/repomd.xml.asc");
             let async_write = self.cache.cfg.store.writer(&asc_link).await?;
-            // TODO: find async pgp?
             let mut asc_fd = tokio_util::io::SyncIoBridge::new(async_write);
             sig.sign(&repomd)?
                 .to_armored_writer(&mut asc_fd, pgp::composed::ArmorOptions::default())?;
@@ -150,7 +133,12 @@ impl<H: Hierarchize> Repo<H> {
 
         while let Some(rel) = stream.next().await {
             let rel = rel?;
-            expected_keys.insert(rel.as_bytes().to_vec());
+            if let None = try {
+                expected_keys.insert(rel.as_path().file_name()?.as_bytes().to_owned());
+            } {
+                tracing::error!(?rel, "iter_rpms gave bad filename");
+                continue;
+            }
 
             if incremental && self.cache.has(rel.as_bytes())? {
                 ret.cached += 1;
@@ -160,8 +148,6 @@ impl<H: Hierarchize> Repo<H> {
         }
 
         if !paths_to_add.is_empty() {
-            // FIXME: we don't really need replace here, we will prune() anyway
-            // FIXME: we don't modify stuff in store?
             self.add_replace(&paths_to_add).await?;
         }
 
@@ -175,23 +161,23 @@ impl<H: Hierarchize> Repo<H> {
         Ok(ret)
     }
 
-    /// Delete a list of packages from the cache and from the store.
-    ///
-    /// Returns the subset of `links` that were not in the cache (they are left alone
-    /// in the store too).
+    /// Delete a list of packages by filename.
     ///
     /// # Errors
     /// Propagates cache and store errors.
-    pub async fn del(&self, links: &[LinkBuf]) -> Res<Vec<LinkBuf>> {
-        let keys: Vec<&[u8]> = links.iter().map(LinkBuf::as_bytes).collect();
+    pub async fn del(&self, filenames: &[Vec<u8>]) -> Res<Vec<Vec<u8>>> {
+        let keys: Vec<&[u8]> = filenames.iter().map(Vec::as_slice).collect();
         let not_found = self.cache.delete_pkgs(&keys)?;
-        let not_found: Vec<LinkBuf> =
-            not_found.iter().map(|k| LinkBuf::from(OsStr::from_bytes(k))).collect();
+        let not_found: Vec<Vec<u8>> = not_found.into_iter().map(<[u8]>::to_vec).collect();
 
-        for link in links {
-            if not_found.contains(link) {
+        for filename in filenames {
+            if not_found.contains(filename) {
                 continue;
             }
+            let Some(link) = self.cache.cfg.hier.locate_relative(OsStr::from_bytes(filename))
+            else {
+                continue;
+            };
             self.cache.cfg.store.delete(link.as_link()).await?;
         }
         Ok(not_found)
@@ -210,6 +196,7 @@ impl<H: Hierarchize> Repo<H> {
     pub async fn write_custom<R>(
         &self,
         dt: &str,
+        filename_suffix: &str,
         mut reader: R,
     ) -> Res<crate::repodata::repomd::Data>
     where
@@ -230,10 +217,10 @@ impl<H: Hierarchize> Repo<H> {
         let checksum = inner_mochi.ftmm.finalize();
 
         let sha_hex = hex::encode(&checksum).into();
-        let href = LinkBuf::from(format!(
-            "{}/repodata/{sha_hex}-{dt}.zst",
-            self.cache.cfg.hier.basedir().as_str().trim_end_matches('/')
-        ));
+        let href = format!("repodata/{sha_hex}-{filename_suffix}.{}", self.comp_cfg.ext());
+        let href = LinkBuf::from(href);
+        let link = self.cache.cfg.hier.basedir().join(&href);
+        self.cache.cfg.store.rename(&tmp_link, &link).await?;
         let data = crate::repodata::repomd::Data {
             r#type: dt.into(),
             checksum: crate::repodata::repomd::Checksum { r#type: ftmm, sha: sha_hex },
@@ -251,7 +238,10 @@ impl<H: Hierarchize> Repo<H> {
             size,
             open_size,
         };
-        self.cache.write_custom_datatype(&data)?;
+        if let Some(old) = self.cache.write_custom_datatype(&data)? {
+            let href = self.cache.cfg.hier.basedir().join(old.location.href);
+            self.cache.cfg.store.delete(&href).await?;
+        }
         Ok(data)
     }
 
@@ -279,5 +269,5 @@ pub struct RegenerateOutput {
 #[derive(Clone, Debug)]
 pub struct AddReplaceOutput {
     pub bad_filenames: Vec<PathBuf>,
-    pub removed: Vec<LinkBuf>,
+    pub removed: Vec<Vec<u8>>,
 }

@@ -2,9 +2,9 @@
 //! [`Package`] struct.
 
 use sha2::Digest;
-use std::io::BufReader;
 
 use crate::prelude::*;
+pub(crate) use crate::repodata::MetanInput;
 
 pub type ParsePathOutput<'a> = kuchiyose::rpm::ParsePathOutput<'a>;
 
@@ -81,135 +81,6 @@ impl Package {
             f.finish()?;
         }
         Ok(appstream_frag)
-    }
-
-    /// Parse a file
-    pub fn parse(
-        mut f: std::fs::File,
-        checksum: String,
-    ) -> Result<(Self, rpm::PackageReader), rpm::Error> {
-        let meta = f.metadata()?;
-        let btime = epoch!(meta.created()?);
-        let header_range = Self::get_header_byte_range(&mut f)?;
-        f.seek(std::io::SeekFrom::Start(0))?;
-        let rpm = rpm::PackageReader::parse(BufReader::new(f))?;
-        let m = &rpm.metadata;
-
-        Ok((
-            Self {
-                name: m.get_name()?.into(),
-                arch: m.get_arch()?.into(),
-                version: Version {
-                    epoch: m.get_epoch().unwrap_or(0).into(),
-                    ver: m.get_version()?.into(),
-                    rel: m.get_release()?.into(),
-                },
-                checksum,
-                summary: m.get_summary().unwrap_or_default().into(),
-                description: m.get_description().unwrap_or_default().into(),
-                packager: m.get_packager().ok().map(Into::into),
-                url: m.get_url().ok().map(Into::into),
-                time: Time { file: btime, build: m.get_build_time()? },
-                size: Size {
-                    package: meta.size(),
-                    installed: m.get_installed_size()?,
-                    archive: m
-                        .header
-                        .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                        .or_else(|_e| {
-                            m.header
-                                .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                                .map(u64::from)
-                        })
-                        .ok(),
-                },
-                format: Format {
-                    license: m.get_license().unwrap_or_default().into(),
-                    vendor: m.get_vendor().ok().map(Into::into),
-                    group: m.get_group().ok().map(Into::into),
-                    buildhost: m.get_build_host().ok().map(Into::into),
-                    sourcerpm: m.get_source_rpm().ok().map(Into::into),
-                    header_range,
-                    requires: Dependencies::from(m.get_requires()?),
-                    provides: Dependencies::from(m.get_provides()?),
-                    conflicts: Dependencies::from(m.get_conflicts()?),
-                    obsoletes: Dependencies::from(m.get_obsoletes()?),
-                    recommends: Dependencies::from(m.get_recommends()?),
-                    suggests: Dependencies::from(m.get_suggests()?),
-                    supplements: Dependencies::from(m.get_supplements()?),
-                    enhances: Dependencies::from(m.get_enhances()?),
-                    files: m.get_file_entries()?.into_iter().map(Into::into).collect(),
-                },
-                changelog: m.get_changelog_entries()?.into_iter().map(Into::into).collect(),
-                appstream_frag: Vec::new(),
-            },
-            rpm,
-        ))
-    }
-
-    /// Open an `.rpm` package.
-    ///
-    /// # Errors
-    /// IO errors and RPM errors may be returned.
-    pub fn open(path: &Path) -> Result<(Self, rpm::PackageReader), rpm::Error> {
-        let rpm = rpm::PackageReader::open(path)?;
-        let m = &rpm.metadata;
-        let mut f = std::fs::File::open(path)?;
-        let reader = BufReader::new(&mut f);
-        let checksum = sha256_digest(reader)?;
-        let meta = f.metadata()?;
-        let btime = epoch!(meta.created()?);
-
-        Ok((
-            Self {
-                name: m.get_name()?.into(),
-                arch: m.get_arch()?.into(),
-                version: Version {
-                    epoch: m.get_epoch().unwrap_or(0).into(),
-                    ver: m.get_version()?.into(),
-                    rel: m.get_release()?.into(),
-                },
-                checksum,
-                summary: m.get_summary().unwrap_or_default().into(),
-                description: m.get_description().unwrap_or_default().into(),
-                packager: m.get_packager().ok().map(Into::into),
-                url: m.get_url().ok().map(Into::into),
-                time: Time { file: btime, build: m.get_build_time()? },
-                size: Size {
-                    package: meta.size(),
-                    installed: m.get_installed_size()?,
-                    archive: m
-                        .header
-                        .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                        .or_else(|_e| {
-                            m.header
-                                .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                                .map(u64::from)
-                        })
-                        .ok(),
-                },
-                format: Format {
-                    license: m.get_license().unwrap_or_default().into(),
-                    vendor: m.get_vendor().ok().map(Into::into),
-                    group: m.get_group().ok().map(Into::into),
-                    buildhost: m.get_build_host().ok().map(Into::into),
-                    sourcerpm: m.get_source_rpm().ok().map(Into::into),
-                    header_range: Self::get_header_byte_range(&mut f)?,
-                    requires: Dependencies::from(m.get_requires()?),
-                    provides: Dependencies::from(m.get_provides()?),
-                    conflicts: Dependencies::from(m.get_conflicts()?),
-                    obsoletes: Dependencies::from(m.get_obsoletes()?),
-                    recommends: Dependencies::from(m.get_recommends()?),
-                    suggests: Dependencies::from(m.get_suggests()?),
-                    supplements: Dependencies::from(m.get_supplements()?),
-                    enhances: Dependencies::from(m.get_enhances()?),
-                    files: m.get_file_entries()?.into_iter().map(Into::into).collect(),
-                },
-                changelog: m.get_changelog_entries()?.into_iter().map(Into::into).collect(),
-                appstream_frag: Vec::new(),
-            },
-            rpm,
-        ))
     }
 
     // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
@@ -451,6 +322,7 @@ impl From<rpm::ChangelogEntry> for Changelog {
     }
 }
 
+#[deprecated]
 pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     let mut hasher = sha2::Sha256::new();
     let mut buffer = [0; 10240];
@@ -464,52 +336,4 @@ pub fn sha256_digest<R: Read>(mut reader: R) -> std::io::Result<String> {
     }
 
     Ok(hex::encode(hasher.finalize()).into())
-}
-
-/// RPM Metadata to be fed into [`crate::repodata::Metan`].
-pub struct MetanInput {
-    pub metadata: rpm::PackageMetadata,
-    pub fmeta: std::fs::Metadata,
-    pub csum: String,
-    /// Repository-relative path, used both as the LMDB key and as the `<location href>`.
-    pub link: kuchiyose::link::LinkBuf,
-    pub csum_type: kuchiyose::ftmm::Ftmm,
-    /// Absolute path to the RPM on disk.
-    pub path: std::path::PathBuf,
-}
-
-impl MetanInput {
-    /// Reopen the rpm archive for streaming reads (e.g. appstream).
-    ///
-    /// # Errors
-    /// Propagates IO and rpm parse errors.
-    pub fn reader(&self) -> Result<rpm::PackageReader, rpm::Error> {
-        rpm::PackageReader::open(&self.path)
-    }
-
-    /// Build a [`MetanInput`] from an absolute path and the repository-relative link.
-    ///
-    /// If `csum` is `None`, the file is hashed here. Otherwise the caller's value is trusted.
-    ///
-    /// # Errors
-    /// Propagates IO and RPM parse errors.
-    pub fn from_path(
-        abs_path: &Path,
-        link: kuchiyose::link::LinkBuf,
-        csum: Option<String>,
-    ) -> Result<Self, rpm::Error> {
-        let reader = rpm::PackageReader::open(abs_path)?;
-        let csum = match csum {
-            Some(c) => c,
-            None => sha256_digest(std::io::BufReader::new(std::fs::File::open(abs_path)?))?,
-        };
-        Ok(Self {
-            metadata: reader.metadata.clone(),
-            fmeta: std::fs::metadata(abs_path)?,
-            csum,
-            link,
-            csum_type: kuchiyose::ftmm::Ftmm::Sha256,
-            path: abs_path.to_path_buf(),
-        })
-    }
 }

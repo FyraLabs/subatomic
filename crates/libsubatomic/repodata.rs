@@ -14,6 +14,8 @@ pub mod other;
 pub mod primary;
 pub mod repomd;
 
+use crate::prelude::*;
+
 use crate::cache::FragDb;
 
 pub mod metan_prelude {
@@ -27,6 +29,8 @@ pub mod metan_prelude {
     /// The list of metans passed to [`crate::cache::Cache::new`].
     pub type Metans = Vec<std::sync::Arc<dyn Metan>>;
 }
+
+pub type MetanComputed = Box<dyn std::any::Any + Send>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetanError {
@@ -105,14 +109,23 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
         txn: &'t mut heed::RwTxn<'db>,
     ) -> heed::Result<()>;
 
-    /// Serialize one package's fragment and store it under `pkg.path`.
+    /// Compute the fragment. The output will be sent to [`Self::save()`].
+    fn compute(&self, pkg: &crate::pkg::MetanInput) -> Result<MetanComputed, MetanError>;
+
+    /// Save the computed input to database.
+    ///
+    /// Implementations must be _idempotent_: calling it once is no different from calling it
+    /// several times successively (there are no side effects).
     fn save<'t, 'db>(
         &self,
         txn: &'t mut heed::RwTxn<'db>,
-        pkg: &crate::pkg::MetanInput,
+        computed: &MetanComputed,
     ) -> Result<(), MetanError>;
 
     /// Remove the fragment keyed by `path`.
+    ///
+    /// Implementations must be _idempotent_: calling it once is no different from calling it
+    /// several times successively (there are no side effects).
     fn del<'t, 'db>(&self, txn: &'t mut heed::RwTxn<'db>, path: &[u8]) -> heed::Result<()>;
 
     /// Stream the full XML document to `w`.
@@ -138,4 +151,65 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
         repomd: &repomd::repomd,
     ) -> std::io::Result<()>;
+}
+
+/// RPM Metadata to be fed into [`crate::repodata::Metan`].
+pub struct MetanInput {
+    pub metadata: rpm::PackageMetadata,
+    pub fmeta: std::fs::Metadata,
+    pub csum: String,
+    /// Repository-relative path, used as the `<location href>` in `primary.xml`.
+    pub link: kuchiyose::link::LinkBuf,
+    /// The RPM filename (last path component), used as the cache key in every
+    /// per-metan database and in the epoch database.
+    pub filename: Vec<u8>,
+    pub csum_type: kuchiyose::ftmm::Ftmm,
+    /// Absolute path to the RPM on disk.
+    pub path: std::path::PathBuf,
+}
+impl MetanInput {
+    /// Reopen the rpm archive for streaming reads (e.g. appstream).
+    ///
+    /// # Errors
+    /// Propagates IO and rpm parse errors.
+    pub fn reader(&self) -> Result<rpm::PackageReader, rpm::Error> {
+        rpm::PackageReader::open(&self.path)
+    }
+}
+
+/// Helper for accessing databases used in [`Metan`] modules.
+#[derive(Debug)]
+pub(crate) struct MetanDb<T> {
+    id: std::borrow::Cow<'static, str>,
+    db: std::sync::OnceLock<std::sync::Arc<T>>,
+}
+// impl<K, V> Default for MetanDb<heed::Database<K, V>> {
+//     fn default() -> Self {
+//         Self { id: String::new(), db: std::sync::OnceLock::new() }
+//     }
+// }
+impl<K: 'static, V: 'static> MetanDb<heed::Database<K, V>> {
+    const fn new(id: &'static str) -> Self {
+        Self { id: std::borrow::Cow::Borrowed(id), db: std::sync::OnceLock::new() }
+    }
+    fn init(
+        &self,
+        env: impl AsRef<heed::Env<heed::WithoutTls>>,
+        txn: &mut heed::RwTxn<'_>,
+    ) -> heed::Result<()> {
+        self.db
+            .set(std::sync::Arc::new(env.as_ref().create_database(txn, Some(&self.id))?))
+            .expect("double db_init");
+        Ok(())
+    }
+    fn arc(&self) -> std::sync::Arc<heed::Database<K, V>> {
+        std::sync::Arc::clone(self.db.get().expect("db uninit"))
+    }
+}
+impl<K: 'static, V: 'static> std::ops::Deref for MetanDb<heed::Database<K, V>> {
+    type Target = heed::Database<K, V>;
+
+    fn deref(&self) -> &Self::Target {
+        self.db.get().expect("db uninit")
+    }
 }
