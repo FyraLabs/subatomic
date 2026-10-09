@@ -99,6 +99,7 @@ impl<H: Hierarchize> Repo<H> {
         self.add(paths)?;
         Ok(AddReplaceOutput { bad_filenames, removed })
     }
+
     /// Trigger repository generation.
     ///
     /// # Errors

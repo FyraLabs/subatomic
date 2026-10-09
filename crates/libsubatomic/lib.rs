@@ -40,7 +40,7 @@
 
 pub mod cache;
 mod err;
-pub mod pkg;
+pub(crate) mod pkg;
 pub mod prelude;
 pub mod repo;
 mod repodata;

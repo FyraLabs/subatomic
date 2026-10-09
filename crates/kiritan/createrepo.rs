@@ -38,11 +38,6 @@ pub fn run(args: Cli) -> Result<()> {
         v
     };
 
-    let comp_cfg = CompConfig::Zstd(kuchiyose::comp::zstd::Cfg {
-        level: args.zstd_level,
-        multi: args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32),
-    });
-
     let cfg = CacheConfig {
         repo: args.repo_name.clone().into(),
         cache_dir: args.cache.clone(),
@@ -52,6 +47,11 @@ pub fn run(args: Cli) -> Result<()> {
         ftmm: Ftmm::Sha256,
         ..
     };
+
+    let comp_cfg = CompConfig::Zstd(kuchiyose::comp::zstd::Cfg {
+        level: args.zstd_level,
+        multi: args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32),
+    });
 
     if let CreaterepoMode::Auto { no_cache: true } = args.mode
         && args.cache.exists()
@@ -144,12 +144,16 @@ fn process_rpms_auto(
 ) -> Result<()> {
     let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
     let cache2 = Arc::clone(&cache);
+
     let joinhdl = std::thread::spawn(move || {
         cache2.update_frags(&rx).inspect_err(|e| tracing::error!(?e, "update_frags failed"))
     });
 
     jwalk::WalkDir::new(&args.input).into_iter().par_bridge().try_for_each_init(
-        || cache.env.read_txn().expect("cannot create rtxn"),
+        || {
+            tracing::debug!("creating rtxn");
+            cache.env.read_txn().expect("cannot create rtxn")
+        },
         |txn, fd| -> Result<()> {
             let p = fd?.path();
             if !p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")) {
@@ -157,9 +161,6 @@ fn process_rpms_auto(
             }
 
             let Some(filename) = p.file_name() else {
-                return Ok(());
-            };
-            if cache.cfg.hier.locate_relative(filename).is_none() {
                 return Ok(());
             };
             let Some(link) = cache.cfg.hier.locate_relative(filename) else {

@@ -1,10 +1,7 @@
 #![allow(clippy::missing_errors_doc)]
-use std::os::unix::ffi::OsStrExt;
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use crate::db::{Key, Repo as DbRepo};
 use crate::error::{ApiError, Result};
+use crate::validate::{md_filename, repo_name, rpm_filename};
 use crate::{DbState, LockerState};
 use axum::Json;
 use axum::extract::{Multipart, Path, State};
@@ -15,6 +12,9 @@ use libsubatomic::metan_prelude::*;
 use libsubatomic::prelude::Itertools;
 use libsubatomic::repo::{FragRequest, hierarchy::Hierarchize};
 use rayon::prelude::*;
+use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tokio_util::io::StreamReader;
@@ -24,6 +24,7 @@ pub async fn list_repos(State(pool): DbState) -> Result<Json<Vec<DbRepo>>> {
 }
 
 pub async fn create_repo(State(pool): DbState, Path(name): Path<String>) -> Result<Json<DbRepo>> {
+    repo_name(&name)?;
     Ok(Json(
         sqlx::query_as!(DbRepo, "INSERT INTO repos (name) VALUES ($1) RETURNING *", &name)
             .fetch_one(&*pool)
@@ -36,11 +37,10 @@ pub async fn sign_headers(
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Response> {
+    repo_name(&repo)?;
     let sig =
         locker.read(&repo, async |hdl| hdl.repo.sig.clone()).await?.ok_or(ApiError::NotFound)?;
-    let Some(mgr) = sig.as_ref() else {
-        return Ok(StatusCode::NO_CONTENT.into_response());
-    };
+    let Some(mgr) = sig.as_ref() else { return Ok(StatusCode::NO_CONTENT.into_response()) };
     let mut resp = rust_multipart_rfc7578_2::client::multipart::Form::default();
 
     while let Some(field) =
@@ -69,6 +69,7 @@ pub async fn upload_pkgs(
     Path(repo): Path<String>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
     let r = locker.read(&repo, async |hdl| {
         let cfg = &hdl.repo.cache.cfg;
         (cfg.cache_dir.clone(), hdl.repo.cache.keys(), cfg.hier.clone(), Arc::clone(&cfg.store))
@@ -284,6 +285,7 @@ pub async fn delete_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     Ok(if locker.del(&name).await? { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
 
@@ -324,6 +326,7 @@ pub async fn del_comps(State(locker): LockerState, Path(repo): Path<String>) -> 
 }
 
 pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Result<String> {
+    repo_name(&repo)?;
     locker
         .read(&repo, async |hdl| {
             let Some(mgr) = &hdl.repo.sig else {
@@ -339,12 +342,14 @@ pub async fn get_key(State(locker): LockerState, Path(repo): Path<String>) -> Re
 pub struct SetKeyReq {
     id: String,
 }
+
 pub async fn set_key(
     State(db): DbState,
     State(locker): LockerState,
     Path(repo): Path<String>,
     Json(SetKeyReq { id }): Json<SetKeyReq>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
     let q = sqlx::query_as!(Key, "SELECT * FROM keys WHERE id = $1", id);
     let Some(key) = q.fetch_optional(&*db).await? else {
         return Ok(StatusCode::NOT_FOUND);
@@ -371,6 +376,7 @@ pub async fn del_key(
     State(locker): LockerState,
     Path(repo): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
     let w = locker.write(&repo, async |mut hdl| try {
         let q = sqlx::query!("UPDATE repos SET key_id = NULL WHERE name = $1", &repo);
         let ra = q.execute(&*db).await?.rows_affected();
@@ -390,6 +396,7 @@ pub async fn refresh_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(true).await).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
@@ -398,6 +405,7 @@ pub async fn rebuild_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
 ) -> Result<StatusCode> {
+    repo_name(&name)?;
     let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false).await).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
@@ -406,6 +414,7 @@ pub async fn list_rpms(
     State(locker): LockerState,
     Path(repo): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
     let Some(keys) = locker
         .read(&repo, async |repohdl| repohdl.repo.cache.keys())
         .await?
@@ -425,11 +434,17 @@ pub async fn list_rpms(
 pub struct DelRpmsReq {
     rpms: Vec<String>,
 }
+
 pub async fn del_rpms(
     State(locker): LockerState,
     Path(repo): Path<String>,
     Json(DelRpmsReq { rpms }): Json<DelRpmsReq>,
 ) -> Result<Json<serde_json::Value>> {
+    repo_name(&repo)?;
+    for rpm in &rpms {
+        rpm_filename(rpm)?;
+    }
+
     tracing::info!(?rpms, "deleting rpms");
     let rpms_bytes: Vec<Vec<u8>> = rpms.iter().map(|s| s.as_bytes().to_vec()).collect();
     let w = locker.write(&repo, async move |repohdl| {
@@ -450,18 +465,20 @@ pub async fn upl_md(
     Path((repo, md)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
+    repo_name(&md)?;
     let field = (multipart.next_field().await)
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::BadRequest("expect multipart (file upload)".to_owned()))?;
-    let filename = field
-        .file_name()
-        .ok_or_else(|| ApiError::BadRequest("expected filename".into()))?
-        .to_owned();
+    let filename: String =
+        field.file_name().ok_or_else(|| ApiError::BadRequest("expected filename".into()))?.into();
+    md_filename(&filename)?;
     let content = (field.bytes().await)
         .map_err(|e| ApiError::BadRequest(format!("cannot get file bytes: {e}")))?;
 
     let w = locker.write(&repo, async move |hdl| {
-        hdl.repo.write_custom(&md, &filename, &content[..]).await?;
+        hdl.repo.write_custom(&md, &filename, &*content).await?;
+        // TODO: only generate repomd
         hdl.repo.generate().await?;
         Ok::<_, libsubatomic::Error>(())
     });
@@ -476,6 +493,8 @@ pub async fn del_md(
     State(locker): LockerState,
     Path((repo, md)): Path<(String, String)>,
 ) -> Result<StatusCode> {
+    repo_name(&repo)?;
+    repo_name(&md)?;
     let w = locker.write(&repo, async move |hdl| {
         hdl.repo.del_custom(&md).await?;
         hdl.repo.generate().await?;
@@ -490,15 +509,16 @@ pub async fn del_md(
 
 #[cfg(test)]
 mod test {
-    use http_body_util::BodyExt;
-    use std::sync::Arc;
-    use tower::util::ServiceExt;
-
+    use crate::api::repos::StatusCode;
     use axum::extract::{Json, Path};
     use axum::{body::Body, http::Request};
+    use http_body_util::BodyExt;
+    use libsubatomic::pgp::composed::Deserializable;
     use rust_multipart_rfc7578_2::client::multipart::{
         Body as MultipartBody, Form as MultipartForm,
     };
+    use std::sync::Arc;
+    use tower::util::ServiceExt;
 
     type Pool = sqlx::Pool<sqlx::Postgres>;
 
@@ -507,6 +527,16 @@ mod test {
     }
 
     const AUTH: &str = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoyNzg1NTc4MDI2fQ.1t5hFfRtAcBCa68tuk4iJ9NOwZ09FttVzqmXo06oiVU";
+    const KEY1_PRIV_ARMOR: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUkEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0OrrwCb9NEYCgt/
+X+732x931pW/h8IirjscbwJ5CQcG44Z1eA6xzTFSUE0gRmlzc2lvbiA8bnVjbGVh
+cmZpc3Npb24tYnVpbGRzeXNAZXhhbXBsZS5jb20+woIEExsIAC4FAmqe7CQWIQRc
+lFlXZHT+Kt+TSSkJBsMmjObbWQIbAwIeAQELARUBFgEnAhkBAAoJEAkGwyaM5ttZ
+yZ6lF65yoaCYmmR8GwlPLYYHGiw1Y1UmANRDe2Z7s+uVWTJZLwyAQab7f1VtbAiT
+qg38sG21+aKNUiFFHynSF64O
+=lkCs
+-----END PGP PRIVATE KEY BLOCK-----";
 
     fn cfg() -> (Arc<crate::config::Config>, impl std::any::Any) {
         let storage_dir = tempfile::tempdir().expect("storage_dir");
@@ -623,6 +653,14 @@ mod test {
         assert_eq!(rpms.len(), 1);
         assert_eq!(rpms.first().unwrap().as_str().unwrap(), "terra-release-44-5.noarch.rpm");
 
+        let asc_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml.asc");
+        let content = std::fs::read_to_string(&asc_path).unwrap();
+        let mgr = libsubatomic::sig::Mgr::from_armor(KEY1_PRIV_ARMOR).unwrap();
+        let sig = libsubatomic::pgp::composed::DetachedSignature::from_string(&content);
+        let repomd = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
+        let repomd = std::fs::read(repomd).expect("repomd.xml");
+        sig.expect("bad sig").0.verify(&mgr.public(), &repomd).expect("bad sig");
+
         let rpms = vec!["terra-release-44-5.noarch.rpm".into()];
         let ret =
             super::del_rpms(locker, Path("rpmfission".into()), Json(super::DelRpmsReq { rpms }));
@@ -631,7 +669,78 @@ mod test {
         assert!(!new.exists());
         assert!(ret.get("not_found").unwrap().as_array().unwrap().is_empty());
     }
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn upload_pkgs_rejects_path_traversal(pool: Pool) {
+        let states = app(pool);
+        let States { app, cfg, .. } = states;
 
+        let outside = cfg.storage_dir.join("escape-1-1.x86_64.rpm");
+        let absolute = "/tmp/pwn-1-1.x86_64.rpm";
+
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "../../escape-1-1.x86_64.rpm",
+            &b"not a real rpm"[..],
+            Some("../../escape-1-1.x86_64.rpm".into()),
+            None,
+            vec![],
+        );
+
+        let req = Request::post("/v1/repos/rpmfission")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(!outside.exists());
+
+        assert!(!std::path::Path::new(absolute).exists());
+        let mut form = MultipartForm::default();
+        form.add_reader_2(
+            "pwn-1-1.x86_64.rpm",
+            &b"not a real rpm"[..],
+            Some(absolute.into()),
+            None,
+            vec![],
+        );
+
+        let req = Request::post("/v1/repos/rpmfission")
+            .header("Authorization", AUTH)
+            .header(axum::http::header::CONTENT_TYPE, form.content_type().as_str())
+            .body(Body::from_stream(MultipartBody::from(form)))
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(!std::path::Path::new(absolute).exists());
+
+        assert!(cfg.storage_dir.join("rpmfission").exists());
+    }
+    #[sqlx::test(fixtures("keys", "repos"))]
+    async fn del_rpms_rejects_path_traversal(pool: Pool) {
+        let states = app(pool);
+        let States { locker, cfg, .. } = states;
+
+        let outside = cfg.storage_dir.join("escape.rpm");
+        std::fs::write(&outside, b"must not be deleted").unwrap();
+
+        for rpm in ["../escape.rpm", "../../escape.rpm", "/tmp/pwn.rpm", "a/../escape.rpm"] {
+            let rpms = vec![rpm.to_string()];
+
+            let result = super::del_rpms(
+                locker.clone(),
+                Path("rpmfission".into()),
+                Json(super::DelRpmsReq { rpms }),
+            )
+            .await;
+
+            assert!(result.is_err(), "path should be rejected: {rpm}");
+        }
+
+        assert!(outside.exists());
+    }
     #[sqlx::test(fixtures("keys", "repos"))]
     async fn sign_headers(pool: Pool) {
         let states = app(pool);
@@ -656,23 +765,14 @@ mod test {
             .body(Body::from_stream(MultipartBody::from(form)))
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
+        let content_type =
+            resp.headers().get(axum::http::header::CONTENT_TYPE).unwrap().to_str().unwrap();
+        assert!(content_type.starts_with("multipart/form-data; boundary="));
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let i = body.windows(4).position(|bs| bs == b"\r\n\r\n").unwrap() + 4;
         let j = body.windows(4).rposition(|bs| bs == b"\r\n--").unwrap();
         let sig = body.slice(i..j);
-        let mgr = libsubatomic::sig::Mgr::from_armor(
-            "-----BEGIN PGP PRIVATE KEY BLOCK-----
-
-xUkEap7sJBswZX6KXHpfqETJO4rY+QtWtpdN0LDn5xThopaO+0OrrwCb9NEYCgt/
-X+732x931pW/h8IirjscbwJ5CQcG44Z1eA6xzTFSUE0gRmlzc2lvbiA8bnVjbGVh
-cmZpc3Npb24tYnVpbGRzeXNAZXhhbXBsZS5jb20+woIEExsIAC4FAmqe7CQWIQRc
-lFlXZHT+Kt+TSSkJBsMmjObbWQIbAwIeAQELARUBFgEnAhkBAAoJEAkGwyaM5ttZ
-yZ6lF65yoaCYmmR8GwlPLYYHGiw1Y1UmANRDe2Z7s+uVWTJZLwyAQab7f1VtbAiT
-qg38sG21+aKNUiFFHynSF64O
-=lkCs
------END PGP PRIVATE KEY BLOCK-----",
-        )
-        .unwrap();
+        let mgr = libsubatomic::sig::Mgr::from_armor(KEY1_PRIV_ARMOR).unwrap();
         rpmmeta.signature =
             libsubatomic::rpm::SignatureHeaderBuilder::from_existing(&rpmmeta.signature)
                 .unwrap()

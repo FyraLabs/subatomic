@@ -101,7 +101,7 @@ struct PackageChecksum<'a> {
 #[derive(Clone, Debug, Serialize)]
 struct PackageLocation<'a> {
     #[serde(rename = "@href")]
-    pub href: &'a [u8],
+    pub href: &'a str,
 }
 
 #[derive(Debug, Default)]
@@ -174,7 +174,7 @@ impl super::Metan for PrimaryMetan {
                 buildhost: rpm.get_build_host().ok().map(Into::into),
                 sourcerpm: rpm.get_source_rpm().ok().map(Into::into),
                 // header_range: Self::get_header_byte_range(&mut f)?,
-                requires: &Dependencies::from(rpm.get_requires()?),
+                requires: &Dependencies::from_requires(rpm.get_requires()?),
                 provides: &Dependencies::from(rpm.get_provides()?),
                 conflicts: &Dependencies::from(rpm.get_conflicts()?),
                 obsoletes: &Dependencies::from(rpm.get_obsoletes()?),

@@ -8,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod repohdl;
+pub mod validate;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
