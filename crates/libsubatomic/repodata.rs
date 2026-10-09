@@ -117,11 +117,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     ///
     /// Implementations must be _idempotent_: calling it once is no different from calling it
     /// several times successively (there are no side effects).
-    fn save(
-        &self,
-        txn: &mut heed::RwTxn<'_>,
-        computed: &MetanComputed,
-    ) -> Result<(), MetanError>;
+    fn save(&self, txn: &mut heed::RwTxn<'_>, computed: &MetanComputed) -> Result<(), MetanError>;
 
     /// Remove the fragment keyed by `path`.
     ///

@@ -64,7 +64,8 @@ impl Hierarchize for Satm0FlatHierarchy {
                         })
                         .map_ok(move |e| {
                             e.path()
-                                .strip_prefix(base.as_path()).map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
+                                .strip_prefix(base.as_path())
+                                .map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
                         })
                         .map(|r| {
                             r.map_err(|e| object_store::Error::Generic {
@@ -113,28 +114,25 @@ impl Hierarchize for FedoraHierarchy {
         let base = self.base.join("Packages");
         async move {
             match store {
-                StoreBackend::Local => {
-                    Box::pin(futures::stream::iter(
-                        jwalk::WalkDir::new(base.as_str())
-                            .into_iter()
-                            .filter_ok(|e| {
-                                e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                StoreBackend::Local => Box::pin(futures::stream::iter(
+                    jwalk::WalkDir::new(base.as_str())
+                        .into_iter()
+                        .filter_ok(|e| {
+                            e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("rpm"))
+                        })
+                        .map_ok(move |e| {
+                            e.path()
+                                .strip_prefix(base.as_path())
+                                .map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
+                        })
+                        .map(|r| {
+                            r.map_err(|e| object_store::Error::Generic {
+                                store: "local",
+                                source: Box::new(e),
                             })
-                            .map_ok(move |e| {
-                                e.path()
-                                    .strip_prefix(base.as_path()).map_or_else(|_| LinkBuf::from(e.path()), LinkBuf::from)
-                            })
-                            .map(|r| {
-                                r.map_err(|e| object_store::Error::Generic {
-                                    store: "local",
-                                    source: Box::new(e),
-                                })
-                            }),
-                    ))
-                        as std::pin::Pin<
-                            Box<dyn Stream<Item = object_store::Result<LinkBuf>> + Send>,
-                        >
-                }
+                        }),
+                ))
+                    as std::pin::Pin<Box<dyn Stream<Item = object_store::Result<LinkBuf>> + Send>>,
                 StoreBackend::Remote(obj_store) => {
                     let prefix = base.to_storepath();
                     let base_len = self.base.as_str().len() + 1;
