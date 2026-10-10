@@ -156,6 +156,7 @@ impl std::ops::Deref for Kirifuda {
 
 impl std::borrow::Borrow<Kiri> for Kirifuda {
     fn borrow(&self) -> &Kiri {
+        // SAFETY: Kirifuda guarantees it is also a valid Kiri
         unsafe { Kiri::from_str_unchecked(&*self.0) }
     }
 }
