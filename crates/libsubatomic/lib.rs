@@ -11,8 +11,11 @@
 //! creation logic. If you want a quick and simple solution in rust, consider this separate
 //! individual implementation: <https://github.com/artifactx-rs/createrepo_rs>
 //!
-//! libsubatomic comes with a [`repodata::RepoCache`] that caches XML "fragments". The XML files are
-//! created by concatenating [`repodata::RepoCacheFragment`] per package in a [`heed`] database.
+//! The `kiritan` (see `../kiritan`) binary also supports repo creation, but its behaviour is not
+//! 100% backwards compatible with `createrepo_c`.
+//!
+//! libsubatomic comes with a [`Cache`] that caches XML "fragments". The XML files are created by
+//! concatenating the fragments per package in a [`heed`] database.
 //!
 //! # 📃 License
 //!
@@ -49,6 +52,7 @@ pub mod sig;
 pub use cache::{Cache, CacheConfig};
 pub use err::{Error, Res};
 pub use kuchiyose::ftmm::{Ftmm, FtmmDigest};
+pub use kuchiyose::kiri::{Kiri, Kirifuda};
 pub use kuchiyose::link::{Link, LinkBuf};
 pub use repo::Repo;
 pub use repodata::metan_prelude;
@@ -57,3 +61,10 @@ pub use repodata::repomd::{Checksum, Data, Location};
 pub use pgp;
 pub use rpm;
 pub use smartstring;
+
+/// Mark a struct to be `#[non_exhaustive]`.
+///
+/// Use `MyStruct { field1, field2, .. }` to create a new instance. This is a workaround for the
+/// incompatibility between `#[non_exhaustive]` and `#[feature(default_field_values)]`.
+#[derive(Debug, Clone, Default, Eq, PartialEq, PartialOrd, Ord)]
+pub(crate) struct NonExhaustive;

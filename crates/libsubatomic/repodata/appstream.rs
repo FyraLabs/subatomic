@@ -98,7 +98,7 @@ pub struct AppstreamMetan {
     db: super::MetanDb<crate::cache::FragDb> = super::MetanDb::new("app"),
 }
 
-type Msg = Option<(Vec<u8>, Vec<u8>)>;
+type Msg = Option<(crate::Kirifuda, Vec<u8>)>;
 
 #[async_trait::async_trait]
 impl super::Metan for AppstreamMetan {
@@ -138,13 +138,13 @@ impl super::Metan for AppstreamMetan {
     ) -> Result<(), super::MetanError> {
         let computed: &Msg = computed.downcast_ref().expect("bad cast");
         if let Some((filename, frag)) = computed {
-            self.db.put(txn, filename, frag)?;
+            self.db.put(txn, filename.as_bytes(), frag)?;
         }
         Ok(())
     }
 
-    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()> {
-        self.db.delete(txn, path)?;
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &crate::Kiri) -> heed::Result<()> {
+        self.db.delete(txn, path.as_bytes())?;
         Ok(())
     }
 

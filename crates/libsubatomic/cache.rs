@@ -8,12 +8,12 @@
 use crate::metan_prelude::*;
 use crate::pkg::MetanInput;
 use crate::prelude::*;
-use crate::repo::FragRequest;
 use crate::repo::hierarchy::Hierarchize;
 use crate::repodata::{MetanGeneration, MetanReady, repomd};
 use kuchiyose::comp::{CompConfig, Mochi};
 use kuchiyose::ftmm::Ftmm;
 use kuchiyose::store::StoreBackend;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -40,6 +40,9 @@ pub struct CacheConfig<H: Hierarchize> {
     pub lmdb_map_size: usize = DEFAULT_MAP_SIZE,
     /// Preferred checksum algorithm for all generated metadata.
     pub ftmm: Ftmm,
+
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
 /// Repository metadata cache.
@@ -75,12 +78,12 @@ impl<H: Hierarchize + Sync> Cache<H> {
         }
         std::fs::create_dir_all(&path)?;
 
-        let max_dbs = metans.iter().map(|m| m.db_count()).sum::<u32>() + 2;
+        let max_dbs = metans.iter().map(|m| m.db_count()).sum::<u32>() + 2; // + env & cus
         // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
                 .read_txn_without_tls()
-                .max_dbs(max_dbs) // epo & cus
+                .max_dbs(max_dbs)
                 .map_size(cfg.lmdb_map_size)
                 .flags(heed::EnvFlags::WRITE_MAP | heed::EnvFlags::NO_SYNC)
                 .open(path)?
@@ -114,11 +117,6 @@ impl<H: Hierarchize + Sync> Cache<H> {
         f(wtxn)
     }
 
-    #[must_use]
-    pub fn metans(&self) -> &[Arc<dyn Metan>] {
-        &self.metans
-    }
-
     /// Return the number of packages currently cached.
     ///
     /// # Errors
@@ -136,77 +134,52 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn has(&self, key: &[u8]) -> Res<bool> {
+    pub fn has(&self, key: &crate::Kiri) -> Res<bool> {
         let txn = self.env.read_txn()?;
-        Ok(self.epo.get(&txn, key)?.is_some())
+        Ok(self.epo.get(&txn, key.as_bytes())?.is_some())
     }
 
     /// Collect every cached package filename.
     ///
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn keys(&self) -> heed::Result<Vec<Vec<u8>>> {
+    pub fn keys(&self) -> Res<Vec<crate::Kirifuda>> {
         let txn = self.env.read_txn()?;
         let mut out = Vec::new();
         for res in self.epo.iter(&txn)? {
             let (k, _) = res?;
-            out.push(k.to_owned());
+            out.push(crate::Kiri::from_bytes(k)?.to_owned());
         }
         Ok(out)
     }
 
-    /// Check whether the RPM at `abs_path` is cached.
-    ///
-    /// The hierarchy is consulted to validate that the file can live in the
-    /// repo, but the cache key is always the filename.
-    ///
-    /// # Errors
-    /// Propagates LMDB errors.
-    pub fn has_rpm(&self, abs_path: &Path) -> Res<bool> {
-        let Some(filename) = abs_path.file_name() else { return Ok(false) };
-        if self.cfg.hier.locate_relative(filename).is_none() {
-            return Ok(false);
-        }
-        self.has(filename.as_bytes())
-    }
-
-    pub fn compute(
-        &self,
-        path: &Path,
-        input: ComputeInput,
-    ) -> Res<Vec<Box<dyn std::any::Any + Send>>> {
+    pub fn compute(&self, path: &Path, input: ComputeInput) -> Res<Vec<MetanComputed>> {
         let ComputeInput { csum, link, .. } = input;
-        let filename = path.file_name().ok_or(Error::BadFileName)?;
-        let link = link
-            .or_else(|| self.cfg.hier.locate_relative(filename))
-            .ok_or(Error::HierRejectPath)?;
+        let filename = crate::Kiri::from_path(path)?;
+        let link = link.or(self.cfg.hier.locate_relative(filename)).ok_or(Error::HierRejectPath)?;
         let reader = rpm::PackageReader::open(path)?;
         let csum = match csum {
             Some(c) => c,
             None => digest(self.cfg.ftmm, path)?,
         };
-        let filename = path.file_name().expect("bad filename").as_bytes().to_owned();
         let input = MetanInput {
             metadata: reader.metadata,
             fmeta: std::fs::metadata(path)?,
             csum,
             link,
-            filename,
+            filename: filename.to_owned(),
             csum_type: self.cfg.ftmm,
             path: path.to_path_buf(),
         };
-        self.metans
-            .par_iter()
-            .map(|metan| Res::Ok(metan.compute(&input)?))
-            .collect::<Res<Vec<Box<dyn std::any::Any + Send>>>>()
+        self.metans.par_iter().map(|metan| Res::Ok(metan.compute(&input)?)).collect()
     }
 
-    /// Consume `recv` until the channel closes, saving every package it receives.
+    /// Update the cache to include all and only the packages from `recv`.
     ///
     /// Each package is fanned out to every registered [`Metan`]. After the channel drains, any
     /// package whose epoch is stale (not seen this round) is purged from every metan.
     ///
-    /// Returns `(new, cached)` — the number of parsed packages and the number of cache hits.
+    /// Return `(new, cached)` — the number of parsed packages and the number of cache hits.
     ///
     /// # Errors
     /// Propagates any error from [`Metan::save`], [`Metan::del`], or LMDB.
@@ -241,11 +214,11 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
         // purge stale keys
         let mut it = self.epo.iter_mut(&mut wtxn)?;
-        let mut purged: Vec<Vec<u8>> = Vec::new();
+        let mut purged: Vec<crate::Kirifuda> = Vec::new();
         while let Some(res) = it.next() {
             let (k, v) = res?;
             if v != epoch {
-                purged.push(k.to_owned());
+                purged.push(crate::Kiri::from_bytes(k)?.to_owned());
                 // SAFETY: we do not keep any references to any values from this db
                 assert!(unsafe { it.del_current()? }, "cannot delete item");
             }
@@ -253,7 +226,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         drop(it);
         for metan in &self.metans {
             for k in &purged {
-                metan.del(&mut wtxn, k)?;
+                metan.del(&mut wtxn, &k)?;
             }
         }
         wtxn.commit()?;
@@ -283,17 +256,21 @@ impl<H: Hierarchize + Sync> Cache<H> {
     ///
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn delete_pkgs<'a>(&self, pkgs: &[&'a [u8]]) -> heed::Result<Vec<&'a [u8]>> {
+    pub fn delete_pkgs<'a, I, K>(&self, pkgs: I) -> heed::Result<Vec<K>>
+    where
+        I: IntoIterator<Item = K>,
+        K: AsRef<crate::Kiri> + 'a,
+    {
         let mut wtxn = self.env.write_txn()?;
         let mut not_found = Vec::new();
-        for &key in pkgs {
-            if self.epo.get(&wtxn, key)?.is_none() {
+        for key in pkgs {
+            if self.epo.get(&wtxn, key.as_ref().as_bytes())?.is_none() {
                 not_found.push(key);
                 continue;
             }
-            self.epo.delete(&mut wtxn, key)?;
+            self.epo.delete(&mut wtxn, key.as_ref().as_bytes())?;
             for metan in &self.metans {
-                metan.del(&mut wtxn, key)?;
+                metan.del(&mut wtxn, key.as_ref())?;
             }
         }
         wtxn.commit()?;
@@ -304,13 +281,13 @@ impl<H: Hierarchize + Sync> Cache<H> {
     ///
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn prune(&self, expected: &std::collections::HashSet<&[u8]>) -> heed::Result<u64> {
-        let to_remove: Vec<Vec<u8>> =
-            self.keys()?.into_iter().filter(|k| !expected.contains(&k.as_slice())).collect();
+    pub(crate) fn prune(&self, expected: &std::collections::HashSet<crate::Kirifuda>) -> Res<u64> {
+        let to_remove: Vec<kuchiyose::kiri::Kirifuda> =
+            self.keys()?.into_iter().filter(|k| !expected.contains(k.deref())).collect();
         let count = to_remove.len() as u64;
         let mut wtxn = self.env.write_txn()?;
         for k in &to_remove {
-            self.epo.delete(&mut wtxn, k)?;
+            self.epo.delete(&mut wtxn, k.as_bytes())?;
             for metan in &self.metans {
                 metan.del(&mut wtxn, k)?;
             }
@@ -323,7 +300,10 @@ impl<H: Hierarchize + Sync> Cache<H> {
     ///
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn write_custom_datatype(&self, data: &repomd::Data) -> heed::Result<Option<repomd::Data>> {
+    pub(crate) fn write_custom_datatype(
+        &self,
+        data: &repomd::Data,
+    ) -> heed::Result<Option<repomd::Data>> {
         let mut txn = self.env.write_txn()?;
         let ret = self.cus.get(&txn, &data.r#type)?;
         self.cus.put(&mut txn, &data.r#type, data)?;
@@ -333,7 +313,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
     /// # Errors
     /// Propagates LMDB errors.
-    pub fn read_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
+    pub(crate) fn read_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
         let txn = self.env.read_txn()?;
         self.cus.get(&txn, dt)
     }
@@ -343,7 +323,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
     /// # Errors
     /// Propagates LMDB and filesystem errors.
     #[tracing::instrument(skip(self))]
-    pub fn del_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
+    pub(crate) fn del_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
         let mut txn = self.env.write_txn()?;
         let Some(data) = self.cus.get(&txn, dt)? else { return Ok(None) };
         self.cus.delete(&mut txn, dt)?;
@@ -485,9 +465,6 @@ impl<H: Hierarchize + Sync> Cache<H> {
     }
 }
 
-// TODO: we should also make something like (nim) type CacheKey = distinct &[u8]
-// or call it Filename?
-
 fn digest(ftmm: Ftmm, path: &Path) -> std::io::Result<String> {
     let mut reader = std::fs::File::open_buffered(path)?;
     let mut hasher = ftmm.to_digest();
@@ -504,17 +481,51 @@ fn digest(ftmm: Ftmm, path: &Path) -> std::io::Result<String> {
     Ok(hex::encode(hasher.finalize()).into())
 }
 
+/// Options to [`Cache::compute`].
 #[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 pub struct ComputeInput {
+    /// Checksum of the package file. You MUST generate the checksum using [`CacheConfig::ftmm`].
+    /// The checksum will not be validated if provided. If `None`, [`Cache::compute`] will read the
+    /// entire package file to obtain a checksum.
     pub csum: Option<String>,
+    /// The final location of the provided package, from [`Hierarchize::locate_relative`].
     pub link: Option<kuchiyose::LinkBuf>,
 }
 
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("hierarchy reject path")]
     HierRejectPath,
-    #[error("expect Path::file_name")]
-    BadFileName,
+    #[error("bad filename: {0}")]
+    BadFilename(#[from] kuchiyose::kiri::Error),
+}
+
+/// Communication object with [`crate::Cache::update_frags`].
+///
+/// A request to [`crate::Cache::update_frags`] that marks the existence of a package. To check
+/// whether a package is cached or not:
+///
+/// ```
+/// use libsubatomic::repo::hierarchy::Hierarchize;
+///
+/// fn has<H: Hierarchize>(cache: libsubatomic::Cache<H>, filename: &Kiri) -> heed::Result<bool> {
+///     let txn = cache.env.read_txn()?;
+///     Ok(cache.epo.get(&txn, filename.as_bytes())?.is_some())
+/// }
+/// ```
+///
+/// [`Cache::has`] may also be used, but a new read transaction is created for each call.
+///
+/// If `has()` returns false, the package can be added via [`FragRequest::Put`]. Obtain the
+/// computed vector via [`Cache::compute`].
+#[derive(Debug)]
+pub enum FragRequest {
+    Cached,
+    /// Request a new (cache-miss) package to be inserted.
+    ///
+    /// This requests [`crate::Cache::update_frags`] to insert a new package that was not previously
+    /// in the cache. Obtain the computed vector via [`Cache::compute`].
+    Put(Vec<crate::repodata::MetanComputed>),
 }

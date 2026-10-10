@@ -101,8 +101,8 @@ impl RepoHdl {
             cache_dir: config.cache_dir.clone(),
             hier,
             store: Arc::new(StoreBackend::Local),
-            lmdb_map_size: libsubatomic::cache::DEFAULT_MAP_SIZE,
             ftmm: Ftmm::Sha256,
+            ..
         };
 
         let metans: Metans = vec![

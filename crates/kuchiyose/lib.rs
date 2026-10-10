@@ -5,11 +5,13 @@
 
 pub mod comp;
 pub mod ftmm;
+pub mod kiri;
 pub mod link;
 pub mod rpm;
 pub mod store;
 
 pub use async_compression;
 pub use ftmm::{Ftmm, FtmmDigest};
+pub use kiri::{Kiri, Kirifuda};
 pub use link::{Link, LinkBuf};
 pub use sha2;

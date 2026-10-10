@@ -9,7 +9,8 @@ pub struct ParsePathOutput<'a> {
 
 /// Attempt to obtain nevra from a filename.
 #[must_use]
-pub fn parse_filename(filename: &[u8]) -> Option<ParsePathOutput<'_>> {
+pub fn parse_filename(filename: &crate::kiri::Kiri) -> Option<ParsePathOutput<'_>> {
+    let filename = filename.as_bytes();
     let (nevr, arch) = filename.strip_suffix(b".rpm")?.rsplit_once(|&b| b == b'.')?;
     let (nev, rel) = nevr.rsplit_once(|&b| b == b'-')?;
     let (name, ev) = nev.rsplit_once(|&b| b == b'-')?;

@@ -11,6 +11,7 @@ macro_rules! comp_algs {
     ($($alg:ident),*$(,)?) => {
         $(pub mod $alg;)*
         ::preinterpret::preinterpret! {
+            #[non_exhaustive]
             #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
             pub enum CompConfig {
                 $([!ident_camel! $alg]($alg::Cfg)),*

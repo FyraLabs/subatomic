@@ -33,6 +33,7 @@ pub mod metan_prelude {
 
 pub type MetanComputed = Box<dyn std::any::Any + Send>;
 
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum MetanError {
     #[error("heed/lmdb error: {source}")]
@@ -66,6 +67,7 @@ impl From<rpm::Error> for MetanError {
 ///
 /// Filled in by [`crate::cache::Cache::write_one`] and handed to [`Metan::on_ready`], which
 /// turns it into the `<data>` element for `repomd.xml`.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct MetanGeneration {
     pub csum: repomd::Checksum,
@@ -76,6 +78,7 @@ pub struct MetanGeneration {
     pub open_size: u64,
 }
 
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct MetanReady {
     pub env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
@@ -123,7 +126,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     ///
     /// Implementations must be _idempotent_: calling it once is no different from calling it
     /// several times successively (there are no side effects).
-    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()>;
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &crate::Kiri) -> heed::Result<()>;
 
     /// Stream the full XML document to `w`.
     ///
@@ -152,6 +155,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
 }
 
 /// RPM Metadata to be fed into [`crate::repodata::Metan`].
+#[non_exhaustive]
 pub struct MetanInput {
     pub metadata: rpm::PackageMetadata,
     pub fmeta: std::fs::Metadata,
@@ -160,7 +164,7 @@ pub struct MetanInput {
     pub link: kuchiyose::link::LinkBuf,
     /// The RPM filename (last path component), used as the cache key in every
     /// per-metan database and in the epoch database.
-    pub filename: Vec<u8>,
+    pub filename: crate::Kirifuda,
     pub csum_type: kuchiyose::ftmm::Ftmm,
     /// Absolute path to the RPM on disk.
     pub path: std::path::PathBuf,

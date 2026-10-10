@@ -37,7 +37,7 @@ pub struct OtherMetan {
     db: super::MetanDb<super::FragDb> = super::MetanDb::new("oth"),
 }
 
-type Msg = (Vec<u8>, std::string::String);
+type Msg = (crate::Kirifuda, std::string::String);
 
 #[async_trait::async_trait]
 impl super::Metan for OtherMetan {
@@ -92,12 +92,12 @@ impl super::Metan for OtherMetan {
         computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
         let computed: &Msg = computed.downcast_ref().expect("bad cast");
-        self.db.put(txn, &computed.0, computed.1.as_bytes())?;
+        self.db.put(txn, computed.0.as_bytes(), computed.1.as_bytes())?;
         Ok(())
     }
 
-    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &[u8]) -> heed::Result<()> {
-        self.db.delete(txn, path)?;
+    fn del(&self, txn: &mut heed::RwTxn<'_>, path: &crate::Kiri) -> heed::Result<()> {
+        self.db.delete(txn, path.as_bytes())?;
         Ok(())
     }
 

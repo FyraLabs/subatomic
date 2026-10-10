@@ -3,7 +3,6 @@
 use futures::prelude::*;
 use itertools::Itertools;
 use kuchiyose::{Link, LinkBuf, store::StoreBackend};
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 // today years old when I realize many rust traits are named after English verbs
 pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
@@ -22,7 +21,7 @@ pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
     /// Path to an RPM, **relative to [`Self::basedir`]**.
     ///
     /// This is what ends up as the `<location href>` and as the LMDB key.
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf>;
+    fn locate_relative(&self, filename: &crate::Kiri) -> Option<LinkBuf>;
 
     /// Every `.rpm` under the repo, **relative to [`Self::basedir`]**.
     ///
@@ -45,8 +44,8 @@ impl Hierarchize for Satm0FlatHierarchy {
         self.base.as_link()
     }
 
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf> {
-        Some(LinkBuf::from(filename.as_ref()))
+    fn locate_relative(&self, filename: &crate::Kiri) -> Option<LinkBuf> {
+        Some(LinkBuf::from(filename.as_str()))
     }
 
     fn iter_rpms(
@@ -100,11 +99,9 @@ impl Hierarchize for FedoraHierarchy {
         self.base.as_link()
     }
 
-    fn locate_relative(&self, filename: impl AsRef<OsStr>) -> Option<LinkBuf> {
-        let f = filename.as_ref();
-        let s = f.to_str()?;
-        let first = *f.as_bytes().first()? as char;
-        Some(LinkBuf::from(format!("Packages/{first}/{s}")))
+    fn locate_relative(&self, filename: &crate::Kiri) -> Option<LinkBuf> {
+        let first = filename.as_str().chars().next().expect("empty Kiri");
+        Some(LinkBuf::from(format!("Packages/{first}/{}", filename.as_str())))
     }
 
     fn iter_rpms(

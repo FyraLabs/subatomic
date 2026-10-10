@@ -1,17 +1,14 @@
-pub mod hierarchy;
-use std::collections::HashSet;
+//! Repository management via [`Repo`].
+//!
+//! This module defines [`Repo`], which is the main way of interacting with a repository. While it
+//! internally uses [`crate::Cache`], [`Repo`] contains some helpers that you most likely need,
+//! such as updating custom datatypes and signing `repomd`.
 
-use crate::{prelude::*, repo::hierarchy::Hierarchize};
-use futures::StreamExt;
+pub mod hierarchy;
+
+use crate::{cache::FragRequest, prelude::*, repo::hierarchy::Hierarchize};
 use kuchiyose::link::LinkBuf;
 use tokio::io::{AsyncRead, AsyncWriteExt};
-
-#[derive(Debug)]
-pub enum FragRequest {
-    Cached,
-    /// Request a new (cache-miss) package to be inserted.
-    Put(Vec<crate::repodata::MetanComputed>),
-}
 
 #[derive(Debug)]
 pub struct Repo<H: Hierarchize> {
@@ -32,6 +29,8 @@ impl<H: Hierarchize> Repo<H> {
     ///
     /// This is synchronous; the caller must supply files that are already on disk.
     /// For remote stores, download to `self.tempdir` first.
+    ///
+    /// WARN: any packages not in `paths` are removed.
     ///
     /// # Errors
     /// Propagates channel and cache errors.
@@ -55,40 +54,37 @@ impl<H: Hierarchize> Repo<H> {
         })
     }
 
+    /*
     /// Upsert packages, removing previous versions of the same (name, arch).
     ///
     /// # Errors
     /// Propagates cache and store errors.
-    async fn add_replace(&self, paths: &[PathBuf]) -> Res<AddReplaceOutput> {
-        let mut bad_filenames: Vec<PathBuf> = Vec::new();
-        let mut removed: Vec<Vec<u8>> = Vec::new();
+    async fn add_replace(&self, links: &[LinkBuf]) -> Res<AddReplaceOutput> {
+        let mut bad_filenames = Vec::new();
+        let mut removed: Vec<crate::Kirifuda> = Vec::new();
 
         let keys = self.cache.keys()?; // keys are filenames
-        let parsed: Vec<_> = keys
-            .iter()
+        let parsed = keys
+            .into_iter()
             .filter_map(|k| {
-                let p = kuchiyose::rpm::parse_filename(k)?;
-                Some((k.clone(), p))
+                let p = kuchiyose::rpm::parse_filename(&k)?;
+                Some((k, p))
             })
-            .collect();
+            .collect_vec();
 
-        for path in paths {
-            let filename = path.file_name().expect("bad filename");
-            let Some(_link) = self.cache.cfg.hier.locate_relative(filename) else {
-                bad_filenames.push(path.clone());
-                continue;
-            };
+        for link in links {
+            let kiri = crate::Kiri::from_link(link)?;
             let Some(crate::pkg::ParsePathOutput { name, arch, .. }) =
-                kuchiyose::rpm::parse_filename(filename.as_bytes())
+                kuchiyose::rpm::parse_filename(kiri)
             else {
-                bad_filenames.push(path.clone());
+                bad_filenames.push(link.to_owned());
                 continue;
             };
             removed.extend(
                 parsed
                     .iter()
                     .filter(|(_, k)| k.name == name && k.arch == arch)
-                    .filter(|(k, _)| k.as_slice() != filename.as_bytes())
+                    .filter(|(k, _)| &**k != kiri)
                     .map(|(k, _)| k.clone()),
             );
         }
@@ -96,9 +92,9 @@ impl<H: Hierarchize> Repo<H> {
         if !removed.is_empty() {
             self.del(&removed).await?;
         }
-        self.add(paths)?;
+        self.add(links)?;
         Ok(AddReplaceOutput { bad_filenames, removed })
-    }
+    }*/
 
     /// Trigger repository generation.
     ///
@@ -117,6 +113,7 @@ impl<H: Hierarchize> Repo<H> {
         Ok(repomd)
     }
 
+    /*
     /// Re-scan the store, upsert what has changed, prune what has gone, then generate.
     ///
     /// # Errors
@@ -124,45 +121,45 @@ impl<H: Hierarchize> Repo<H> {
     ///
     /// # Panics
     /// The function panics if it encounters `..` as a file name.
-    pub async fn regenerate(&self, incremental: bool) -> Res<RegenerateOutput> {
+    async fn regenerate(&self, incremental: bool) -> Res<RegenerateOutput> {
         let stream = self.cache.cfg.hier.iter_rpms(&self.cache.cfg.store).await;
         let mut stream = std::pin::pin!(stream);
 
-        let mut expected_keys: HashSet<Vec<u8>> = HashSet::new();
-        let mut paths_to_add: Vec<PathBuf> = Vec::new();
+        let mut expected_keys: HashSet<crate::Kirifuda> = HashSet::new();
+        let mut links_to_add = Vec::new();
         let mut ret = RegenerateOutput::default();
+
+        let txn = self.cache.env.read_txn()?;
 
         while let Some(rel) = stream.next().await {
             let rel = rel?;
-            if try {
-                expected_keys.insert(rel.as_path().file_name()?.as_bytes().to_owned());
-            }
-            .is_none()
-            {
-                tracing::error!(?rel, "iter_rpms gave bad filename");
+            let Ok(kiri) = crate::Kiri::from_path(rel.as_path())
+                .inspect_err(|err| tracing::error!(?err, ?rel, "iter_rpms gave bad filename"))
+            else {
                 continue;
-            }
+            };
+            expected_keys.insert(kiri.to_owned());
 
-            if incremental && self.cache.has(rel.as_bytes())? {
+            if incremental && self.cache.epo.get(&txn, kiri.as_bytes())?.is_some() {
                 ret.cached += 1;
                 continue;
             }
-            paths_to_add.push(rel.as_path().to_owned());
+            links_to_add.push(rel);
         }
 
-        if !paths_to_add.is_empty() {
-            self.add_replace(&paths_to_add).await?;
+        if !links_to_add.is_empty() {
+            self.add_replace(&links_to_add).await?;
         }
 
         ret.repomd = self.cache.write_all(&self.comp_cfg).await?;
 
         if incremental {
-            let expected_refs: HashSet<_> = expected_keys.iter().map(|k| &**k).collect();
-            ret.removed = self.cache.prune(&expected_refs)?;
+            ret.removed = self.cache.prune(&expected_keys)?;
         }
 
         Ok(ret)
     }
+    */
 
     /// Delete a list of packages by filename.
     ///
@@ -170,17 +167,18 @@ impl<H: Hierarchize> Repo<H> {
     ///
     /// # Errors
     /// Propagates cache and store errors.
-    pub async fn del(&self, filenames: &[Vec<u8>]) -> Res<Vec<Vec<u8>>> {
-        let keys: Vec<&[u8]> = filenames.iter().map(Vec::as_slice).collect();
-        let not_found = self.cache.delete_pkgs(&keys)?;
-        let not_found: Vec<Vec<u8>> = not_found.into_iter().map(<[u8]>::to_vec).collect();
+    pub async fn del<'a, I, K>(&self, filenames: I) -> Res<Vec<K>>
+    where
+        I: IntoIterator<Item = K> + Copy,
+        K: AsRef<crate::Kiri> + 'a + std::cmp::PartialEq,
+    {
+        let not_found = self.cache.delete_pkgs(filenames)?;
 
         for filename in filenames {
-            if not_found.contains(filename) {
+            if not_found.contains(&filename) {
                 continue;
             }
-            let Some(link) = self.cache.cfg.hier.locate_relative(OsStr::from_bytes(filename))
-            else {
+            let Some(link) = self.cache.cfg.hier.locate_relative(filename.as_ref()) else {
                 continue;
             };
             let link = self.cache.cfg.hier.basedir().join(&link);
@@ -265,16 +263,18 @@ impl<H: Hierarchize> Repo<H> {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug, Default)]
 pub struct RegenerateOutput {
-    pub skipped: Vec<(PathBuf, rpm::Error)> = Vec::new(),
-    pub cached: usize = 0,
-    pub removed: u64 = 0,
-    pub repomd: Vec<u8> = Vec::new(),
+    pub skipped: Vec<(PathBuf, rpm::Error)>,
+    pub cached: usize,
+    pub removed: u64,
+    pub repomd: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
-pub struct AddReplaceOutput {
-    pub bad_filenames: Vec<PathBuf>,
-    pub removed: Vec<Vec<u8>>,
+#[non_exhaustive]
+#[derive(Clone, Debug, Default)]
+struct AddReplaceOutput {
+    pub bad_filenames: Vec<LinkBuf>,
+    pub removed: Vec<crate::Kirifuda>,
 }

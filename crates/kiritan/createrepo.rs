@@ -5,11 +5,10 @@ use jwalk::rayon::iter::{ParallelBridge, ParallelIterator};
 use kuchiyose::comp::CompConfig;
 use kuchiyose::ftmm::Ftmm;
 use kuchiyose::store::StoreBackend;
+use libsubatomic::cache::FragRequest;
 use libsubatomic::metan_prelude::*;
-use libsubatomic::repo::FragRequest;
 use libsubatomic::repo::hierarchy::Hierarchize;
 use libsubatomic::{Cache, CacheConfig};
-use std::os::unix::ffi::OsStrExt;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
@@ -53,7 +52,7 @@ fn configure(
     Ok((comp_cfg, cache))
 }
 
-pub fn run(args: Cli) -> Result<()> {
+pub fn run(mut args: Cli) -> Result<()> {
     if !args.input.is_dir() {
         bail!("input is not a directory: {}", args.input.display());
     }
@@ -69,7 +68,7 @@ pub fn run(args: Cli) -> Result<()> {
             process_rpms_auto(&args, cache, &comp_cfg)?;
             return Ok(());
         }
-        CreaterepoMode::Manual { ref add, ref remove, ref comps } => (add, remove, comps),
+        CreaterepoMode::Manual { ref add, ref mut remove, ref comps } => (add, remove, comps),
         CreaterepoMode::Md { delete, key, file } => {
             let repo = libsubatomic::Repo { tempdir: None, cache, sig: None, comp_cfg, .. };
             if delete {
@@ -109,12 +108,11 @@ pub fn run(args: Cli) -> Result<()> {
     joinhdl.join().expect("can't join")?;
 
     if !remove.is_empty() {
-        let to_remove: Vec<&[u8]> = remove.iter().map(String::as_bytes).collect();
-        for not_found in cache.delete_pkgs(&to_remove)? {
-            error!(
-                not_found = %std::ffi::OsStr::from_bytes(not_found).display(),
-                "some packages not found in cache"
-            );
+        let remove = std::mem::take(remove);
+        let to_remove: Vec<_> =
+            remove.into_iter().map(kuchiyose::Kirifuda::from_string).try_collect()?;
+        for not_found in cache.delete_pkgs(to_remove)? {
+            error!(not_found = not_found.as_str(), "some packages not found in cache");
         }
     }
 
@@ -157,7 +155,7 @@ fn process_rpms_auto(
                 return Ok(());
             }
 
-            let Some(filename) = p.file_name() else {
+            let Ok(filename) = kuchiyose::Kiri::from_path(&p) else {
                 return Ok(());
             };
             let Some(link) = cache.cfg.hier.locate_relative(filename) else {

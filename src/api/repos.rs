@@ -8,11 +8,11 @@ use axum::extract::{Multipart, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use futures_util::{StreamExt, TryStreamExt};
+use libsubatomic::cache::FragRequest;
 use libsubatomic::metan_prelude::*;
 use libsubatomic::prelude::Itertools;
-use libsubatomic::repo::{FragRequest, hierarchy::Hierarchize};
+use libsubatomic::repo::hierarchy::Hierarchize;
 use rayon::prelude::*;
-use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
@@ -136,8 +136,8 @@ pub async fn upload_pkgs(
 
     Ok(Json(serde_json::json!({
         "removed": removed_out
-            .iter()
-            .map(|bs| String::from_utf8_lossy(bs).to_string())
+            .into_iter()
+            .map(|kf| kf.into_string())
             .collect_vec(),
     })))
 }
@@ -146,8 +146,8 @@ struct UploadProcessor<'k, H: Hierarchize> {
     dir: PathBuf,
     hier: H,
     store: Arc<kuchiyose::store::StoreBackend>,
-    parsed_keys: Vec<(Vec<u8>, kuchiyose::rpm::ParsePathOutput<'k>)>,
-    removed: Vec<Vec<u8>> = Vec::new(),
+    parsed_keys: Vec<(kuchiyose::Kirifuda, kuchiyose::rpm::ParsePathOutput<'k>)>,
+    removed: Vec<kuchiyose::Kirifuda> = Vec::new(),
     received: Vec<ReceiveRpmOut> = Vec::new(),
 }
 
@@ -201,10 +201,11 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             return Err(ApiError::BadRequest("invalid rpm filename".to_owned()));
         }
         let path = self.dir.join(&name);
+        let filename = kuchiyose::Kiri::from_str(&name)?;
 
         let link = self
             .hier
-            .locate_relative(name.as_str())
+            .locate_relative(filename)
             .ok_or_else(|| ApiError::BadRequest("hierarchy rejected filename".into()))?;
         let link = self.hier.basedir().join(&link);
 
@@ -231,7 +232,6 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
         }
         .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
 
-        let filename = path.file_name().expect("expected file").as_bytes();
         let Some(kuchiyose::rpm::ParsePathOutput { name, arch, .. }) =
             kuchiyose::rpm::parse_filename(filename)
         else {
@@ -241,7 +241,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .parsed_keys
             .iter()
             .filter(|(_, k)| k.name == name && k.arch == arch)
-            .filter(|(k, _)| k.as_slice() != filename);
+            .filter(|(k, _)| &**k != filename);
         self.removed.extend(prev_versions.map(|(k, _)| k.clone()));
         Ok(ReceiveRpmOut { csum, path })
     }
@@ -395,6 +395,7 @@ pub async fn del_key(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/*
 pub async fn refresh_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
@@ -412,6 +413,7 @@ pub async fn rebuild_repo(
     let q = locker.read(&name, async |repohdl| repohdl.repo.regenerate(false).await).await?;
     Ok(if q.transpose()?.is_some() { StatusCode::NO_CONTENT } else { StatusCode::NOT_FOUND })
 }
+*/
 
 pub async fn list_rpms(
     State(locker): LockerState,
@@ -427,9 +429,7 @@ pub async fn list_rpms(
         return Err(ApiError::NotFound);
     };
     Ok(Json(serde_json::Value::Array(
-        keys.into_iter()
-            .map(|v| serde_json::Value::String(String::from_utf8_lossy(&v).to_string()))
-            .collect(),
+        keys.into_iter().map(|v| serde_json::Value::String(v.into_string())).collect(),
     )))
 }
 
@@ -448,18 +448,19 @@ pub async fn del_rpms(
         rpm_filename(rpm)?;
     }
 
+    let kiri_rpms: Vec<_> = rpms.iter().map(|s| kuchiyose::Kiri::from_str(s)).try_collect()?;
+    let kiri_rpms = &kiri_rpms;
+
     tracing::info!(?rpms, "deleting rpms");
-    let rpms_bytes: Vec<Vec<u8>> = rpms.iter().map(|s| s.as_bytes().to_vec()).collect();
     let w = locker.write(&repo, async move |repohdl| {
-        let out = repohdl.repo.del(&rpms_bytes).await?;
+        let out = repohdl.repo.del(kiri_rpms).await?;
         repohdl.repo.generate().await?;
         Ok::<_, libsubatomic::Error>(out)
     });
     let Some(not_found) = w.await?.transpose()? else {
         return Err(ApiError::NotFound);
     };
-    let not_found: Vec<String> =
-        not_found.iter().map(|s| String::from_utf8_lossy(s).to_string()).collect();
+    let not_found: Vec<String> = not_found.iter().map(|s| s.as_str().to_owned()).collect();
     Ok(Json(serde_json::json!({ "not_found": not_found })))
 }
 

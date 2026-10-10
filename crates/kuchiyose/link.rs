@@ -15,6 +15,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// A borrowed, repository-relative path.
+#[repr(transparent)]
 pub struct Link(str);
 
 /// An owned, repository-relative path.

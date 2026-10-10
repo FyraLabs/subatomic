@@ -15,6 +15,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("internal server error: {0}")]
     Internal(String),
+    #[error("bad filename: {0}")]
+    Kiri(#[from] kuchiyose::kiri::Error),
 }
 
 impl IntoResponse for ApiError {
@@ -29,6 +31,7 @@ impl IntoResponse for ApiError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_owned())
             }
             Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            Self::Kiri(e) => (StatusCode::BAD_REQUEST, format!("{e}")),
         };
         (status, axum::Json(serde_json::json!({ "error": message }))).into_response()
     }
