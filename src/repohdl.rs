@@ -95,7 +95,7 @@ impl RepoHdl {
         match &mut hier {
             Hierarchy::Satm0Flat(inner) => inner.base = inner.base.join(repo_name),
             Hierarchy::Fedora(inner) => inner.base = inner.base.join(repo_name),
-            _ => unimplemented!(),
+            _ => unreachable!(),
         }
 
         let cfg = CacheConfig {

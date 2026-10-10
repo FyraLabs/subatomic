@@ -100,7 +100,7 @@ impl Hierarchize for Satm0Flat {
                             .map(|r| r),
                     )
                 }
-                _ => unimplemented!(),
+                _ => unreachable!(),
             }
         })
     }
@@ -164,7 +164,7 @@ impl Hierarchize for Fedora {
                             .map(|r| r),
                     )
                 }
-                _ => unimplemented!(),
+                _ => unreachable!(),
             }
         })
     }

@@ -98,8 +98,7 @@ pub async fn upload_pkgs(
             staged
                 .into_par_iter()
                 .map(|ReceiveRpmOut { csum, path }| {
-                    let mut input = libsubatomic::cache::ComputeInput::default();
-                    input.csum = Some(csum.into());
+                    let input = libsubatomic::cache::ComputeInput { csum: Some(csum.into()), .. };
                     let computed = hdl.repo.cache.compute(&path, input)?;
                     Ok::<_, libsubatomic::Error>((path, computed))
                 })
@@ -137,7 +136,7 @@ pub async fn upload_pkgs(
     Ok(Json(serde_json::json!({
         "removed": removed_out
             .into_iter()
-            .map(|kf| kf.into_string())
+            .map(libsubatomic::Kirifuda::into_string)
             .collect_vec(),
     })))
 }

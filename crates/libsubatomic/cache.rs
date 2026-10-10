@@ -155,7 +155,9 @@ impl<H: Hierarchize + Sync> Cache<H> {
     pub fn compute(&self, path: &Path, input: ComputeInput) -> Res<Vec<MetanComputed>> {
         let ComputeInput { csum, link, .. } = input;
         let filename = crate::Kiri::new(path)?;
-        let link = link.or(self.cfg.hier.locate_relative(filename)).ok_or(Error::HierRejectPath)?;
+        let link = link
+            .or_else(|| self.cfg.hier.locate_relative(filename))
+            .ok_or(Error::HierRejectPath)?;
         let reader = rpm::PackageReader::open(path)?;
         let csum = match csum {
             Some(c) => c,
@@ -226,7 +228,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         drop(it);
         for metan in &self.metans {
             for k in &purged {
-                metan.del(&mut wtxn, &k)?;
+                metan.del(&mut wtxn, k)?;
             }
         }
         wtxn.commit()?;
@@ -494,9 +496,9 @@ pub struct ComputeInput {
     /// Checksum of the package file. You MUST generate the checksum using [`CacheConfig::ftmm`].
     /// The checksum will not be validated if provided. If `None`, [`Cache::compute`] will read the
     /// entire package file to obtain a checksum.
-    pub csum: Option<String>,
+    pub csum: Option<String> = None,
     /// The final location of the provided package, from [`Hierarchize::locate_relative`].
-    pub link: Option<kuchiyose::LinkBuf>,
+    pub link: Option<kuchiyose::LinkBuf> = None,
 
     /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
     #[expect(private_interfaces)]

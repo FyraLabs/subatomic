@@ -208,6 +208,7 @@ pub enum FileType {
 }
 
 impl FileType {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     #[must_use]
     pub const fn is_normal(&self) -> bool {
         matches!(self, Self::Normal)

@@ -116,7 +116,7 @@ impl super::Metan for OtherMetan {
         }))
     }
 
-    fn on_post_repomd<'db>(
+    fn on_post_repomd(
         &self,
         _: Arc<heed::Env<heed::WithoutTls>>,
         _: &super::repomd::repomd,

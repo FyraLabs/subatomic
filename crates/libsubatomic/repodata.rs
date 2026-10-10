@@ -153,7 +153,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     // TODO: actually invoke this hook
     /// Hook invoked after `repomd.xml` has been written. Useful to create output that depend on it
     /// (e.g. `tetsudou.json`).
-    fn on_post_repomd<'db>(
+    fn on_post_repomd(
         &self,
         env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
         repomd: &repomd::repomd,

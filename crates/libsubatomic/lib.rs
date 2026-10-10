@@ -71,6 +71,6 @@ pub use smartstring;
 /// incompatibility between `#[non_exhaustive]` and `#[feature(default_field_values)]`.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct NonExhaustive;
-pub(crate) fn non_exhaustive() -> NonExhaustive {
+pub(crate) const fn non_exhaustive() -> NonExhaustive {
     NonExhaustive
 }

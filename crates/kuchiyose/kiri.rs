@@ -23,16 +23,18 @@ pub struct Kiri(str);
 impl Kiri {
     /// Treat `bytes` as a valid filename and cast directly.
     #[inline]
-    pub unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
+    #[must_use]
+    pub const unsafe fn from_bytes_unchecked(bytes: &[u8]) -> &Self {
         // SAFETY: `Kiri` is `#[repr(transparent)]` over `str` and `[u8]`.
-        unsafe { &*(std::ptr::from_ref(bytes) as *const Kiri) }
+        unsafe { &*(std::ptr::from_ref(bytes) as *const Self) }
     }
 
     /// Treat `s` as a valid filename and cast directly.
     #[inline]
-    pub unsafe fn from_str_unchecked(s: &str) -> &Self {
+    #[must_use]
+    pub const unsafe fn from_str_unchecked(s: &str) -> &Self {
         // SAFETY: `Kiri` is `#[repr(transparent)]` over `str` and `[u8]`.
-        unsafe { &*(std::ptr::from_ref(s) as *const Kiri) }
+        unsafe { &*(std::ptr::from_ref(s) as *const Self) }
     }
 
     /// Check that the given string is a valid utf-8 filename and cast.
@@ -68,12 +70,14 @@ impl Kiri {
     }
 
     #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
 
     #[inline]
-    pub fn as_str(&self) -> &str {
+    #[must_use]
+    pub const fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -93,12 +97,12 @@ impl PartialEq<str> for Kiri {
 
 impl PartialEq<Kirifuda> for Kiri {
     fn eq(&self, other: &Kirifuda) -> bool {
-        &**other == &self.0
+        **other == self.0
     }
 }
 impl PartialEq<&Kirifuda> for Kiri {
     fn eq(&self, other: &&Kirifuda) -> bool {
-        &***other == &self.0
+        ***other == self.0
     }
 }
 
@@ -120,6 +124,7 @@ pub struct Kirifuda(String);
 
 impl Kirifuda {
     #[inline]
+    #[must_use]
     pub fn into_string(self) -> String {
         self.0
     }
@@ -134,14 +139,15 @@ impl Kirifuda {
     }
 
     #[inline]
-    pub unsafe fn from_string_unchecked(s: String) -> Self {
+    #[must_use]
+    pub const unsafe fn from_string_unchecked(s: String) -> Self {
         Self(s)
     }
 }
 
-impl ToString for Kirifuda {
-    fn to_string(&self) -> String {
-        self.0.to_owned()
+impl std::fmt::Display for Kirifuda {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -150,14 +156,14 @@ impl std::ops::Deref for Kirifuda {
 
     fn deref(&self) -> &Self::Target {
         // SAFETY: Kirifuda guarantees it is also a valid Kiri
-        unsafe { Kiri::from_str_unchecked(&*self.0) }
+        unsafe { Kiri::from_str_unchecked(&self.0) }
     }
 }
 
 impl std::borrow::Borrow<Kiri> for Kirifuda {
     fn borrow(&self) -> &Kiri {
         // SAFETY: Kirifuda guarantees it is also a valid Kiri
-        unsafe { Kiri::from_str_unchecked(&*self.0) }
+        unsafe { Kiri::from_str_unchecked(&self.0) }
     }
 }
 
@@ -169,8 +175,8 @@ impl ToOwned for Kiri {
     }
 }
 
-impl AsRef<Kiri> for Kiri {
-    fn as_ref(&self) -> &Kiri {
+impl AsRef<Self> for Kiri {
+    fn as_ref(&self) -> &Self {
         self
     }
 }

@@ -114,7 +114,7 @@ impl super::Metan for FilelistsMetan {
         }))
     }
 
-    fn on_post_repomd<'db>(
+    fn on_post_repomd(
         &self,
         _: Arc<heed::Env<heed::WithoutTls>>,
         _: &super::repomd::repomd,

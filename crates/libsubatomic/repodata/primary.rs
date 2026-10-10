@@ -21,6 +21,7 @@ struct PrimaryMetadata<'a> {
     pub packages_list: Vec<Package<'a>>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename = "package")]
 struct Package<'a> {
@@ -258,7 +259,7 @@ impl super::Metan for PrimaryMetan {
         }))
     }
 
-    fn on_post_repomd<'db>(
+    fn on_post_repomd(
         &self,
         _: Arc<heed::Env<heed::WithoutTls>>,
         _: &super::repomd::repomd,
