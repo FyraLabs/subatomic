@@ -22,10 +22,10 @@ num_cpus = "1.17.0"
 object_store = "0.14.1"
 pgp = { workspace = true }
 quick-xml = { version = "0.42.0", features = ["serialize"] }
-rand = "0.8.8" # fixed by rpm
+rand = "0.8.6" # fixed by pgp
 rayon = { workspace = true }
 replace_with = "0.1.8"
-rpm = "0.26.0"
+rpm = "0.30.2"
 serde = { version = "1.0.229", features = ["derive"] }
 sha2 = "0.11.0"
 smallvec = "1.15.2"
@@ -34,7 +34,7 @@ thiserror = "2.0.19"
 tokio = { workspace = true }
 tokio-util = { version = "0.7.19", features = ["io-util", "io"] }
 tracing = "0.1.44"
-zstd = { version = "0.13.3", features = ["zstdmt", "fat-lto"] }
+zstd = { version = "0.14.2", features = ["zstdmt", "fat-lto"] }
 
 [lints]
 workspace = true
