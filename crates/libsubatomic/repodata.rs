@@ -139,7 +139,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     ///
     /// Returns `Ok(None)` if the metan produced no output (e.g. an appstream file with zero
     /// components). The default impls all return `Some(…)`.
-    fn on_ready<'db>(&self, ready: MetanReady) -> std::io::Result<Option<repomd::Data>>;
+    fn on_ready(&self, ready: MetanReady) -> std::io::Result<Option<repomd::Data>>;
 
     // TODO: actually invoke this hook
     /// Hook invoked after `repomd.xml` has been written. Useful to create output that depend on it

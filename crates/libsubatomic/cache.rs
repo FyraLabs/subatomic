@@ -407,7 +407,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let size = inner_mochi.size;
         let sha = hex::encode(inner_mochi.ftmm.finalize()).into();
         let (filename, ext) = (metan.filename(), comp_cfg.ext());
-        let newlink = repodata_dir.join(format!("repodata/{sha}-{filename}.{ext}"));
+        let newlink = repodata_dir.join(format!("{sha}-{filename}.{ext}"));
         self.cfg.store.rename(&link, &newlink).await?;
 
         let generation = MetanGeneration {

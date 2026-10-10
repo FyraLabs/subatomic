@@ -76,6 +76,9 @@ pub async fn upload_pkgs(
     });
     let (cache_dir, keys, hier, store) = r.await?.ok_or(ApiError::NotFound)?;
     let keys = keys.map_err(|e| ApiError::Internal(format!("can't get cache keys: {e}")))?;
+    if let kuchiyose::store::StoreBackend::Local = *store {
+        tokio::fs::create_dir_all(hier.basedir().as_path()).await?;
+    }
 
     let tempdir = tempfile::Builder::new().prefix("upload-").tempdir_in(&cache_dir);
     let tempdir =

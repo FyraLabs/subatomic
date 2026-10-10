@@ -99,10 +99,7 @@ impl super::Metan for FilelistsMetan {
         Ok(())
     }
 
-    fn on_ready<'db>(
-        &self,
-        ready: super::MetanReady,
-    ) -> std::io::Result<Option<super::repomd::Data>> {
+    fn on_ready(&self, ready: super::MetanReady) -> std::io::Result<Option<super::repomd::Data>> {
         let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size } =
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-filelists.xml.{comp_ext}", csum.sha).into();

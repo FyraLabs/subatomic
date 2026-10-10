@@ -110,10 +110,9 @@ impl<H: Hierarchize> Repo<H> {
         if let Some(sig) = &self.sig {
             let asc_link = self.cache.cfg.hier.basedir().join("repodata/repomd.xml.asc");
             let mut writer = self.cache.cfg.store.writer(&asc_link).await?;
-            let mut buf = Vec::new();
-            sig.sign(&repomd)?
-                .to_armored_writer(&mut buf, pgp::composed::ArmorOptions::default())?;
+            let buf = sig.sign(&repomd)?.to_armored_bytes(pgp::composed::ArmorOptions::default())?;
             writer.write_all(&buf).await?;
+            writer.shutdown().await?;
         }
         Ok(repomd)
     }

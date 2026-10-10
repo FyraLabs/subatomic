@@ -241,10 +241,7 @@ impl super::Metan for PrimaryMetan {
         Ok(())
     }
 
-    fn on_ready<'db>(
-        &self,
-        ready: super::MetanReady,
-    ) -> std::io::Result<Option<super::repomd::Data>> {
+    fn on_ready(&self, ready: super::MetanReady) -> std::io::Result<Option<super::repomd::Data>> {
         let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size } =
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-primary.xml.{comp_ext}", csum.sha).into();
