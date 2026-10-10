@@ -6,6 +6,8 @@ pub struct Cfg {
     pub multi: u32,
 }
 
+impl crate::Sealed for Cfg {}
+
 impl super::CompConfigure for Cfg {
     fn to_async_write<'a, W: AsyncWrite + 'a>(&'a self, inner: W) -> impl AsyncWrite {
         let level = if self.level == 0 {

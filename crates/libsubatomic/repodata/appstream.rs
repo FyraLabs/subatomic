@@ -128,7 +128,7 @@ impl super::Metan for AppstreamMetan {
         let mut reader = rpm::PackageReader::open(&pkg.path)?;
         let frag = appstream_frag(&mut reader)?;
         let msg: Msg = (!frag.is_empty()).then_some((pkg.filename.clone(), frag));
-        Ok(Box::new(msg))
+        Ok(super::MetanComputed(Box::new(msg)))
     }
 
     fn save(
@@ -136,7 +136,7 @@ impl super::Metan for AppstreamMetan {
         txn: &mut heed::RwTxn<'_>,
         computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
-        let computed: &Msg = computed.downcast_ref().expect("bad cast");
+        let computed: &Msg = computed.0.downcast_ref().expect("bad cast");
         if let Some((filename, frag)) = computed {
             self.db.put(txn, filename.as_bytes(), frag)?;
         }
@@ -149,7 +149,7 @@ impl super::Metan for AppstreamMetan {
     }
 
     fn on_ready(&self, ready: super::MetanReady) -> std::io::Result<Option<super::repomd::Data>> {
-        let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size } =
+        let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size, .. } =
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-appstream.xml.{}", csum.sha, comp_ext).into();
         Ok(Some(super::repomd::Data {

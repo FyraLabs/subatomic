@@ -22,6 +22,10 @@ pub struct Repo<H: Hierarchize> {
     pub cache: crate::cache::Cache<H>,
     pub sig: Option<crate::sig::Mgr> = None,
     pub comp_cfg: kuchiyose::comp::CompConfig,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
 impl<H: Hierarchize> Repo<H> {

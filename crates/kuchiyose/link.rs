@@ -16,12 +16,22 @@ use std::path::{Path, PathBuf};
 
 /// A borrowed, repository-relative path.
 #[repr(transparent)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Link(str);
 
 /// An owned, repository-relative path.
 #[expect(clippy::unsafe_derive_deserialize)]
 #[derive(
-    Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 #[serde(transparent)]
 pub struct LinkBuf(String);
@@ -66,11 +76,13 @@ impl LinkBuf {
     }
 
     /// Allocates a new `object_store::path::Path`.
+    #[inline]
     #[must_use]
     pub fn to_storepath(&self) -> object_store::path::Path {
         object_store::path::Path::from(self.0.as_str())
     }
 
+    #[inline]
     #[must_use]
     pub fn from_storepath(p: &object_store::path::Path) -> Self {
         Self(p.as_ref().to_owned())
@@ -98,6 +110,7 @@ impl LinkBuf {
 }
 
 impl Link {
+    #[inline]
     #[must_use]
     pub const fn new(str: &str) -> &Self {
         // SAFETY: `Link` is `#[repr(transparent)]` over `str`.
@@ -123,11 +136,13 @@ impl Link {
     }
 
     /// Allocates a new [`object_store::path::Path`].
+    #[inline]
     #[must_use]
     pub fn to_storepath(&self) -> object_store::path::Path {
         object_store::path::Path::from(&self.0)
     }
 
+    #[inline]
     #[must_use]
     pub fn to_linkbuf(&self) -> LinkBuf {
         LinkBuf(self.0.to_owned())
@@ -144,28 +159,6 @@ impl Link {
     #[must_use]
     pub fn parent(&self) -> Option<&Self> {
         Some(Self::new(self.0.trim_suffix('/').rsplit_once('/')?.0))
-    }
-}
-
-impl PartialEq for Link {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-impl Eq for Link {}
-impl PartialOrd for Link {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Link {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-impl std::hash::Hash for Link {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
     }
 }
 
@@ -265,16 +258,6 @@ impl std::fmt::Display for Link {
 impl std::fmt::Display for LinkBuf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
-    }
-}
-impl std::fmt::Debug for Link {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
-    }
-}
-impl std::fmt::Debug for LinkBuf {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
     }
 }
 

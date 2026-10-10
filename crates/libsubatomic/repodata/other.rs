@@ -83,7 +83,7 @@ impl super::Metan for OtherMetan {
         };
         let xml = quick_xml::se::to_string(&frag)?;
         let msg: Msg = (pkg.filename.clone(), xml);
-        Ok(Box::new(msg))
+        Ok(super::MetanComputed(Box::new(msg)))
     }
 
     fn save(
@@ -91,7 +91,7 @@ impl super::Metan for OtherMetan {
         txn: &mut heed::RwTxn<'_>,
         computed: &super::MetanComputed,
     ) -> Result<(), super::MetanError> {
-        let computed: &Msg = computed.downcast_ref().expect("bad cast");
+        let computed: &Msg = computed.0.downcast_ref().expect("bad cast");
         self.db.put(txn, computed.0.as_bytes(), computed.1.as_bytes())?;
         Ok(())
     }
@@ -102,7 +102,7 @@ impl super::Metan for OtherMetan {
     }
 
     fn on_ready(&self, ready: super::MetanReady) -> std::io::Result<Option<super::repomd::Data>> {
-        let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size } =
+        let super::MetanGeneration { csum, osum, comp_ext, timestamp, size, open_size, .. } =
             ready.generation.expect("no generation");
         let href = format!("repodata/{}-other.xml.{comp_ext}", csum.sha).into();
         Ok(Some(super::repomd::Data {

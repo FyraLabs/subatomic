@@ -518,6 +518,7 @@ mod test {
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use libsubatomic::pgp::composed::Deserializable;
+    use libsubatomic::repo::hierarchy::Hierarchize;
     use rust_multipart_rfc7578_2::client::multipart::{
         Body as MultipartBody, Form as MultipartForm,
     };
@@ -553,7 +554,14 @@ qg38sG21+aKNUiFFHynSF64O
                 db_max_conns: 32,
                 jwt_secret: "cad4a3a28cfdb1a464e26e5851e6cd44a95fd8c57c117d294a9e8391e70274d2"
                     .into(),
-                storage_dir: storage_dir.path().to_owned(),
+                storage: crate::config::StorageConfig::Local,
+                hierarchy: libsubatomic::repo::hierarchy::Hierarchy::Satm0Flat(
+                    libsubatomic::repo::hierarchy::Satm0Flat {
+                        base: storage_dir.path().into(),
+                        ..
+                    },
+                ),
+                compression: Default::default(),
                 cache_dir: cache_dir.path().to_owned(),
                 body_limit: 10_485_760,
             }),
@@ -624,7 +632,7 @@ qg38sG21+aKNUiFFHynSF64O
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         println!("{body}");
         assert!(body.get("removed").unwrap().as_array().unwrap().is_empty());
-        let old = cfg.storage_dir.join("rpmfission/terra-release-44-4.noarch.rpm");
+        let old = cfg.hierarchy.basedir().join("rpmfission/terra-release-44-4.noarch.rpm");
         assert!(std::fs::exists(&old).unwrap());
 
         let mut form = MultipartForm::default();
@@ -648,20 +656,20 @@ qg38sG21+aKNUiFFHynSF64O
         let removed = body.get("removed").unwrap().as_array().unwrap();
         assert_eq!(removed.len(), 1);
         assert_eq!(removed.first().unwrap().as_str().unwrap(), "terra-release-44-4.noarch.rpm");
-        let new = cfg.storage_dir.join("rpmfission/terra-release-44-5.noarch.rpm");
-        assert!(!old.exists());
-        assert!(new.exists());
+        let new = cfg.hierarchy.basedir().join("rpmfission/terra-release-44-5.noarch.rpm");
+        assert!(!old.as_path().exists());
+        assert!(new.as_path().exists());
 
         let ret = super::list_rpms(locker.clone(), Path("rpmfission".into())).await.unwrap().0;
         let rpms = ret.as_array().unwrap();
         assert_eq!(rpms.len(), 1);
         assert_eq!(rpms.first().unwrap().as_str().unwrap(), "terra-release-44-5.noarch.rpm");
 
-        let asc_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml.asc");
+        let asc_path = cfg.hierarchy.basedir().join("rpmfission/repodata/repomd.xml.asc");
         let content = std::fs::read_to_string(&asc_path).unwrap();
         let mgr = libsubatomic::sig::Mgr::from_armor(KEY1_PRIV_ARMOR).unwrap();
         let sig = libsubatomic::pgp::composed::DetachedSignature::from_string(&content);
-        let repomd = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
+        let repomd = cfg.hierarchy.basedir().join("rpmfission/repodata/repomd.xml");
         let repomd = std::fs::read(repomd).expect("repomd.xml");
         sig.expect("bad sig").0.verify(&mgr.public(), &repomd).expect("bad sig");
 
@@ -670,7 +678,7 @@ qg38sG21+aKNUiFFHynSF64O
             super::del_rpms(locker, Path("rpmfission".into()), Json(super::DelRpmsReq { rpms }));
         let ret = ret.await.unwrap().0;
         println!("{ret:?}");
-        assert!(!new.exists());
+        assert!(!new.as_path().exists());
         assert!(ret.get("not_found").unwrap().as_array().unwrap().is_empty());
     }
     #[sqlx::test(fixtures("keys", "repos"))]
@@ -678,7 +686,7 @@ qg38sG21+aKNUiFFHynSF64O
         let states = app(pool);
         let States { app, cfg, .. } = states;
 
-        let outside = cfg.storage_dir.join("escape-1-1.x86_64.rpm");
+        let outside = cfg.hierarchy.basedir().join("escape-1-1.x86_64.rpm");
         let absolute = "/tmp/pwn-1-1.x86_64.rpm";
 
         let mut form = MultipartForm::default();
@@ -698,7 +706,7 @@ qg38sG21+aKNUiFFHynSF64O
 
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        assert!(!outside.exists());
+        assert!(!outside.as_path().exists());
 
         assert!(!std::path::Path::new(absolute).exists());
         let mut form = MultipartForm::default();
@@ -720,14 +728,14 @@ qg38sG21+aKNUiFFHynSF64O
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
         assert!(!std::path::Path::new(absolute).exists());
 
-        assert!(cfg.storage_dir.join("rpmfission").exists());
+        assert!(cfg.hierarchy.basedir().join("rpmfission").as_path().exists());
     }
     #[sqlx::test(fixtures("keys", "repos"))]
     async fn del_rpms_rejects_path_traversal(pool: Pool) {
         let states = app(pool);
         let States { locker, cfg, .. } = states;
 
-        let outside = cfg.storage_dir.join("escape.rpm");
+        let outside = cfg.hierarchy.basedir().join("escape.rpm");
         std::fs::write(&outside, b"must not be deleted").unwrap();
 
         for rpm in ["../escape.rpm", "../../escape.rpm", "/tmp/pwn.rpm", "a/../escape.rpm"] {
@@ -743,7 +751,7 @@ qg38sG21+aKNUiFFHynSF64O
             assert!(result.is_err(), "path should be rejected: {rpm}");
         }
 
-        assert!(outside.exists());
+        assert!(outside.as_path().exists());
     }
     #[sqlx::test(fixtures("keys", "repos"))]
     async fn sign_headers(pool: Pool) {
@@ -854,7 +862,7 @@ qg38sG21+aKNUiFFHynSF64O
         let resp = app.clone().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), 204);
 
-        let repomd_path = cfg.storage_dir.join("rpmfission/repodata/repomd.xml");
+        let repomd_path = cfg.hierarchy.basedir().join("rpmfission/repodata/repomd.xml");
         let content = std::fs::read_to_string(&repomd_path).unwrap();
         assert!(content.contains(r#"<data type="mytype">"#));
 
@@ -873,12 +881,12 @@ qg38sG21+aKNUiFFHynSF64O
     async fn del_repos(pool: Pool) {
         let states = app(pool);
         let States { cfg, locker, .. } = states;
-        std::fs::create_dir_all(cfg.storage_dir.join("rpmball")).unwrap();
+        std::fs::create_dir_all(cfg.hierarchy.basedir().join("rpmball")).unwrap();
         assert_eq!(
             super::delete_repo(locker.clone(), Path("rpmball".into())).await.unwrap(),
             axum::http::StatusCode::NO_CONTENT
         );
-        assert!(!cfg.storage_dir.join("rpmball").exists());
+        assert!(!cfg.hierarchy.basedir().join("rpmball").as_path().exists());
         assert!(locker.read("rpmball", async |_| unreachable!()).await.unwrap().is_none());
     }
 

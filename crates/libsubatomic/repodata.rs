@@ -31,7 +31,7 @@ pub mod metan_prelude {
     pub type Metans = Vec<std::sync::Arc<dyn Metan>>;
 }
 
-pub type MetanComputed = Box<dyn std::any::Any + Send>;
+pub struct MetanComputed(Box<dyn std::any::Any + Send>);
 
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
@@ -67,7 +67,6 @@ impl From<rpm::Error> for MetanError {
 ///
 /// Filled in by [`crate::cache::Cache::write_one`] and handed to [`Metan::on_ready`], which
 /// turns it into the `<data>` element for `repomd.xml`.
-#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct MetanGeneration {
     pub csum: repomd::Checksum,
@@ -76,13 +75,20 @@ pub struct MetanGeneration {
     pub timestamp: i64,
     pub size: u64,
     pub open_size: u64,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
-#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct MetanReady {
     pub env: std::sync::Arc<heed::Env<heed::WithoutTls>>,
     pub generation: Option<MetanGeneration>,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
 /// One repomd datatype.
@@ -155,7 +161,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
 }
 
 /// RPM Metadata to be fed into [`crate::repodata::Metan`].
-#[non_exhaustive]
+#[derive(Debug)]
 pub struct MetanInput {
     pub metadata: rpm::PackageMetadata,
     pub fmeta: std::fs::Metadata,
@@ -168,6 +174,10 @@ pub struct MetanInput {
     pub csum_type: kuchiyose::ftmm::Ftmm,
     /// Absolute path to the RPM on disk.
     pub path: std::path::PathBuf,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 impl MetanInput {
     /// Reopen the rpm archive for streaming reads (e.g. appstream).

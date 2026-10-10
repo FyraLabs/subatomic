@@ -2,7 +2,7 @@ use crate::ftmm::{Ftmm, FtmmDigest};
 use tokio::io::AsyncWrite;
 
 /// A configuration trait that supports turning into [`AsyncWrite`].
-pub trait CompConfigure {
+pub trait CompConfigure: crate::Sealed {
     fn to_async_write<'a, W: AsyncWrite + 'a>(&'a self, inner: W) -> impl AsyncWrite;
     fn ext(&self) -> &'static str;
 }
@@ -59,6 +59,7 @@ impl CompConfig {
 }
 
 /// A thin wrapper around an [`AsyncWrite`] with checksum & size calculation.
+#[non_exhaustive]
 pub struct Mochi<W: AsyncWrite + Unpin> {
     pub inner: W,
     pub ftmm: FtmmDigest,

@@ -1,17 +1,16 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use kuchiyose::ftmm::Ftmm;
 use kuchiyose::store::StoreBackend;
 use libsubatomic::metan_prelude::*;
-use libsubatomic::repo::hierarchy::Satm0FlatHierarchy;
+use libsubatomic::repo::hierarchy::{Hierarchize, Hierarchy};
 use libsubatomic::{Cache, CacheConfig};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::validate::repo_name;
 use crate::{config::Config, error::Result};
 
-// TODO: unhardcode
-pub type Repo = libsubatomic::Repo<Satm0FlatHierarchy>;
+pub type Repo = libsubatomic::Repo<Hierarchy>;
 
 pub struct Locker {
     repolocks: RwLock<HashMap<String, RwLock<RepoHdl>>>,
@@ -92,9 +91,12 @@ impl RepoHdl {
         else {
             return Ok(None);
         };
-        let repodir = config.storage_dir.join(repo_name);
-
-        let hier = Satm0FlatHierarchy { base: repodir.into() };
+        let mut hier = config.hierarchy.clone();
+        match &mut hier {
+            Hierarchy::Satm0Flat(inner) => inner.base = inner.base.join(repo_name),
+            Hierarchy::Fedora(inner) => inner.base = inner.base.join(repo_name),
+            _ => unimplemented!(),
+        }
 
         let cfg = CacheConfig {
             repo: repo_name.into(),
@@ -132,15 +134,16 @@ impl RepoHdl {
             cache,
             sig,
             comp_cfg: kuchiyose::comp::CompConfig::default(),
+            ..
         };
 
         Ok(Some(Self { repo }))
     }
 
     pub async fn delete_physical(&self, config: Arc<Config>) -> Result<()> {
-        let path: PathBuf = config.storage_dir.join(&*self.repo.cache.cfg.repo);
-        if path.exists() {
-            tokio::fs::remove_dir_all(path).await?;
+        let link: kuchiyose::LinkBuf = config.hierarchy.basedir().join(&*self.repo.cache.cfg.repo);
+        if link.as_path().exists() {
+            tokio::fs::remove_dir_all(link.as_path()).await?;
         }
         Ok(())
     }

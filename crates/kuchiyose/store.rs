@@ -18,6 +18,7 @@ use tokio::io::AsyncWrite;
 
 use crate::link::Link;
 
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum StoreErr {
     #[error("io error: {source}")]
@@ -38,12 +39,16 @@ pub enum StoreErr {
 /// local filesystem.
 ///
 /// See [`Self::writer()`] for more information.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum StoreBackend {
     Local,
     Remote(Arc<dyn object_store::ObjectStore>),
 }
 
+/// Blanket trait for [`StoreBackend::writer`].
+///
+/// This trait is not meant to be implemented externally.
 pub trait StoreWrite: AsyncWrite + Send + Unpin + std::any::Any {
     fn as_any_ref(&self) -> &dyn std::any::Any;
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;

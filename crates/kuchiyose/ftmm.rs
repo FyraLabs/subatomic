@@ -57,14 +57,22 @@ macro_rules! ftmm {
         }
 
         impl std::str::FromStr for Ftmm {
-            type Err = ();
+            type Err = ParseFtmmErr;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Ok(match s {
                     $( [!lower! $item] => Self::$item, )*
-                    _ => return Err(()),
+                    _ => return Err(ParseFtmmErr::Unknown(s.to_owned())),
                 })
             }
         }
     }};
 }
+
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum ParseFtmmErr {
+    #[error("unknown checksum algorithm: {0}")]
+    Unknown(String),
+}
+
 ftmm![Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256];

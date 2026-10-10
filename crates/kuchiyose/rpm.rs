@@ -1,3 +1,4 @@
+#[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 pub struct ParsePathOutput<'a> {
     pub name: &'a [u8],

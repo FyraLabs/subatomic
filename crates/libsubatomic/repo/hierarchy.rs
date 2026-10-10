@@ -4,8 +4,17 @@ use futures::prelude::*;
 use itertools::Itertools;
 use kuchiyose::{Link, LinkBuf, store::StoreBackend};
 
+#[non_exhaustive]
+#[enum_dispatch::enum_dispatch]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub enum Hierarchy {
+    Satm0Flat,
+    Fedora,
+}
+
 // today years old when I realize many rust traits are named after English verbs
-pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
+#[enum_dispatch::enum_dispatch(Hierarchy)]
+pub trait Hierarchize: std::fmt::Debug + Send + Sync {
     /// The repository root.
     ///
     /// This is usually the directory that contains the `repodata/` subdirectory.
@@ -28,18 +37,24 @@ pub trait Hierarchize: Clone + std::fmt::Debug + Send + Sync {
     /// Dispatches on the store: `Local` walks the filesystem (can use `jwalk`
     /// or `std::fs`, both much faster than `LocalFileSystem`), `Remote` lists
     /// the object store.
-    fn iter_rpms(
-        &self,
-        store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send;
+    fn iter_rpms<'a>(
+        &'a self,
+        store: &'a StoreBackend,
+    ) -> futures::future::BoxFuture<'a, futures::stream::BoxStream<'a, object_store::Result<LinkBuf>>>;
 }
 
-#[derive(Clone, Debug)]
-pub struct Satm0FlatHierarchy {
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct Satm0Flat {
     pub base: LinkBuf,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    #[serde(skip)]
+    #[serde(default = "crate::non_exhaustive")]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
-impl Hierarchize for Satm0FlatHierarchy {
+impl Hierarchize for Satm0Flat {
     fn basedir(&self) -> &Link {
         self.base.as_link()
     }
@@ -48,12 +63,13 @@ impl Hierarchize for Satm0FlatHierarchy {
         Some(LinkBuf::from(filename.as_str()))
     }
 
-    fn iter_rpms(
-        &self,
-        store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send {
+    fn iter_rpms<'a>(
+        &'a self,
+        store: &'a StoreBackend,
+    ) -> futures::future::BoxFuture<'a, futures::stream::BoxStream<'a, object_store::Result<LinkBuf>>>
+    {
         let base = self.base.clone();
-        async move {
+        Box::pin(async move {
             match store {
                 StoreBackend::Local => Box::pin(futures::stream::iter(
                     jwalk::WalkDir::new(base.as_str())
@@ -84,17 +100,24 @@ impl Hierarchize for Satm0FlatHierarchy {
                             .map(|r| r),
                     )
                 }
+                _ => unimplemented!(),
             }
-        }
+        })
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FedoraHierarchy {
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct Fedora {
     pub base: LinkBuf,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    #[serde(skip)]
+    #[serde(default = "crate::non_exhaustive")]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
-impl Hierarchize for FedoraHierarchy {
+impl Hierarchize for Fedora {
     fn basedir(&self) -> &Link {
         self.base.as_link()
     }
@@ -104,12 +127,13 @@ impl Hierarchize for FedoraHierarchy {
         Some(LinkBuf::from(format!("Packages/{first}/{}", filename.as_str())))
     }
 
-    fn iter_rpms(
-        &self,
-        store: &StoreBackend,
-    ) -> impl Future<Output = impl Stream<Item = object_store::Result<LinkBuf>> + Send> + Send {
+    fn iter_rpms<'a>(
+        &'a self,
+        store: &'a StoreBackend,
+    ) -> futures::future::BoxFuture<'a, futures::stream::BoxStream<'a, object_store::Result<LinkBuf>>>
+    {
         let base = self.base.join("Packages");
-        async move {
+        Box::pin(async move {
             match store {
                 StoreBackend::Local => Box::pin(futures::stream::iter(
                     jwalk::WalkDir::new(base.as_str())
@@ -140,7 +164,8 @@ impl Hierarchize for FedoraHierarchy {
                             .map(|r| r),
                     )
                 }
+                _ => unimplemented!(),
             }
-        }
+        })
     }
 }

@@ -9,6 +9,7 @@ path = "./lib.rs"
 [dependencies]
 async-trait = "0.1.92"
 crossbeam-channel = { workspace = true }
+enum_dispatch = "0.3.13"
 futures = "0.3.34"
 heed = { version = "0.22.1", default-features = false, features = [
   "serde-bincode",

@@ -12,11 +12,10 @@ use libsubatomic::{Cache, CacheConfig};
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
-fn configure(
-    args: &Cli,
-) -> Result<(CompConfig, Cache<libsubatomic::repo::hierarchy::Satm0FlatHierarchy>)> {
-    let hier = libsubatomic::repo::hierarchy::Satm0FlatHierarchy {
+fn configure(args: &Cli) -> Result<(CompConfig, Cache<libsubatomic::repo::hierarchy::Satm0Flat>)> {
+    let hier = libsubatomic::repo::hierarchy::Satm0Flat {
         base: args.output().display().to_string().into(),
+        ..
     };
     let mut metans: Metans = vec![
         Arc::new(PrimaryMetan::default()),
@@ -134,7 +133,7 @@ pub fn run(mut args: Cli) -> Result<()> {
 
 fn process_rpms_auto(
     args: &Cli,
-    cache: Arc<Cache<libsubatomic::repo::hierarchy::Satm0FlatHierarchy>>,
+    cache: Arc<Cache<libsubatomic::repo::hierarchy::Satm0Flat>>,
     comp_cfg: &CompConfig,
 ) -> Result<()> {
     let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
@@ -155,7 +154,7 @@ fn process_rpms_auto(
                 return Ok(());
             }
 
-            let Ok(filename) = kuchiyose::Kiri::from_path(&p) else {
+            let Ok(filename) = kuchiyose::Kiri::new(&p) else {
                 return Ok(());
             };
             let Some(link) = cache.cfg.hier.locate_relative(filename) else {

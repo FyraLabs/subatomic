@@ -41,12 +41,12 @@ pub struct CacheConfig<H: Hierarchize> {
     /// Preferred checksum algorithm for all generated metadata.
     pub ftmm: Ftmm,
 
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
     #[expect(private_interfaces)]
     pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
 /// Repository metadata cache.
-#[non_exhaustive]
 #[derive(Debug)]
 pub struct Cache<H: Hierarchize + Sync> {
     pub cfg: CacheConfig<H>,
@@ -155,7 +155,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
     pub fn compute(&self, path: &Path, input: ComputeInput) -> Res<Vec<MetanComputed>> {
         let ComputeInput { csum, link, .. } = input;
-        let filename = crate::Kiri::from_path(path)?;
+        let filename = crate::Kiri::new(path)?;
         let link = link.or(self.cfg.hier.locate_relative(filename)).ok_or(Error::HierRejectPath)?;
         let reader = rpm::PackageReader::open(path)?;
         let csum = match csum {
@@ -170,6 +170,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
             filename: filename.to_owned(),
             csum_type: self.cfg.ftmm,
             path: path.to_path_buf(),
+            ..
         };
         self.metans.par_iter().map(|metan| Res::Ok(metan.compute(&input)?)).collect()
     }
@@ -345,7 +346,9 @@ impl<H: Hierarchize + Sync> Cache<H> {
     pub async fn write_all(&self, comp_cfg: &CompConfig) -> Res<Vec<u8>> {
         tracing::info!("writing repodata");
         let repodata_dir = self.cfg.hier.basedir().join("repodata");
-        std::fs::create_dir_all(&repodata_dir)?;
+        if let StoreBackend::Local = &*self.cfg.store {
+            tokio::fs::create_dir_all(&repodata_dir).await?;
+        }
 
         let timestamp =
             SystemTime::now().duration_since(UNIX_EPOCH).expect("time underflow").as_secs() as i64;
@@ -397,8 +400,9 @@ impl<H: Hierarchize + Sync> Cache<H> {
             timestamp,
             size,
             open_size,
+            ..
         };
-        let ready = MetanReady { env: Arc::clone(&self.env), generation: Some(generation) };
+        let ready = MetanReady { env: Arc::clone(&self.env), generation: Some(generation), .. };
         Ok(metan.on_ready(ready)?)
     }
 
@@ -482,7 +486,6 @@ fn digest(ftmm: Ftmm, path: &Path) -> std::io::Result<String> {
 }
 
 /// Options to [`Cache::compute`].
-#[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 pub struct ComputeInput {
     /// Checksum of the package file. You MUST generate the checksum using [`CacheConfig::ftmm`].
@@ -491,6 +494,10 @@ pub struct ComputeInput {
     pub csum: Option<String>,
     /// The final location of the provided package, from [`Hierarchize::locate_relative`].
     pub link: Option<kuchiyose::LinkBuf>,
+
+    /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
+    #[expect(private_interfaces)]
+    pub non_exhaustive: crate::NonExhaustive = crate::NonExhaustive,
 }
 
 #[non_exhaustive]
@@ -520,7 +527,7 @@ pub enum Error {
 ///
 /// If `has()` returns false, the package can be added via [`FragRequest::Put`]. Obtain the
 /// computed vector via [`Cache::compute`].
-#[derive(Debug)]
+#[non_exhaustive]
 pub enum FragRequest {
     Cached,
     /// Request a new (cache-miss) package to be inserted.

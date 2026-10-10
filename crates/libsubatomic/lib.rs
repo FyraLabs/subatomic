@@ -1,5 +1,8 @@
 //! libsubatomic: handle rpm repositories
 //!
+//! libsubatomic is the underlying library for handling rpm repositories.
+//! Requries Rust nightly.
+//!
 //! # Usage
 //!
 //! The main entrypoint is [`Repo`]. Each associated methods roughly represent an API operation.
@@ -66,5 +69,8 @@ pub use smartstring;
 ///
 /// Use `MyStruct { field1, field2, .. }` to create a new instance. This is a workaround for the
 /// incompatibility between `#[non_exhaustive]` and `#[feature(default_field_values)]`.
-#[derive(Debug, Clone, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) struct NonExhaustive;
+pub(crate) fn non_exhaustive() -> NonExhaustive {
+    NonExhaustive
+}
