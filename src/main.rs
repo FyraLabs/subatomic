@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![feature(try_blocks_heterogeneous)]
+#![feature(try_blocks)]
+#![feature(default_field_values)]
 
 pub mod api;
 pub mod auth;
@@ -90,8 +91,8 @@ pub fn app(
         .route("/v1/repos/{name}/key", delete(api::repos::del_key))
         .route("/v1/repos/{name}/rpms", get(api::repos::list_rpms))
         .route("/v1/repos/{name}/rpms", post(api::repos::del_rpms))
-        .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
-        .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
+        // .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
+        // .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
         .route("/v1/repos/{name}/md/{md}", put(api::repos::upl_md))
         .route("/v1/repos/{name}/md/{md}", delete(api::repos::del_md))
         .route("/v1/keys", post(api::keys::create_key))

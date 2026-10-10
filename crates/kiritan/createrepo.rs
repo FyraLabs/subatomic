@@ -1,31 +1,45 @@
-#![allow(clippy::cast_possible_truncation)]
 use crate::cli::{Cli, CreaterepoMode};
 use color_eyre::Result;
 use color_eyre::eyre::bail;
 use jwalk::rayon::iter::{ParallelBridge, ParallelIterator};
-use libsubatomic::pkg::Package;
-use libsubatomic::repodata::{RepoCache, repomd::DataType};
-use std::os::unix::ffi::OsStrExt;
+use kuchiyose::comp::CompConfig;
+use kuchiyose::ftmm::Ftmm;
+use kuchiyose::store::StoreBackend;
+use libsubatomic::cache::FragRequest;
+use libsubatomic::metan_prelude::*;
+use libsubatomic::repo::hierarchy::Hierarchize;
+use libsubatomic::{Cache, CacheConfig};
 use std::sync::Arc;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info};
 
-/// Repo-relative href for a package, as repodata expects. Falls back to the
-/// filename when the path is not inside the repo root.
-fn href_for(path: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
-    path.strip_prefix(root).unwrap_or(path).to_path_buf()
-}
-
-pub fn run(args: Cli) -> Result<()> {
-    if !args.input.is_dir() {
-        bail!("input is not a directory: {}", args.input.display());
+fn configure(args: &Cli) -> Result<(CompConfig, Cache<libsubatomic::repo::hierarchy::Satm0Flat>)> {
+    let hier = libsubatomic::repo::hierarchy::Satm0Flat {
+        base: args.output().display().to_string().into(),
+        ..
+    };
+    let mut metans: Metans = vec![
+        Arc::new(PrimaryMetan::default()),
+        Arc::new(FilelistsMetan::default()),
+        Arc::new(OtherMetan::default()),
+    ];
+    if args.appstream {
+        let mut metan = AppstreamMetan::default();
+        metan.repo = args.repo_name.clone().into();
+        metans.push(Arc::new(metan) as Arc<dyn Metan>);
     }
-
-    std::fs::create_dir_all(args.output())?;
-
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, args.output())?;
-    cache.zstd_level = args.zstd_level;
-    cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
-
+    let cfg = CacheConfig {
+        repo: args.repo_name.clone().into(),
+        cache_dir: args.cache.clone(),
+        hier,
+        store: Arc::new(StoreBackend::Local),
+        lmdb_map_size: libsubatomic::cache::DEFAULT_MAP_SIZE,
+        ftmm: Ftmm::Sha256,
+        ..
+    };
+    let comp_cfg = CompConfig::Zstd(kuchiyose::comp::zstd::Cfg {
+        level: args.zstd_level,
+        multi: args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32),
+    });
     if let CreaterepoMode::Auto { no_cache: true } = args.mode
         && args.cache.exists()
     {
@@ -33,28 +47,42 @@ pub fn run(args: Cli) -> Result<()> {
         std::fs::remove_dir_all(&args.cache)?;
     }
     std::fs::create_dir_all(&args.cache)?;
+    let cache = Cache::new(cfg, metans)?;
+    Ok((comp_cfg, cache))
+}
+
+pub fn run(mut args: Cli) -> Result<()> {
+    if !args.input.is_dir() {
+        bail!("input is not a directory: {}", args.input.display());
+    }
+
+    std::fs::create_dir_all(args.output())?;
+
+    let (comp_cfg, cache) = configure(&args)?;
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
 
     let (add, remove, comps) = match args.mode {
         CreaterepoMode::Auto { .. } => {
-            process_rpms_auto(&args)?;
+            let cache = Arc::new(cache);
+            process_rpms_auto(&args, cache, &comp_cfg)?;
             return Ok(());
         }
-        CreaterepoMode::Manual { add, remove, comps } => (add, remove, comps),
+        CreaterepoMode::Manual { ref add, ref mut remove, ref comps } => (add, remove, comps),
         CreaterepoMode::Md { delete, key, file } => {
+            let repo = libsubatomic::Repo { tempdir: None, cache, sig: None, comp_cfg, .. };
             if delete {
-                cache.del_custom_datatype(&key)?;
+                rt.block_on(repo.del_custom(&key))?;
                 return Ok(());
             }
             let f = file.expect("filename should be provided unless with --delete");
-            let filename = f.file_name().expect("bad filename");
-            cache.update_custom_datatype(
-                DataType::Custom(key.into(), filename.to_string_lossy().into()),
-                &std::fs::read(&f)?,
-            )?;
+            let content = rt.block_on(tokio::fs::File::open(&f))?;
+            let Some(filename) = f.file_name().expect("bad filename").to_str() else {
+                bail!("invalid utf-8: {}", f.display())
+            };
+            rt.block_on(repo.write_custom(&key, filename, content))?;
             return Ok(());
         }
     };
-    let output = args.output.unwrap_or_else(|| args.input.join("repodata"));
 
     let cache = Arc::new(cache);
     let cache2 = Arc::clone(&cache);
@@ -65,118 +93,100 @@ pub fn run(args: Cli) -> Result<()> {
     });
 
     let len = add.len();
-
-    add.into_iter().enumerate().par_bridge().try_for_each(|(i, path)| {
-        info!(progress = format!("[{}/{len}]", i + 1), path = %path.display(), "parsing");
-        let Ok((pkg, mut rpmreader)) = Package::open(&path)
-            .inspect_err(|e| error!(path = %path.display(), error = %e, "skipping"))
+    add.iter().enumerate().par_bridge().for_each(|(i, p)| {
+        info!(progress = format!("[{}/{len}]", i + 1), path = %p.display(), "queued");
+        let Ok(computed) = cache
+            .compute(p, libsubatomic::cache::ComputeInput::default())
+            .inspect_err(|err| tracing::error!(?err, "cannot compute frag"))
         else {
-            return Ok(());
+            return;
         };
-        trace!(filename = %path.display(), "process");
-        let href = href_for(&path, &args.input);
-        let mut frag = libsubatomic::repodata::FragEph::new(&pkg, &href);
-        if args.appstream {
-            frag.app = libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));
-        }
-        trace!(filename = %path.display(), "sending");
-        tx.send((path, Some(frag))).expect("tx should be open");
-        libsubatomic::err::Res::Ok(())
-    })?;
+        tx.send((p.into(), FragRequest::Put(computed))).expect("can't send");
+    });
     drop(tx);
     joinhdl.join().expect("can't join")?;
 
     if !remove.is_empty() {
-        let to_remove: Vec<&[u8]> = remove.iter().map(String::as_bytes).collect();
-        for not_found in cache.delete_pkgs(&to_remove)? {
-            error!(not_found = %std::ffi::OsStr::from_bytes(not_found).display(), "some packages not found in cache");
+        let remove = std::mem::take(remove);
+        let to_remove: Vec<_> =
+            remove.into_iter().map(kuchiyose::Kirifuda::from_string).try_collect()?;
+        for not_found in cache.delete_pkgs(to_remove)? {
+            error!(not_found = not_found.as_str(), "some packages not found in cache");
         }
     }
 
-    let mut cache = Arc::into_inner(cache).expect("cache arc should be single");
-
+    let cache = Arc::into_inner(cache).expect("cache arc should be single");
+    let repo = libsubatomic::Repo { cache, comp_cfg: comp_cfg.clone(), .. };
     if let Some(comps_path) = comps {
-        let comps_bytes = std::fs::read(comps_path)?;
-        let dir = args.input.clone();
-        let repo = libsubatomic::Repo { dir, cache, sig: None, use_appstream: args.appstream };
-        // TODO: どっちに附則するかチグハグだね
-        // maybe add this fn to repocache too?
-        repo.add_comps(&comps_bytes)?;
-        cache = repo.cache;
+        let fd = rt.block_on(tokio::fs::File::open(comps_path))?;
+        rt.block_on(repo.write_custom("group", "comps.xml", fd))?;
     }
-
-    let mut datatypes = vec![DataType::Primary, DataType::Filelists, DataType::Other];
-    if args.appstream {
-        datatypes.push(DataType::Appstream);
-    }
-
     info!("writing repodata");
-    let _repomd = cache.write_all(&datatypes)?;
-
+    rt.block_on(repo.cache.write_all(&comp_cfg))?;
     if args.compact {
-        cache.compact_close()?;
+        repo.cache.compact_close()?;
     }
 
-    info!(dir = %output.display(), "repodata written");
+    info!(dir = %args.output().display(), "repodata written");
     Ok(())
 }
 
-fn process_rpms_auto(args: &Cli) -> Result<()> {
+fn process_rpms_auto(
+    args: &Cli,
+    cache: Arc<Cache<libsubatomic::repo::hierarchy::Satm0Flat>>,
+    comp_cfg: &CompConfig,
+) -> Result<()> {
     let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
-    let mut cache = RepoCache::new(&args.repo_name, &args.cache, args.output())?;
-    cache.zstd_level = args.zstd_level;
-    cache.zstd_multi = args.zstd_multi.try_into().unwrap_or_else(|_| num_cpus::get() as u32);
-    let cache = Arc::new(cache);
     let cache2 = Arc::clone(&cache);
 
     let joinhdl = std::thread::spawn(move || {
         cache2.update_frags(&rx).inspect_err(|e| tracing::error!(?e, "update_frags failed"))
     });
+
     jwalk::WalkDir::new(&args.input).into_iter().par_bridge().try_for_each_init(
         || {
             tracing::debug!("creating rtxn");
             cache.env.read_txn().expect("cannot create rtxn")
         },
-        |txn, fd| {
+        |txn, fd| -> Result<()> {
             let p = fd?.path();
             if !p.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("rpm")) {
-                return Ok::<_, color_eyre::Report>(());
-            }
-            if cache.db_epo.get(txn, p.as_os_str().as_encoded_bytes())?.is_some() {
-                tx.send((p, None))?;
                 return Ok(());
             }
-            let filename = p.file_name().expect("no filename");
-            debug!(filename = %filename.display(), "parsing");
-            let Ok((pkg, mut rpmreader)) = Package::open(&p)
-                .inspect_err(|e| error!(path = %p.display(), error = %e, "skipping"))
-            else {
+
+            let Ok(filename) = kuchiyose::Kiri::new(&p) else {
                 return Ok(());
             };
-            trace!(filename = %filename.display(), "process");
-            let href = href_for(&p, &args.input);
-            let mut frag = libsubatomic::repodata::FragEph::new(&pkg, &href);
-            if args.appstream {
-                frag.app =
-                    libsubatomic::repodata::Frag(Some(Package::appstream_frag(&mut rpmreader)?));
-            }
-            trace!(filename = %filename.display(), "sending");
-            tx.send((p, Some(frag)))?;
+            let Some(link) = cache.cfg.hier.locate_relative(filename) else {
+                return Ok(());
+            };
+            let mut input = libsubatomic::cache::ComputeInput::default();
+            input.link = Some(link);
+
+            let req = if cache.epo.get(txn, filename.as_bytes())?.is_some() {
+                FragRequest::Cached
+            } else {
+                let Ok(computed) = cache
+                    .compute(&p, input)
+                    .inspect_err(|err| tracing::error!(?err, "cannot compute frag"))
+                else {
+                    return Ok(());
+                };
+                FragRequest::Put(computed)
+            };
+            tx.send((p, req)).expect("can't send");
             Ok(())
         },
     )?;
-    drop(tx); // close
+
+    drop(tx);
     debug!("joining");
     let (n_new, n_cached) = joinhdl.join().expect("cannot join")?;
     info!(?n_new, ?n_cached, "all rpms processed");
 
-    let mut datatypes = vec![DataType::Primary, DataType::Filelists, DataType::Other];
-    if args.appstream {
-        datatypes.push(DataType::Appstream);
-    }
-
     info!("writing repodata");
-    let _repomd = cache.write_all(&datatypes)?;
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    rt.block_on(cache.write_all(comp_cfg))?;
 
     if args.compact {
         Arc::into_inner(cache).expect("cache arc should be single").compact_close()?;

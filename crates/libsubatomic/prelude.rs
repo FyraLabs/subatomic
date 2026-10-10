@@ -1,3 +1,6 @@
+//! Exports for convenience.
+//!
+//! This module does not follow semver. Use with caution.
 pub use itertools::Itertools;
 pub use rayon::prelude::*;
 pub use serde::{Deserialize, Serialize};
@@ -17,5 +20,6 @@ macro_rules! epoch {
 pub use crate::epoch;
 pub use crate::err::Res;
 
+pub use futures;
 pub use pgp;
 pub use rpm;

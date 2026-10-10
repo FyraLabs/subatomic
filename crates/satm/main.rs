@@ -8,6 +8,7 @@ mod api_client;
 
 mod cli;
 
+#[must_use]
 pub const fn convert_filter(
     filter: clap_verbosity_flag::log::LevelFilter,
 ) -> tracing_subscriber::filter::LevelFilter {

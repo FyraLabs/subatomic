@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![feature(slice_split_once)]
+#![feature(default_field_values)]
+#![feature(iterator_try_collect)]
 
 use clap::Parser;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};

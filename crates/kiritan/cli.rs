@@ -8,7 +8,7 @@ pub struct Cli {
     /// Path to directory for a list of rpms, which will be searched recursively.
     #[arg(default_value = ".")]
     pub input: PathBuf,
-    /// Path to the `repodata/` directory, where xml metadata will be written to.
+    /// Path to the parent directory of `repodata/` (where xml metadata will be written to).
     #[arg(short, long)]
     pub output: Option<PathBuf>,
     /// Path to cache directory, initialized automatically if it doesn't exist yet.
@@ -42,7 +42,7 @@ pub struct Cli {
 impl Cli {
     pub fn output(&self) -> &Path {
         static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-        self.output.as_deref().unwrap_or_else(|| DIR.get_or_init(|| self.input.join("repodata")))
+        self.output.as_deref().unwrap_or_else(|| DIR.get_or_init(|| self.input.clone()))
     }
 }
 

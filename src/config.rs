@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(Debug, serde::Deserialize)]
 pub struct Config {
     #[serde(default = "defaults::localhost")]
     pub server_host: String,
@@ -10,12 +10,16 @@ pub struct Config {
     #[serde(default = "defaults::_32")]
     pub db_max_conns: u32,
     pub jwt_secret: String,
-    #[serde(default = "defaults::subatomic_repos")]
-    pub storage_dir: PathBuf,
     #[serde(default = "defaults::kiritanpo_nabe")]
     pub cache_dir: PathBuf,
     #[serde(default = "defaults::_1_073_741_824")]
     pub body_limit: usize,
+    #[serde(default)]
+    pub storage: StorageConfig,
+    #[serde(default = "defaults::satm0")]
+    pub hierarchy: libsubatomic::repo::hierarchy::Hierarchy,
+    #[serde(default)]
+    pub compression: kuchiyose::comp::CompConfig,
 }
 
 impl Config {
@@ -42,7 +46,27 @@ impl Config {
     }
 }
 
+#[derive(Debug, Default, serde::Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageConfig {
+    #[default]
+    Local,
+    AWS,
+}
+impl StorageConfig {
+    pub fn to_store_backend(self) -> object_store::Result<kuchiyose::store::StoreBackend> {
+        Ok(match self {
+            Self::Local => kuchiyose::store::StoreBackend::Local,
+            Self::AWS => kuchiyose::store::StoreBackend::Remote(Arc::new(
+                object_store::aws::AmazonS3Builder::from_env().build()?,
+            )),
+        })
+    }
+}
+
 mod defaults {
+    use libsubatomic::repo::hierarchy as hier;
+
     pub fn localhost() -> String {
         String::from("localhost")
     }
@@ -64,5 +88,11 @@ mod defaults {
     /// the value is set to one that triggers the warning.
     pub const fn _1_073_741_824() -> usize {
         1_073_741_824
+    }
+    pub fn satm0() -> hier::Hierarchy {
+        hier::Hierarchy::Satm0Flat(hier::Satm0Flat {
+            base: kuchiyose::LinkBuf::from(subatomic_repos()),
+            ..
+        })
     }
 }

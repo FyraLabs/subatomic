@@ -1,10 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
-use libsubatomic::repodata::RepoCache;
+use kuchiyose::ftmm::Ftmm;
+use kuchiyose::store::StoreBackend;
+use libsubatomic::metan_prelude::*;
+use libsubatomic::repo::hierarchy::{Hierarchize, Hierarchy};
+use libsubatomic::{Cache, CacheConfig};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::validate::repo_name;
 use crate::{config::Config, error::Result};
+
+pub type Repo = libsubatomic::Repo<Hierarchy>;
 
 pub struct Locker {
     repolocks: RwLock<HashMap<String, RwLock<RepoHdl>>>,
@@ -46,13 +52,10 @@ impl Locker {
         let ret = f(self.repolocks.read().await.get(repo).unwrap().write().await).await;
         // TODO: handle error properly
         let mut w = self.repolocks.write().await;
-        let (_ /* key */, repohdl) = w.remove_entry(repo).unwrap();
-        let mut repohdl = repohdl.into_inner();
-        repohdl.repo = repohdl.repo.compact_cache().expect("cannot compact cache");
-        // NOTE: I feel like always keeping this in the cache makes chances for corruption higher…
-        // need second opinion
-        // w.insert(key, RwLock::new(repohdl));
+        let (_, repohdl) = w.remove_entry(repo).unwrap();
         drop(w);
+        let repohdl = repohdl.into_inner();
+        repohdl.repo.cache.compact_close()?;
         Ok(Some(ret))
     }
     #[tracing::instrument(skip(self))]
@@ -75,47 +78,72 @@ impl Locker {
 
 /// Thin wrapper around [`libsubatomic::Repo`].
 pub struct RepoHdl {
-    pub repo: libsubatomic::Repo,
+    pub repo: Repo,
 }
 
 impl RepoHdl {
     async fn new(pool: &sqlx::PgPool, config: &Config, repo_name: &str) -> Result<Option<Self>> {
         crate::validate::repo_name(repo_name)?;
         let Some(repo) =
-            sqlx::query_as::<_, crate::db::Repo>("SELECT * FROM repos WHERE name = $1")
-                .bind(repo_name)
+            sqlx::query_as!(crate::db::Repo, "SELECT * FROM repos WHERE name = $1", repo_name)
                 .fetch_optional(pool)
                 .await?
         else {
             return Ok(None);
         };
+        let mut hier = config.hierarchy.clone();
+        match &mut hier {
+            Hierarchy::Satm0Flat(inner) => inner.base = inner.base.join(repo_name),
+            Hierarchy::Fedora(inner) => inner.base = inner.base.join(repo_name),
+            _ => unreachable!(),
+        }
 
-        let repodir = config.storage_dir.join(repo_name);
-        let cache = RepoCache::new(repo_name, &config.cache_dir, &repodir.join("repodata"))
-            .map_err(libsubatomic::err::Error::from)?;
+        let cfg = CacheConfig {
+            repo: repo_name.into(),
+            cache_dir: config.cache_dir.clone(),
+            hier,
+            store: Arc::new(StoreBackend::Local),
+            ftmm: Ftmm::Sha256,
+            ..
+        };
+
+        let metans: Metans = vec![
+            Arc::new(PrimaryMetan::default()) as Arc<dyn Metan>,
+            Arc::new(FilelistsMetan::default()),
+            Arc::new(OtherMetan::default()),
+            // TODO: unhardcode?
+            {
+                let mut m = AppstreamMetan::default();
+                m.repo = repo_name.into();
+                Arc::new(m)
+            },
+        ];
+
+        let cache = Cache::new(cfg, metans).map_err(libsubatomic::Error::from)?;
 
         let sig = if let Some(key_id) = repo.key_id {
-            let key = sqlx::query_as::<_, crate::db::Key>("SELECT * FROM keys WHERE id = $1")
-                .bind(key_id)
-                .fetch_one(pool)
-                .await?;
-            Some(
-                libsubatomic::sig::Mgr::from_armor(&key.pri)
-                    .map_err(libsubatomic::err::Error::from)?,
-            )
+            let q = sqlx::query_as!(crate::db::Key, "SELECT * FROM keys WHERE id = $1", key_id);
+            let key = q.fetch_one(pool).await?;
+            Some(libsubatomic::sig::Mgr::from_armor(&key.pri).map_err(libsubatomic::Error::from)?)
         } else {
             None
         };
 
-        let repo = libsubatomic::Repo { cache, sig, use_appstream: true, dir: repodir };
+        let repo = libsubatomic::Repo {
+            tempdir: None,
+            cache,
+            sig,
+            comp_cfg: kuchiyose::comp::CompConfig::default(),
+            ..
+        };
 
         Ok(Some(Self { repo }))
     }
 
     pub async fn delete_physical(&self, config: Arc<Config>) -> Result<()> {
-        let path = config.storage_dir.join(&*self.repo.cache.repo);
-        if path.exists() {
-            tokio::fs::remove_dir_all(path).await?;
+        let link: kuchiyose::LinkBuf = config.hierarchy.basedir().join(&*self.repo.cache.cfg.repo);
+        if link.as_path().exists() {
+            tokio::fs::remove_dir_all(link.as_path()).await?;
         }
         Ok(())
     }

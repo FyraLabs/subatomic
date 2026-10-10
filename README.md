@@ -22,6 +22,12 @@ Requires Rust nightly.
 
 You should compile with `clang` to enable fat-LTO for `zstd`. See <https://lib.rs/crates/zstd-sys/features#feature-fat-lto>.
 
+## ⚙ Configuration
+
+The subatomic server can be configured mainly by environment variables. Supported variables include:
+- variables listed in the `Config` struct in `config.rs`
+- https://docs.rs/object_store/latest/object_store/aws/struct.AmazonS3Builder.html#method.from_env
+
 ## 📃 License
 
     Copyright (C) 2026  Fyra Labs
