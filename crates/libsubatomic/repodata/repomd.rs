@@ -3,6 +3,7 @@ use kuchiyose::ftmm::Ftmm;
 use kuchiyose::link::LinkBuf;
 
 #[derive(Clone, Debug, Serialize)]
+#[expect(non_camel_case_types)]
 pub struct repomd { // FIXME: how to make roottag lowercase properly
     #[serde(rename = "@xmlns")]
     pub xmlns: &'static str = "http://linux.duke.edu/metadata/repo",

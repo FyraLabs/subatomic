@@ -6,7 +6,7 @@
 
 pub mod hierarchy;
 
-use crate::{cache::FragRequest, prelude::*, repo::hierarchy::Hierarchize};
+use crate::{prelude::*, repo::hierarchy::Hierarchize};
 use kuchiyose::link::LinkBuf;
 use tokio::io::{AsyncRead, AsyncWriteExt};
 
@@ -29,6 +29,7 @@ pub struct Repo<H: Hierarchize> {
 }
 
 impl<H: Hierarchize> Repo<H> {
+    /*
     /// Enqueue local RPMs for insertion into the cache.
     ///
     /// This is synchronous; the caller must supply files that are already on disk.
@@ -58,7 +59,6 @@ impl<H: Hierarchize> Repo<H> {
         })
     }
 
-    /*
     /// Upsert packages, removing previous versions of the same (name, arch).
     ///
     /// # Errors
@@ -276,9 +276,10 @@ pub struct RegenerateOutput {
     pub repomd: Vec<u8>,
 }
 
+/*
 #[non_exhaustive]
 #[derive(Clone, Debug, Default)]
 struct AddReplaceOutput {
     pub bad_filenames: Vec<LinkBuf>,
     pub removed: Vec<crate::Kirifuda>,
-}
+}*/

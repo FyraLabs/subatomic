@@ -573,6 +573,7 @@ qg38sG21+aKNUiFFHynSF64O
         axum::extract::State(Arc::new(crate::repohdl::Locker::new(pool, cfg)))
     }
 
+    #[expect(dead_code)]
     struct States<A> {
         app: axum::Router,
         cfg: Arc<crate::config::Config>,

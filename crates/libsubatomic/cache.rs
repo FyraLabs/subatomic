@@ -13,7 +13,6 @@ use crate::repodata::{MetanGeneration, MetanReady, repomd};
 use kuchiyose::comp::{CompConfig, Mochi};
 use kuchiyose::ftmm::Ftmm;
 use kuchiyose::store::StoreBackend;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -278,6 +277,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(not_found)
     }
 
+    /*
     /// Remove every key not present in `expected`. Return the number removed.
     ///
     /// # Errors
@@ -296,6 +296,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         wtxn.commit()?;
         Ok(count)
     }
+    */
 
     /// Store a custom datatype's `repomd` fragment, and return the old instance.
     ///
@@ -312,12 +313,14 @@ impl<H: Hierarchize + Sync> Cache<H> {
         Ok(ret)
     }
 
+    /*
     /// # Errors
     /// Propagates LMDB errors.
     pub(crate) fn read_custom_datatype(&self, dt: &str) -> heed::Result<Option<repomd::Data>> {
         let txn = self.env.read_txn()?;
         self.cus.get(&txn, dt)
     }
+    */
 
     /// Delete a custom datatype's file and cache entry.
     ///

@@ -3,8 +3,6 @@
 use crate::prelude::*;
 pub use crate::repodata::MetanInput;
 
-pub type ParsePathOutput<'a> = kuchiyose::rpm::ParsePathOutput<'a>;
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Version {
     #[serde(rename = "@epoch")]
@@ -47,13 +45,14 @@ pub struct Size {
     pub archive: Option<u64>,
 }
 
+/*
 #[derive(Clone, Debug, Serialize)]
 pub struct HeaderRange {
     #[serde(rename = "@start")]
     pub start: u64,
     #[serde(rename = "@end")]
     pub end: u64,
-}
+}*/
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Dependencies {
