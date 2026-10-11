@@ -60,7 +60,7 @@ impl Config {
 pub enum StorageConfig {
     #[default]
     Local,
-    AWS,
+    Aws,
 }
 impl StorageConfig {
     pub fn to_store_backend(self) -> object_store::Result<kuchiyose::store::StoreBackend> {
