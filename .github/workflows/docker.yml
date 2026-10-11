@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     if: (github.event_name != 'pull_request' && ! github.event.pull_request.head.repo.fork) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork)
-    uses: korewaChino/actions/.github/workflows/docker.yml@5458e0d1f0fde38d71938de257a81be3b04c5d98
+    uses: FyraLabs/actions/.github/workflows/docker.yml@2c3af61a6d74f43a802f9b91487d33e302d4de00
     secrets: inherit
     permissions:
       contents: read
