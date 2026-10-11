@@ -1,5 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
+use figment::providers::Format;
+
 #[derive(Debug, serde::Deserialize)]
 pub struct Config {
     #[serde(default = "defaults::localhost")]
@@ -27,9 +29,16 @@ impl Config {
     ///
     /// # Errors
     /// Missing environment variables cause an error.
-    pub fn from_env() -> envy::Result<Self> {
-        _ = dotenvy::dotenv();
-        envy::from_env::<Self>()
+    pub fn new() -> figment::Result<Self> {
+        if let Err(err) = dotenvy::dotenv() {
+            tracing::warn!(?err, "could not load `.env`");
+        }
+        let cfg: Self = figment::Figment::new()
+            .merge(figment::providers::Toml::file("subatomic.toml"))
+            .merge(figment::providers::Env::raw())
+            .extract()?;
+        cfg.check();
+        Ok(cfg)
     }
 
     /// Check if all configurations are valid.

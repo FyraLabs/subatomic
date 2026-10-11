@@ -53,10 +53,8 @@ fn main() {
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("cannot build tokio");
+    let mut runtime = tokio::runtime::Builder::new_multi_thread();
+    let runtime = runtime.enable_all().build().expect("cannot build tokio");
     let handle = runtime.spawn(inner_main());
     loop {
         if handle.is_finished() {
@@ -105,9 +103,7 @@ pub fn app(
 }
 
 async fn inner_main() {
-    let config = Config::from_env().expect("cannot obtain config from env");
-    config.check();
-    let config = Arc::new(config);
+    let config = Arc::new(Config::new().expect("cannot obtain config"));
 
     let pool = create_pool(&config).await.expect("cannot create pool");
     let pool = Arc::new(pool);
