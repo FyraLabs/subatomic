@@ -1,25 +1,35 @@
 //! Repository-relative paths.
 //!
-//! [`Link`] and [`LinkBuf`] are the borrowed and owned forms of a path inside a
-//! repository. They are to repository paths what [`std::path::Path`] and
-//! [`std::path::PathBuf`] are to filesystem paths.
+//! [`Link`] and [`LinkBuf`] are the borrowed and owned forms of a path inside a repository. They
+//! are to repository paths what [`std::path::Path`] and [`std::path::PathBuf`] are to filesystem paths.
 //!
-//! Unlike [`std::path::Path`], a `Link` is always UTF-8. This is because RPM repository
-//! metadata (XML `href` attributes, `repomd.xml` locations, object-store keys) is UTF-8.
+//! Unlike [`std::path::Path`], a [`Link`] is always utf-8. This is because RPM repository metadata
+//! (XML `href` attributes, `repomd.xml` locations, object-store keys) is utf-8.
 //!
-//! Do not use `Link`/`LinkBuf` for paths that must be local (e.g. a temporary RPM file
-//! being parsed). Use `std::path::{Path, PathBuf}` there.
+//! Do NOT use [`Link`]/[`LinkBuf`] for that must be local (e.g. a temporary RPM file being parsed).
 
 use std::borrow::Borrow;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-/// A borrowed, repository-relative path.
+/// Borrowed (potentially remote) path to arbitrary files/directories in a repository.
+///
+/// [`LinkBuf`] (represented by [`String`]) is the owned version of [`Link`] (represented by [`str`]).
+///
+/// [`Link`]s MUST be utf-8 compliant (guaranteed by [`str`]) paths that respect the corresponding
+/// [`crate::store::StoreBackend`]:
+/// - [`crate::store::StoreBackend::Local`]: MUST be a valid path supported by the local filesystem
+/// - [`crate::store::StoreBackend::Remote`]: MUST be a valid path supported by the underlying
+/// remote storage.
 #[repr(transparent)]
 #[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Link(str);
 
-/// An owned, repository-relative path.
+/// Owned (potentially remote) path to arbitrary files/directories in a repository.
+///
+/// [`LinkBuf`] (represented by [`String`]) is the owned version of [`Link`] (represented by [`str`]).
+///
+/// For more information, see [`Link`].
 #[expect(clippy::unsafe_derive_deserialize)]
 #[derive(
     Clone,

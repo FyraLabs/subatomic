@@ -4,6 +4,7 @@ use futures::prelude::*;
 use itertools::Itertools;
 use kuchiyose::{Link, LinkBuf, store::StoreBackend};
 
+/// A static enum for all possible file hierarchies officially supported by `libsubatomic`.
 #[non_exhaustive]
 #[enum_dispatch::enum_dispatch]
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -13,30 +14,21 @@ pub enum Hierarchy {
 }
 
 // today years old when I realize many rust traits are named after English verbs
+/// Specification on how packages are organized in a package repository.
 #[enum_dispatch::enum_dispatch(Hierarchy)]
 pub trait Hierarchize: std::fmt::Debug + Send + Sync {
     /// The repository root.
     ///
     /// This is usually the directory that contains the `repodata/` subdirectory.
     /// This is analogous to the directory the `baseurl` field represents in `dnf`.
-    ///
-    /// * [`StoreBackend::Local`] — an absolute filesystem path.
-    /// * [`StoreBackend::Remote`] — a prefix inside the object store.
-    ///
-    /// Both are `Link` (UTF-8). For local, we require UTF-8 paths, which is
-    /// the same restriction we already impose on hrefs.
     fn basedir(&self) -> &Link;
 
     /// Path to an RPM, **relative to [`Self::basedir`]**.
     ///
-    /// This is what ends up as the `<location href>` and as the LMDB key.
+    /// This is what ends up as the `<location href>`.
     fn locate_relative(&self, filename: &crate::Kiri) -> Option<LinkBuf>;
 
     /// Every `.rpm` under the repo, **relative to [`Self::basedir`]**.
-    ///
-    /// Dispatches on the store: `Local` walks the filesystem (can use `jwalk`
-    /// or `std::fs`, both much faster than `LocalFileSystem`), `Remote` lists
-    /// the object store.
     fn iter_rpms<'a>(
         &'a self,
         store: &'a StoreBackend,
