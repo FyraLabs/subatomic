@@ -2552,6 +2552,7 @@ dependencies = [
  "itertools",
  "jwalk",
  "kuchiyose",
+ "memchr",
  "num_cpus",
  "object_store",
  "pgp",

@@ -302,20 +302,12 @@ impl super::Metan for PrimaryMetan {
     }
 }
 
+//? cr_is_primary
 pub fn is_primary(f: &rpm::FileEntry<'_>) -> bool {
-    const BIN: &[u8] = b"bin/";
-
     let p = f.path();
     let p = p.as_os_str().as_bytes();
 
     p.starts_with(b"/etc/")
         || p == b"/usr/lib/sendmail"
-        || 'b: {
-            for i in 0..p.len() - BIN.len() {
-                if &p[i..i + BIN.len()] == BIN {
-                    break 'b true;
-                }
-            }
-            false
-        }
+        || memchr::memmem::find(p, b"bin/").is_some()
 }

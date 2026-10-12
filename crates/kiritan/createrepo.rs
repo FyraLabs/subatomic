@@ -160,6 +160,7 @@ fn process_rpms_auto(
             let Some(link) = cache.cfg.hier.locate_relative(filename) else {
                 return Ok(());
             };
+            tracing::debug!(?filename, "processing");
             let mut input = libsubatomic::cache::ComputeInput::default();
             input.link = Some(link);
 
