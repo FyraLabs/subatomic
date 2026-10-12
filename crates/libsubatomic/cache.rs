@@ -49,11 +49,18 @@ pub struct CacheConfig<H: Hierarchize> {
 #[derive(Debug)]
 pub struct Cache<H: Hierarchize + Sync> {
     pub cfg: CacheConfig<H>,
-    /// The LMDB environment shared by all datatypes.
+    /// LMDB environment shared by all datatypes.
+    ///
+    /// Handler to the LMDB "session". Use this to create transactions for interacting with any
+    /// LMDB databases.
     pub env: Arc<heed::Env<heed::WithoutTls>>,
-    /// Package filename → last-seen unix micros. Drives incremental pruning.
+    /// Database used to mark existence of package. A record exists in this database iff the cache
+    /// acknowledges the package's existence, and violation of this condition results in (safe) UB.
+    ///
+    /// This is used in [`Self::update_frags`] to temporarily store an arbitrary unix epoch in μs
+    /// of all found packages, and records that do not have the correct latest epoch are removed.
     pub epo: MarkDb,
-    /// User-supplied custom datatypes keyed by [`repomd::DataType::as_type`].
+    /// User-supplied custom datatypes keyed by [`repomd::Data::r#type`].
     pub cus: DataDb,
     /// All datatypes this repo generates.
     metans: Metans,
@@ -378,7 +385,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
 
         // `StoreBackend::writer` is async because a remote backend must open a multipart upload.
         // For local files, this resolves immediately.
-        let writer = self.cfg.store.writer(&link).await.map_err(crate::err::Error::from)?;
+        let writer = self.cfg.store.writer(&link).await?;
 
         // Pipeline: metan → open-checksum → compression → checksum → store.
         let ftmm = self.cfg.ftmm;
@@ -387,7 +394,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
             let mut w = comp_cfg.to_mochi(&mut inner_mochi, ftmm);
 
             let env = Arc::clone(&self.env);
-            metan.on_generate(env, Box::pin(&mut w)).await.map_err(crate::err::Error::from)?;
+            metan.on_generate(env, Box::pin(&mut w)).await?;
             w.shutdown().await?;
 
             (w.size, w.ftmm.finalize())

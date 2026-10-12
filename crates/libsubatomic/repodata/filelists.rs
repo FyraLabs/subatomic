@@ -134,7 +134,7 @@ impl super::Metan for FilelistsMetan {
         w.write_all(self.db.len(&txn)?.to_string().as_bytes()).await?;
         w.write_all(b"\">").await?;
 
-        let (tx, rx) = crossbeam_channel::bounded(16);
+        let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 2);
         let env2 = Arc::clone(&env);
         let db2 = self.db.arc();
 

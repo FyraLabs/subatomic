@@ -99,7 +99,7 @@ impl StorageConfig {
     pub fn to_store_backend(self) -> object_store::Result<kuchiyose::store::StoreBackend> {
         Ok(match self {
             Self::Local => kuchiyose::store::StoreBackend::Local,
-            Self::AWS => kuchiyose::store::StoreBackend::Remote(Arc::new(
+            Self::Aws => kuchiyose::store::StoreBackend::Remote(Arc::new(
                 object_store::aws::AmazonS3Builder::from_env().build()?,
             )),
         })

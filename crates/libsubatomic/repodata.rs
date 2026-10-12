@@ -134,6 +134,7 @@ pub trait Metan: std::fmt::Debug + Send + Sync {
     /// several times successively (there are no side effects).
     fn del(&self, txn: &mut heed::RwTxn<'_>, path: &crate::Kiri) -> heed::Result<()>;
 
+    // v2: remove useless lifetimes
     /// Stream the full XML document to `w`.
     ///
     /// The writer is the head of a compression + hashing pipeline, so implementors should

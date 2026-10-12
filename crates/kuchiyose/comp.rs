@@ -1,9 +1,17 @@
+//! Helpers related to compression.
+//!
+//! This modules provides the [`CompConfigure`] trait and a static dispatch of all officially
+//! supported compression algorithms via the [`CompConfig`] enum.
+//! 
+//! [`Mochi`] also resides in this module, which is a writer that performs hashing while writing.
 use crate::ftmm::{Ftmm, FtmmDigest};
 use tokio::io::AsyncWrite;
 
 /// A configuration trait that supports turning into [`AsyncWrite`].
 pub trait CompConfigure: crate::Sealed {
+    /// Create the actual compression writer from the configuration.
     fn to_async_write<'a, W: AsyncWrite + 'a>(&'a self, inner: W) -> impl AsyncWrite;
+    /// File extension (typical) of the compresion algorithm.
     fn ext(&self) -> &'static str;
 }
 
@@ -11,6 +19,7 @@ macro_rules! comp_algs {
     ($($alg:ident),*$(,)?) => {
         $(pub mod $alg;)*
         ::preinterpret::preinterpret! {
+            /// A static dispatch enum for all supported compression algorithms.
             #[non_exhaustive]
             #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[serde(rename_all = "snake_case")]
@@ -30,6 +39,7 @@ macro_rules! comp_algs {
                     }
                 }
 
+                /// File extension (typical) of the compresion algorithm.
                 pub fn ext(&self) -> &'static str {
                     match self {
                         $(Self::[!ident_camel! $alg](cfg) => cfg.ext(),)*

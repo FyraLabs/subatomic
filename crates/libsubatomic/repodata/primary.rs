@@ -192,11 +192,9 @@ impl super::Metan for PrimaryMetan {
                 installed: rpm.get_installed_size()?,
                 archive: rpm
                     .header
-                    .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                    .or_else(|_e| {
-                        rpm.header
-                            .get_entry_data_as_u32(rpm::IndexTag::RPMTAG_ARCHIVESIZE)
-                            .map(u64::from)
+                    .get_entry_data_as_u64(rpm::IndexTag::RPMTAG_PAYLOADSIZEALT)
+                    .or_else(|_| {
+                        rpm.header.get_entry_data_as_u64(rpm::IndexTag::RPMTAG_LONGARCHIVESIZE)
                     })
                     .ok(),
             },
@@ -279,7 +277,7 @@ impl super::Metan for PrimaryMetan {
         w.write_all(self.db.len(&txn)?.to_string().as_bytes()).await?;
         w.write_all(b"\">").await?;
 
-        let (tx, rx) = crossbeam_channel::bounded(16);
+        let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 2);
         let env2 = std::sync::Arc::clone(&env);
         let db2 = self.db.arc();
 

@@ -41,8 +41,9 @@ pub struct Size {
     pub installed: u64,
     // archive size seems to be optional on some packages when testing with terra44 dataset,
     // so we can avoid serializing it if it's not present
+    // https://github.com/rpm-software-management/createrepo_c/blob/79689ed308d6602c19c14148b89a5bd61906ff37/src/package_internal.h#L57
     #[serde(rename = "@archive", skip_serializing_if = "Option::is_none")]
-    pub archive: Option<u64>,
+    pub archive: Option<u64>, // ? "size of archive (I have no idea what does it mean)"
 }
 
 /*

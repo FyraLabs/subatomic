@@ -37,6 +37,7 @@ pub trait Hierarchize: std::fmt::Debug + Send + Sync {
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Satm0Flat {
+    /// Path to root directory of repository.
     pub base: LinkBuf,
 
     /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
@@ -100,6 +101,7 @@ impl Hierarchize for Satm0Flat {
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Fedora {
+    /// Path to root directory of repository.
     pub base: LinkBuf,
 
     /// Force struct constructions to use the `MyStruct { fields, .. }` notation.
