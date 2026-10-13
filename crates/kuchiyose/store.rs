@@ -258,7 +258,7 @@ impl AsyncWrite for MultipartUploadWriter {
                 other => return other,
             }
 
-            let Self::Active { mut upload, buffer, mut ongoing } =
+            let Self::Active { mut upload, buffer, ongoing } =
                 std::mem::replace(self.as_mut().get_mut(), Self::Done)
             else {
                 unreachable!()
