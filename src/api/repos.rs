@@ -564,6 +564,7 @@ qg38sG21+aKNUiFFHynSF64O
                 compression: Default::default(),
                 cache_dir: cache_dir.path().to_owned(),
                 body_limit: 10_485_760,
+                sentry_dsn: None,
             }),
             (storage_dir, cache_dir),
         )
