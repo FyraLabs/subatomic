@@ -227,7 +227,6 @@ impl From<rpm::ChangelogEntry> for Changelog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Cursor, Write};
 
     // ── Version::parse ──────────────────────────────────────────────
     #[test]

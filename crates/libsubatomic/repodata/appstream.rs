@@ -104,7 +104,7 @@ mod tests {
 
     fn run_str(pkgname: &str, xml: &str) -> String {
         let out = run(pkgname, xml, None).unwrap();
-        String::from_utf8(out).unwrap()
+        std::string::String::from_utf8(out).unwrap().into()
     }
 
     #[test]

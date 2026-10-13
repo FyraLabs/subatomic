@@ -528,6 +528,7 @@ pub enum Error {
 ///
 /// ```
 /// use libsubatomic::repo::hierarchy::Hierarchize;
+/// use kuchiyose::Kiri;
 ///
 /// fn has<H: Hierarchize>(cache: libsubatomic::Cache<H>, filename: &Kiri) -> heed::Result<bool> {
 ///     let txn = cache.env.read_txn()?;

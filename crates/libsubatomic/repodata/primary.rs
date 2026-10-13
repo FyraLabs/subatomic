@@ -310,9 +310,10 @@ impl super::Metan for PrimaryMetan {
 
 //? cr_is_primary
 pub fn is_primary(f: &rpm::FileEntry<'_>) -> bool {
-    let p = f.path();
-    let p = p.as_os_str().as_bytes();
+    inner_is_primary(f.path().as_os_str().as_bytes())
+}
 
+fn inner_is_primary(p: &[u8]) -> bool {
     p.starts_with(b"/etc/")
         || p == b"/usr/lib/sendmail"
         || memchr::memmem::find(p, b"bin/").is_some()
@@ -320,69 +321,71 @@ pub fn is_primary(f: &rpm::FileEntry<'_>) -> bool {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     // ── is_primary ──────────────────────────────────────────────────
     #[test]
     fn is_primary_etc() {
-        assert!(FileEntry::new("/etc/foo").is_primary());
-        assert!(FileEntry::new("/etc/").is_primary());
-        assert!(FileEntry::new("/etc/passwd").is_primary());
-        assert!(!FileEntry::new("/etc").is_primary());
-        assert!(!FileEntry::new("/etcfoo").is_primary());
+        assert!(inner_is_primary(b"/etc/foo"));
+        assert!(inner_is_primary(b"/etc/"));
+        assert!(inner_is_primary(b"/etc/passwd"));
+        assert!(!inner_is_primary(b"/etc"));
+        assert!(!inner_is_primary(b"/etcfoo"));
     }
 
     #[test]
     fn is_primary_sendmail() {
-        assert!(FileEntry::new("/usr/lib/sendmail").is_primary());
-        assert!(!FileEntry::new("/usr/lib/sendmail/foo").is_primary());
-        assert!(!FileEntry::new("/usr/lib/sendmail2").is_primary());
+        assert!(inner_is_primary(b"/usr/lib/sendmail"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmail/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmail2"));
     }
 
     #[test]
     fn is_primary_bin_variants() {
-        assert!(FileEntry::new("/usr/bin/bash").is_primary());
-        assert!(FileEntry::new("/bin/ls").is_primary());
-        assert!(FileEntry::new("/opt/bin/foo").is_primary());
-        assert!(FileEntry::new("/usr/local/bin/app").is_primary());
-        assert!(FileEntry::new("bin/foo").is_primary()); // contains bin/
-        assert!(FileEntry::new("/a/bin/b").is_primary());
+        assert!(inner_is_primary(b"/usr/bin/bash"));
+        assert!(inner_is_primary(b"/bin/ls"));
+        assert!(inner_is_primary(b"/opt/bin/foo"));
+        assert!(inner_is_primary(b"/usr/local/bin/app"));
+        assert!(inner_is_primary(b"bin/foo")); // contains bin/
+        assert!(inner_is_primary(b"/a/bin/b"));
     }
 
     #[test]
     fn is_primary_negative() {
-        assert!(!FileEntry::new("/usr/share/doc/foo").is_primary());
-        assert!(!FileEntry::new("/var/lib/foo").is_primary());
-        assert!(!FileEntry::new("/usr/libexec/foo").is_primary());
-        assert!(!FileEntry::new("/tmp/foo").is_primary());
-        assert!(!FileEntry::new("/usr/lib/sendmailfoo").is_primary());
+        assert!(!inner_is_primary(b"/usr/share/doc/foo"));
+        assert!(!inner_is_primary(b"/var/lib/foo"));
+        assert!(!inner_is_primary(b"/usr/libexec/foo"));
+        assert!(!inner_is_primary(b"/tmp/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmailfoo"));
         // "binary" contains "bin" but not "bin/" -> not primary
-        assert!(!FileEntry::new("/usr/binary/foo").is_primary());
-        assert!(!FileEntry::new("/usr/lib/foo").is_primary());
-        assert!(!FileEntry::new("/opt/lib/foo").is_primary());
+        assert!(!inner_is_primary(b"/usr/binary/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/foo"));
+        assert!(!inner_is_primary(b"/opt/lib/foo"));
     }
 
     #[test]
     fn is_primary_sbin_is_primary() {
         // "sbin/" contains "bin/" substring -> considered primary (createrepo_c uses strstr("bin/"))
-        assert!(FileEntry::new("/sbin/foo").is_primary());
-        assert!(FileEntry::new("/usr/sbin/foo").is_primary());
+        assert!(inner_is_primary(b"/sbin/foo"));
+        assert!(inner_is_primary(b"/usr/sbin/foo"));
     }
 
     #[test]
     fn is_primary_short_paths_no_panic() {
         // previously impl did `0..p.len()-4` which panics on short paths
-        assert!(!FileEntry::new("/").is_primary());
-        assert!(!FileEntry::new("/a").is_primary());
-        assert!(!FileEntry::new("").is_primary());
-        assert!(!FileEntry::new("ab").is_primary());
-        assert!(!FileEntry::new("/ab").is_primary());
-        assert!(!FileEntry::new("/bin").is_primary()); // no trailing slash, no "bin/"
+        assert!(!inner_is_primary(b"/"));
+        assert!(!inner_is_primary(b"/a"));
+        assert!(!inner_is_primary(b""));
+        assert!(!inner_is_primary(b"ab"));
+        assert!(!inner_is_primary(b"/ab"));
+        assert!(!inner_is_primary(b"/bin")); // no trailing slash, no "bin/"
     }
 
     #[test]
     fn is_primary_bin_at_edges() {
-        assert!(FileEntry::new("bin/").is_primary());
-        assert!(FileEntry::new("/bin/").is_primary());
-        assert!(FileEntry::new("a/bin/b").is_primary());
+        assert!(inner_is_primary(b"bin/"));
+        assert!(inner_is_primary(b"/bin/"));
+        assert!(inner_is_primary(b"a/bin/b"));
     }
 
     // ── get_header_byte_range ───────────────────────────────────────
@@ -391,14 +394,14 @@ mod test {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../random-rpm-examples/terra-release-44-4.noarch.rpm");
         let mut f = std::fs::File::open(&path).unwrap();
-        let range = Package::get_header_byte_range(&mut f).unwrap();
+        let range = get_header_byte_range(&mut f).unwrap();
         let meta = f.metadata().unwrap();
         assert!(range.start >= 112);
         assert!(range.end > range.start);
         assert!(range.end <= meta.len());
         // idempotent
         let mut f2 = std::fs::File::open(&path).unwrap();
-        let range2 = Package::get_header_byte_range(&mut f2).unwrap();
+        let range2 = get_header_byte_range(&mut f2).unwrap();
         assert_eq!(range.start, range2.start);
         assert_eq!(range.end, range2.end);
     }
@@ -409,7 +412,7 @@ mod test {
         // file shorter than 106 bytes -> read_exact fails
         tmp.write_all(&[0u8; 50]).unwrap();
         tmp.seek(std::io::SeekFrom::Start(0)).unwrap();
-        let res = Package::get_header_byte_range(&mut tmp);
+        let res = get_header_byte_range(&mut tmp);
         assert!(res.is_err());
     }
 
@@ -425,7 +428,7 @@ mod test {
         tmp.write_all(&[1, 0]).unwrap();
         tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
         tmp.write_all(&[2, 0]).unwrap();
-        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        let range = get_header_byte_range(&mut tmp).unwrap();
         assert_eq!(range.start, 128);
         assert_eq!(range.end, 176);
     }
@@ -441,7 +444,7 @@ mod test {
         // hdrstart = 112+5+3=120, so hdr fields at 128
         tmp.seek(std::io::SeekFrom::Start(128)).unwrap();
         tmp.write_all(&[0, 1]).unwrap();
-        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        let range = get_header_byte_range(&mut tmp).unwrap();
         assert_eq!(range.start, 120);
         assert_eq!(range.end, 137);
     }
@@ -456,7 +459,7 @@ mod test {
         // hdrstart 128, hdr at 136
         tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
         tmp.write_all(&[0, 8]).unwrap(); // hdrsize 24
-        let range = Package::get_header_byte_range(&mut tmp).unwrap();
+        let range = get_header_byte_range(&mut tmp).unwrap();
         assert_eq!(range.start, 128);
         assert_eq!(range.end, 152); // 128+24
     }

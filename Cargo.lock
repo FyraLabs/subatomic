@@ -2566,6 +2566,7 @@ dependencies = [
  "sha2 0.11.0",
  "smallvec",
  "smartstring",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",

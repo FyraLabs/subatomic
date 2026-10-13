@@ -40,7 +40,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 signal-hook = "0.4.4"
 srmw = { git = "https://github.com/madonuko/srmw" }
-tempfile = "3.27.0"
+tempfile.workspace = true
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { version = "0.7.19", features = ["compat"] }
@@ -63,6 +63,7 @@ pgp = "0.20.0"                                                         # fixed b
 rayon = "1.12.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+tempfile = "3.27.0"
 thiserror = "2.0.19"
 tracing = "0.1.44"
 tracing-logfmt = "0.3.7"

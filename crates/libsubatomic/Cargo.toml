@@ -39,6 +39,7 @@ zstd = { version = "0.14.2", features = ["zstdmt", "fat-lto"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -554,6 +554,7 @@ qg38sG21+aKNUiFFHynSF64O
                 jwt_secret: "cad4a3a28cfdb1a464e26e5851e6cd44a95fd8c57c117d294a9e8391e70274d2"
                     .into(),
                 storage: crate::config::StorageConfig::Local,
+                store: kuchiyose::store::StoreBackend::Local,
                 hierarchy: libsubatomic::repo::hierarchy::Hierarchy::Satm0Flat(
                     libsubatomic::repo::hierarchy::Satm0Flat {
                         base: storage_dir.path().into(),
