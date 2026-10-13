@@ -40,8 +40,9 @@ pub enum StoreErr {
 ///
 /// See [`Self::writer()`] for more information.
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum StoreBackend {
+    #[default]
     Local,
     Remote(Arc<dyn object_store::ObjectStore>),
 }

@@ -45,6 +45,8 @@ pub struct Config {
     /// Type of the package storage (store). Store is where your RPMs will be stored.
     #[serde(default)]
     pub storage: StorageConfig,
+    #[serde(default, skip)]
+    pub store: kuchiyose::store::StoreBackend,
     /// File hierarchy of the repositories. This is where you specify the path to the repositories.
     #[serde(default = "defaults::satm0")]
     pub hierarchy: libsubatomic::repo::hierarchy::Hierarchy,
@@ -61,10 +63,11 @@ impl Config {
         if let Err(err) = dotenvy::dotenv() {
             tracing::warn!(?err, "could not load `.env`");
         }
-        let cfg: Self = figment::Figment::new()
+        let mut cfg: Self = figment::Figment::new()
             .merge(figment::providers::Toml::file("subatomic.toml"))
             .merge(figment::providers::Env::raw())
             .extract()?;
+        cfg.store = cfg.storage.to_store_backend().expect("cannot obtain store");
         cfg.check();
         Ok(cfg)
     }

@@ -1,7 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
 use kuchiyose::ftmm::Ftmm;
-use kuchiyose::store::StoreBackend;
 use libsubatomic::metan_prelude::*;
 use libsubatomic::repo::hierarchy::{Hierarchize, Hierarchy};
 use libsubatomic::{Cache, CacheConfig};
@@ -102,7 +101,7 @@ impl RepoHdl {
             repo: repo_name.into(),
             cache_dir: config.cache_dir.clone(),
             hier,
-            store: Arc::new(StoreBackend::Local),
+            store: Arc::new(config.store.clone()),
             ftmm: Ftmm::Sha256,
             ..
         };
