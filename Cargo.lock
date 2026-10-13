@@ -2677,34 +2677,18 @@ dependencies = [
 
 [[package]]
 name = "kiritan"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "clap",
  "color-eyre",
  "crossbeam-channel",
  "jwalk",
- "kuchiyose",
  "libsubatomic",
+ "libsubatomic-kuchiyose",
  "num_cpus",
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "kuchiyose"
-version = "1.1.0"
-dependencies = [
- "async-compression",
- "atoi 3.1.0",
- "futures",
- "object_store",
- "preinterpret",
- "serde",
- "sha2 0.11.1",
- "thiserror",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2782,7 +2766,7 @@ dependencies = [
 
 [[package]]
 name = "libsubatomic"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
@@ -2792,7 +2776,7 @@ dependencies = [
  "hex",
  "itertools",
  "jwalk",
- "kuchiyose",
+ "libsubatomic-kuchiyose",
  "memchr",
  "num_cpus",
  "object_store",
@@ -2813,6 +2797,22 @@ dependencies = [
  "tokio-util",
  "tracing",
  "zstd",
+]
+
+[[package]]
+name = "libsubatomic-kuchiyose"
+version = "1.1.1"
+dependencies = [
+ "async-compression",
+ "atoi 3.1.0",
+ "futures",
+ "object_store",
+ "preinterpret",
+ "serde",
+ "sha2 0.11.1",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5208,9 +5208,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "srmw"
-version = "0.1.1"
-source = "git+https://github.com/madonuko/srmw#2869851518409bf357d92f26d27184e868517962"
+name = "srmw-sendable"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e8146b14171ee61970b2647e6e3560deee32bcbfa1d520e8501faa60517d6e8"
 dependencies = [
  "async-std",
  "futures",
@@ -5249,8 +5250,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "subatomic"
-version = "1.1.1"
+name = "subatomic-server"
+version = "1.1.2"
 dependencies = [
  "axum",
  "crossbeam-channel",
@@ -5260,8 +5261,8 @@ dependencies = [
  "hex",
  "http-body-util",
  "jsonwebtoken",
- "kuchiyose",
  "libsubatomic",
+ "libsubatomic-kuchiyose",
  "num_cpus",
  "object_store",
  "rayon",
@@ -5271,7 +5272,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "sqlx",
- "srmw",
+ "srmw-sendable",
  "tempfile",
  "thiserror",
  "tokio",

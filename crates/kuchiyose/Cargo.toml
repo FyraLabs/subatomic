@@ -1,9 +1,17 @@
 [package]
-name = "kuchiyose"
-version = "1.1.0"
+name = "libsubatomic-kuchiyose"
+version = "1.1.1"
 edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "Wrappers and utilities for libsubatomic"
+homepage = "https://github.com/FyraLabs/subatomic/tree/main/crates/kuchiyose"
+repository = "https://github.com/FyraLabs/subatomic"
+readme = "README.md"
+keywords = ["fedora", "dnf", "rpm", "repodata", "createrepo"]
+categories = ["api-bindings"]
 
 [lib]
+name = "kuchiyose"
 path = "./lib.rs"
 
 [dependencies]
