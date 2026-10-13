@@ -2,6 +2,13 @@
 name = "satm"
 version = "1.1.0"
 edition = "2024"
+license = "AGPL-3.0-or-later"
+description = "CLI web client for subatomic-server"
+homepage = "https://github.com/FyraLabs/subatomic/tree/main/crates/satm"
+repository = "https://github.com/FyraLabs/subatomic"
+readme = "README.md"
+keywords = ["fedora", "dnf", "rpm", "repodata", "createrepo"]
+categories = ["development-tools::build-utils", "command-line-utilities", "api-bindings"]
 
 [[bin]]
 name = "satm"
