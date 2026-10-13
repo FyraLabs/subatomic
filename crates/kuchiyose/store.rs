@@ -155,7 +155,7 @@ pub enum MultipartUploadWriter {
         /// A pool of ongoing futures of uploading tasks.
         ongoing: FuturesUnordered<UploadPart>,
     },
-    /// The writer is finalizing by calling [`MulitpartUpload::complete()`].
+    /// The writer is finalizing by calling [`MultipartUpload::complete()`].
     ///
     /// Currently the result of the future [`object_store::PutResult`] is discarded. Errors are
     /// propagated in shutdown.
@@ -187,7 +187,11 @@ impl MultipartUploadWriter {
     // to force `upload` to be moved into the future, take ownership.
     async fn complete(
         mut upload: Box<dyn MultipartUpload + 'static>,
+        mut ongoing: FuturesUnordered<UploadPart>,
     ) -> object_store::Result<object_store::PutResult> {
+        while let Some(res) = ongoing.next().await {
+            res?;
+        }
         upload.complete().await
     }
 }
@@ -230,23 +234,17 @@ impl AsyncWrite for MultipartUploadWriter {
         }
         Poll::Ready(Ok(buf.len()))
     }
-
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let Self::Active { upload, buffer, ongoing } = self.get_mut() else {
-            tracing::error!("write to inactive MultipartUploadWriter");
+        tracing::warn!("MultipartUploadWriter::poll_flush called");
+        let Self::Active { ongoing, .. } = self.get_mut() else {
+            tracing::error!("flush on inactive MultipartUploadWriter");
             return Poll::Ready(Ok(()));
         };
-        // keep the capacity
-        #[allow(clippy::drain_collect)]
-        let bytes: Vec<u8> = buffer.drain(..).collect();
-        ongoing.push(upload.put_part(PutPayload::from_bytes(bytes.into())));
 
         loop {
             match ongoing.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => {}
-                Poll::Ready(Some(Err(e))) => {
-                    return Poll::Ready(Err(io::Error::other(e)));
-                }
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(io::Error::other(e))),
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(None) => return Poll::Ready(Ok(())),
             }
@@ -257,21 +255,32 @@ impl AsyncWrite for MultipartUploadWriter {
         if let Self::Active { .. } = self.as_mut().get_mut() {
             match self.as_mut().poll_flush(cx) {
                 Poll::Ready(Ok(())) => {}
-                others => return others,
+                other => return other,
             }
-            let Self::Active { upload, .. } =
+
+            let Self::Active { mut upload, buffer, ongoing } =
                 std::mem::replace(self.as_mut().get_mut(), Self::Done)
             else {
                 unreachable!()
             };
-            *self.as_mut().get_mut() = Self::Completing { fut: Box::pin(Self::complete(upload)) };
+
+            if !buffer.is_empty() {
+                ongoing.push(upload.put_part(PutPayload::from_bytes(buffer.into())));
+            }
+
+            *self.as_mut().get_mut() =
+                Self::Completing { fut: Box::pin(Self::complete(upload, ongoing)) };
         } else if let Self::Done = self.as_mut().get_mut() {
-            tracing::warn!("calling shutdown to MultipartUploadWriter::Done");
+            tracing::warn!("shutdown called on MultipartUploadWriter::Done");
             return Poll::Ready(Ok(()));
         }
+
         let Self::Completing { fut } = self.as_mut().get_mut() else { unreachable!() };
         match fut.poll_unpin(cx) {
-            Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),
+            Poll::Ready(Ok(_)) => {
+                *self.as_mut().get_mut() = Self::Done;
+                Poll::Ready(Ok(()))
+            }
             Poll::Ready(Err(e)) => Poll::Ready(Err(io::Error::other(e))),
             Poll::Pending => Poll::Pending,
         }
