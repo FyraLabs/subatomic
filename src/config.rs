@@ -42,6 +42,8 @@ pub struct Config {
     /// to allow larger package uploads.
     #[serde(default = "defaults::_1_073_741_824")]
     pub body_limit: usize,
+    #[serde(default)]
+    pub sentry_dsn: Option<String>,
     /// Type of the package storage (store). Store is where your RPMs will be stored.
     #[serde(default)]
     pub storage: StorageConfig,
@@ -98,6 +100,7 @@ pub enum StorageConfig {
     /// [`object_store::aws::AmazonS3Builder::from_env`].
     Aws,
 }
+
 impl StorageConfig {
     pub fn to_store_backend(self) -> object_store::Result<kuchiyose::store::StoreBackend> {
         Ok(match self {
