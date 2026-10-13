@@ -80,9 +80,8 @@ pub async fn del_key(
     let q = sqlx::query!("DELETE FROM keys WHERE id = $1", id);
     let q = q.execute(&*pool).await;
     if q.as_ref().is_err_and(|e| {
-        e.as_database_error().is_some_and(|e| {
-            e.is_foreign_key_violation() || e.code().is_some_and(|c| c == "23001")
-        })
+        e.as_database_error()
+            .is_some_and(|e| e.is_foreign_key_violation() || e.code().is_some_and(|c| c == "23001"))
     }) {
         return Ok((StatusCode::CONFLICT, "the key is still in use (by another repo)"));
     }

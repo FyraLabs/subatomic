@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![feature(try_blocks_heterogeneous)]
+#![feature(try_blocks)]
+#![feature(default_field_values)]
 
 pub mod api;
 pub mod auth;
@@ -7,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod repohdl;
+pub mod validate;
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -51,10 +53,8 @@ fn main() {
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("cannot build tokio");
+    let mut runtime = tokio::runtime::Builder::new_multi_thread();
+    let runtime = runtime.enable_all().build().expect("cannot build tokio");
     let handle = runtime.spawn(inner_main());
     loop {
         if handle.is_finished() {
@@ -89,8 +89,8 @@ pub fn app(
         .route("/v1/repos/{name}/key", delete(api::repos::del_key))
         .route("/v1/repos/{name}/rpms", get(api::repos::list_rpms))
         .route("/v1/repos/{name}/rpms", post(api::repos::del_rpms))
-        .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
-        .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
+        // .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
+        // .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
         .route("/v1/repos/{name}/md/{md}", put(api::repos::upl_md))
         .route("/v1/repos/{name}/md/{md}", delete(api::repos::del_md))
         .route("/v1/keys", post(api::keys::create_key))
@@ -103,9 +103,7 @@ pub fn app(
 }
 
 async fn inner_main() {
-    let config = Config::from_env().expect("cannot obtain config from env");
-    config.check();
-    let config = Arc::new(config);
+    let config = Arc::new(Config::new().expect("cannot obtain config"));
 
     let pool = create_pool(&config).await.expect("cannot create pool");
     let pool = Arc::new(pool);
