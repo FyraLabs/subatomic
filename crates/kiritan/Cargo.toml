@@ -1,6 +1,6 @@
 [package]
 name = "kiritan"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 description = "Next-generation modern RPM repository metadata generator"
@@ -15,8 +15,10 @@ color-eyre = "0.6.5"
 crossbeam-channel = { workspace = true }
 # WARN: deprecated
 jwalk = "0.9.0"
+kuchiyose = { workspace = true }
 libsubatomic = { path = "../libsubatomic" }
 num_cpus = "1.17.0"
+tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

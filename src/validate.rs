@@ -33,7 +33,7 @@ pub fn rpm_filename(name: &str) -> Result<(), ApiError> {
         return Err(ApiError::BadRequest("filename must end with .rpm".into()));
     }
     // also ensure parseable as rpm filename
-    if libsubatomic::pkg::parse_filename(name.as_bytes()).is_none() {
+    if kuchiyose::rpm::parse_filename(kuchiyose::Kiri::from_str(name)?).is_none() {
         return Err(ApiError::BadRequest("invalid rpm filename format".into()));
     }
     Ok(())

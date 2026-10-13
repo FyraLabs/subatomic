@@ -79,9 +79,9 @@ pub async fn del_key(
     // db has fk check, we don't need to modify locker as we are certain nobody is using the key
     let q = sqlx::query!("DELETE FROM keys WHERE id = $1", id);
     let q = q.execute(&*pool).await;
-    if q.as_ref()
-        .is_err_and(|e| e.as_database_error().is_some_and(|e| e.is_foreign_key_violation()))
-    {
+    if q.as_ref().is_err_and(|e| {
+        e.as_database_error().is_some_and(sqlx::error::DatabaseError::is_foreign_key_violation)
+    }) {
         return Ok((StatusCode::CONFLICT, "the key is still in use (by another repo)"));
     }
     Ok((if q?.rows_affected() == 0 { StatusCode::NOT_FOUND } else { StatusCode::NO_CONTENT }, ""))

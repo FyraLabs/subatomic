@@ -1,5 +1,6 @@
 #![warn(rust_2018_idioms)]
-#![feature(try_blocks_heterogeneous)]
+#![feature(try_blocks)]
+#![feature(default_field_values)]
 
 pub mod api;
 pub mod auth;
@@ -52,8 +53,7 @@ fn main() {
 
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
-    let config = Config::from_env().expect("cannot obtain config from env");
-    config.check();
+    let config = Config::new().expect("cannot obtain config from env");
     let config = Arc::new(config);
 
     let _sentry_guard = config
@@ -62,10 +62,8 @@ fn main() {
         .filter(|dsn| !dsn.is_empty())
         .map(|dsn| sentry::init((dsn, sentry::ClientOptions::default())));
 
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("cannot build tokio");
+    let mut runtime = tokio::runtime::Builder::new_multi_thread();
+    let runtime = runtime.enable_all().build().expect("cannot build tokio");
     let handle = runtime.spawn(inner_main(config));
     loop {
         if handle.is_finished() {
@@ -100,8 +98,8 @@ pub fn app(
         .route("/v1/repos/{name}/key", delete(api::repos::del_key))
         .route("/v1/repos/{name}/rpms", get(api::repos::list_rpms))
         .route("/v1/repos/{name}/rpms", post(api::repos::del_rpms))
-        .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
-        .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
+        // .route("/v1/repos/{name}/refresh", post(api::repos::refresh_repo))
+        // .route("/v1/repos/{name}/rebuild", post(api::repos::rebuild_repo))
         .route("/v1/repos/{name}/md/{md}", put(api::repos::upl_md))
         .route("/v1/repos/{name}/md/{md}", delete(api::repos::del_md))
         .route("/v1/keys", post(api::keys::create_key))
@@ -125,7 +123,6 @@ async fn inner_main(config: Arc<Config>) {
 
     let addr = format!("{}:{}", config.server_host, config.server_port);
     tracing::info!(addr, "starting server");
-
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

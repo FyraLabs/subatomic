@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("libsubatomic error: {0}")]
-    Libsubatomic(#[from] libsubatomic::err::Error),
+    Libsubatomic(#[from] libsubatomic::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
@@ -15,6 +15,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("internal server error: {0}")]
     Internal(String),
+    #[error("bad filename: {0}")]
+    Kiri(#[from] kuchiyose::kiri::Error),
 }
 
 impl IntoResponse for ApiError {
@@ -29,6 +31,7 @@ impl IntoResponse for ApiError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_owned())
             }
             Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            Self::Kiri(e) => (StatusCode::BAD_REQUEST, format!("{e}")),
         };
         (status, axum::Json(serde_json::json!({ "error": message }))).into_response()
     }
