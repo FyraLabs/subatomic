@@ -226,3 +226,56 @@ impl<K: 'static, V: 'static> std::ops::Deref for MetanDb<heed::Database<K, V>> {
         self.db.get().expect("db uninit")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kuchiyose::ftmm::Ftmm;
+    use kuchiyose::link::LinkBuf;
+
+    #[test]
+    fn checksum_serde_roundtrip() {
+        let c = repomd::Checksum { r#type: Ftmm::Sha256, sha: "abc".into() };
+        let json = serde_json::to_string(&c).unwrap();
+        let back: repomd::Checksum = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.sha, "abc");
+        assert_eq!(back.r#type, Ftmm::Sha256);
+    }
+
+    #[test]
+    fn data_serde_roundtrip() {
+        let d = repomd::Data {
+            r#type: "primary".into(),
+            checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "abc".into() },
+            open_checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "def".into() },
+            location: repomd::Location { href: LinkBuf::from("repodata/abc-primary.xml.zst") },
+            timestamp: 1_234_567_890,
+            size: 100,
+            open_size: 200,
+        };
+        let xml = quick_xml::se::to_string(&d).unwrap();
+        assert!(xml.contains(r#"type="primary""#), "xml={xml}");
+        let back: repomd::Data = quick_xml::de::from_str(&xml).unwrap();
+        assert_eq!(back.r#type, "primary");
+        assert_eq!(back.checksum.sha, "abc");
+        assert_eq!(back.location.href.as_str(), "repodata/abc-primary.xml.zst");
+    }
+
+    #[test]
+    fn generate_writes_repomd_root() {
+        let data = vec![repomd::Data {
+            r#type: "other".into(),
+            checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "x".into() },
+            open_checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "y".into() },
+            location: repomd::Location { href: LinkBuf::from("repodata/x-other.xml.zst") },
+            timestamp: 0,
+            size: 1,
+            open_size: 2,
+        }];
+        let mut buf = Vec::new();
+        repomd::repomd::generate(&mut buf, data).unwrap();
+        let s = std::str::from_utf8(&buf).unwrap();
+        assert!(s.contains("<repomd"), "s={s}");
+        assert!(s.contains(r#"type="other""#), "s={s}");
+    }
+}

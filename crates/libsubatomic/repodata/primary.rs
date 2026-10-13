@@ -106,7 +106,7 @@ struct PackageLocation<'a> {
 
 // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
 // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.c#L248
-/*
+#[cfg(test)]
 fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> {
     f.seek(std::io::SeekFrom::Start(104))?;
     let mut bytes = [0u8; 2];
@@ -135,7 +135,15 @@ fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> 
     }
     Ok(HeaderRange { start: hdrstart, end: hdrend })
 }
-*/
+
+#[cfg(test)]
+#[derive(Clone, Debug, Serialize)]
+struct HeaderRange {
+    #[serde(rename = "@start")]
+    pub start: u64,
+    #[serde(rename = "@end")]
+    pub end: u64,
+}
 
 #[derive(Debug, Default)]
 pub struct PrimaryMetan {
@@ -304,10 +312,157 @@ impl super::Metan for PrimaryMetan {
 
 //? cr_is_primary
 pub fn is_primary(f: &rpm::FileEntry<'_>) -> bool {
-    let p = f.path();
-    let p = p.as_os_str().as_bytes();
+    inner_is_primary(f.path().as_os_str().as_bytes())
+}
 
+fn inner_is_primary(p: &[u8]) -> bool {
     p.starts_with(b"/etc/")
         || p == b"/usr/lib/sendmail"
         || memchr::memmem::find(p, b"bin/").is_some()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    // ── is_primary ──────────────────────────────────────────────────
+    #[test]
+    fn is_primary_etc() {
+        assert!(inner_is_primary(b"/etc/foo"));
+        assert!(inner_is_primary(b"/etc/"));
+        assert!(inner_is_primary(b"/etc/passwd"));
+        assert!(!inner_is_primary(b"/etc"));
+        assert!(!inner_is_primary(b"/etcfoo"));
+    }
+
+    #[test]
+    fn is_primary_sendmail() {
+        assert!(inner_is_primary(b"/usr/lib/sendmail"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmail/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmail2"));
+    }
+
+    #[test]
+    fn is_primary_bin_variants() {
+        assert!(inner_is_primary(b"/usr/bin/bash"));
+        assert!(inner_is_primary(b"/bin/ls"));
+        assert!(inner_is_primary(b"/opt/bin/foo"));
+        assert!(inner_is_primary(b"/usr/local/bin/app"));
+        assert!(inner_is_primary(b"bin/foo")); // contains bin/
+        assert!(inner_is_primary(b"/a/bin/b"));
+    }
+
+    #[test]
+    fn is_primary_negative() {
+        assert!(!inner_is_primary(b"/usr/share/doc/foo"));
+        assert!(!inner_is_primary(b"/var/lib/foo"));
+        assert!(!inner_is_primary(b"/usr/libexec/foo"));
+        assert!(!inner_is_primary(b"/tmp/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/sendmailfoo"));
+        // "binary" contains "bin" but not "bin/" -> not primary
+        assert!(!inner_is_primary(b"/usr/binary/foo"));
+        assert!(!inner_is_primary(b"/usr/lib/foo"));
+        assert!(!inner_is_primary(b"/opt/lib/foo"));
+    }
+
+    #[test]
+    fn is_primary_sbin_is_primary() {
+        // "sbin/" contains "bin/" substring -> considered primary (createrepo_c uses strstr("bin/"))
+        assert!(inner_is_primary(b"/sbin/foo"));
+        assert!(inner_is_primary(b"/usr/sbin/foo"));
+    }
+
+    #[test]
+    fn is_primary_short_paths_no_panic() {
+        // previously impl did `0..p.len()-4` which panics on short paths
+        assert!(!inner_is_primary(b"/"));
+        assert!(!inner_is_primary(b"/a"));
+        assert!(!inner_is_primary(b""));
+        assert!(!inner_is_primary(b"ab"));
+        assert!(!inner_is_primary(b"/ab"));
+        assert!(!inner_is_primary(b"/bin")); // no trailing slash, no "bin/"
+    }
+
+    #[test]
+    fn is_primary_bin_at_edges() {
+        assert!(inner_is_primary(b"bin/"));
+        assert!(inner_is_primary(b"/bin/"));
+        assert!(inner_is_primary(b"a/bin/b"));
+    }
+
+    // ── get_header_byte_range ───────────────────────────────────────
+    #[test]
+    fn header_range_on_real_rpm() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../random-rpm-examples/terra-release-44-4.noarch.rpm");
+        let mut f = std::fs::File::open(&path).unwrap();
+        let range = get_header_byte_range(&mut f).unwrap();
+        let meta = f.metadata().unwrap();
+        assert!(range.start >= 112);
+        assert!(range.end > range.start);
+        assert!(range.end <= meta.len());
+        // idempotent
+        let mut f2 = std::fs::File::open(&path).unwrap();
+        let range2 = get_header_byte_range(&mut f2).unwrap();
+        assert_eq!(range.start, range2.start);
+        assert_eq!(range.end, range2.end);
+    }
+
+    #[test]
+    fn header_range_truncated_file_errors() {
+        let mut tmp = tempfile::tempfile().unwrap();
+        // file shorter than 106 bytes -> read_exact fails
+        tmp.write_all(&[0u8; 50]).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let res = get_header_byte_range(&mut tmp);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn header_range_synthetic() {
+        // Craft minimal RPM-like header structure:
+        // at 104: sigindex=1 (0x01), sigdata=0x00 => sigsize=16, hdrstart=128
+        // at hdrstart+8 (136): hdrindex=2 (0x02), hdrdata=0x00 => hdrsize=48, hdrend=176
+        let mut tmp = tempfile::tempfile().unwrap();
+        // ensure file large enough
+        tmp.set_len(200).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[1, 0]).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
+        tmp.write_all(&[2, 0]).unwrap();
+        let range = get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 128);
+        assert_eq!(range.end, 176);
+    }
+
+    #[test]
+    fn header_range_synthetic_with_padding() {
+        // sigindex=0, sigdata=5 => sigsize=5, pad=3, hdrstart=120
+        // hdrindex=0, hdrdata=1 => hdrsize=17, hdrend=137
+        let mut tmp = tempfile::tempfile().unwrap();
+        tmp.set_len(200).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[0, 5]).unwrap();
+        // hdrstart = 112+5+3=120, so hdr fields at 128
+        tmp.seek(std::io::SeekFrom::Start(128)).unwrap();
+        tmp.write_all(&[0, 1]).unwrap();
+        let range = get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 120);
+        assert_eq!(range.end, 137);
+    }
+
+    #[test]
+    fn header_range_synthetic_no_padding() {
+        // sigsize 16 already 8-aligned => no padding
+        let mut tmp = tempfile::tempfile().unwrap();
+        tmp.set_len(300).unwrap();
+        tmp.seek(std::io::SeekFrom::Start(104)).unwrap();
+        tmp.write_all(&[1, 0]).unwrap(); // 16
+        // hdrstart 128, hdr at 136
+        tmp.seek(std::io::SeekFrom::Start(136)).unwrap();
+        tmp.write_all(&[0, 8]).unwrap(); // hdrsize 24
+        let range = get_header_byte_range(&mut tmp).unwrap();
+        assert_eq!(range.start, 128);
+        assert_eq!(range.end, 152); // 128+24
+    }
 }

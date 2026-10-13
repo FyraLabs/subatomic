@@ -46,15 +46,6 @@ pub struct Size {
     pub archive: Option<u64>, // ? "size of archive (I have no idea what does it mean)"
 }
 
-/*
-#[derive(Clone, Debug, Serialize)]
-pub struct HeaderRange {
-    #[serde(rename = "@start")]
-    pub start: u64,
-    #[serde(rename = "@end")]
-    pub end: u64,
-}*/
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Dependencies {
     #[serde(rename = "rpm:entry", default)]
@@ -184,6 +175,7 @@ pub struct FileEntry {
     #[serde(rename = "$text")]
     pub path: PathBuf,
 }
+
 impl<'a> From<rpm::FileEntry<'a>> for FileEntry {
     fn from(value: rpm::FileEntry<'a>) -> Self {
         Self {
@@ -229,5 +221,98 @@ pub struct Changelog {
 impl From<rpm::ChangelogEntry> for Changelog {
     fn from(rpm::ChangelogEntry { name, timestamp, description }: rpm::ChangelogEntry) -> Self {
         Self { author: name.into(), date: timestamp, text: description.into() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Version::parse ──────────────────────────────────────────────
+    #[test]
+    fn version_parse_simple() {
+        let v = Version::parse("1.0-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_with_epoch() {
+        let v = Version::parse("2:1.0-3.el9");
+        assert_eq!(v.epoch, 2);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "3.el9");
+    }
+
+    #[test]
+    fn version_parse_epoch_zero_explicit() {
+        let v = Version::parse("0:2.5-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "2.5");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_non_numeric_epoch_fallback() {
+        // "abc:1.0-1" -> epoch parse fails, fallback to 0 and keep colon in ver
+        let v = Version::parse("abc:1.0-1");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "abc:1.0");
+        assert_eq!(v.rel, "1");
+    }
+
+    #[test]
+    fn version_parse_no_rel() {
+        let v = Version::parse("1.0");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_no_rel_with_epoch() {
+        let v = Version::parse("1:2.0");
+        assert_eq!(v.epoch, 1);
+        assert_eq!(v.ver, "2.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_empty() {
+        let v = Version::parse("");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, "");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_trailing_dash() {
+        let v = Version::parse("1.0-");
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_multiple_dashes_only_first_splits() {
+        // only first '-' after epoch splits ver/rel
+        let v = Version::parse("1.0-1-2");
+        assert_eq!(v.ver, "1.0");
+        assert_eq!(v.rel, "1-2");
+    }
+
+    #[test]
+    fn version_parse_colon_only() {
+        let v = Version::parse(":");
+        assert_eq!(v.epoch, 0);
+        assert_eq!(v.ver, ":");
+        assert_eq!(v.rel, "");
+    }
+
+    #[test]
+    fn version_parse_large_epoch() {
+        let v = Version::parse("4294967295:1.0-1");
+        assert_eq!(v.epoch, 4294967295);
+        assert_eq!(v.ver, "1.0");
     }
 }
