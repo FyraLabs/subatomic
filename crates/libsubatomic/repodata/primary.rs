@@ -106,6 +106,7 @@ struct PackageLocation<'a> {
 
 // https://github.com/madonuko/createrepo_nim/blob/719b99a469101c61441623f9fecfd3c7d977fbcb/src/rpm.nim#L160
 // https://github.com/rpm-software-management/createrepo_c/blob/5cf41fe5d703901d78078ed18c67ab667e446c1a/src/misc.c#L248
+#[cfg(test)]
 fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> {
     f.seek(std::io::SeekFrom::Start(104))?;
     let mut bytes = [0u8; 2];
@@ -135,6 +136,7 @@ fn get_header_byte_range(f: &mut std::fs::File) -> std::io::Result<HeaderRange> 
     Ok(HeaderRange { start: hdrstart, end: hdrend })
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Serialize)]
 struct HeaderRange {
     #[serde(rename = "@start")]
