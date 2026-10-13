@@ -2,7 +2,7 @@
 //!
 //! This modules provides the [`CompConfigure`] trait and a static dispatch of all officially
 //! supported compression algorithms via the [`CompConfig`] enum.
-//! 
+//!
 //! [`Mochi`] also resides in this module, which is a writer that performs hashing while writing.
 use crate::ftmm::{Ftmm, FtmmDigest};
 use tokio::io::AsyncWrite;
