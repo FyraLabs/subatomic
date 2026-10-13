@@ -37,5 +37,9 @@ tokio-util = { version = "0.7.19", features = ["io-util", "io"] }
 tracing = "0.1.44"
 zstd = { version = "0.14.2", features = ["zstdmt", "fat-lto"] }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile.workspace = true
+
 [lints]
 workspace = true
