@@ -49,8 +49,11 @@ pub type CfgState = State<Arc<Config>>;
 pub type LockerState = State<Arc<repohdl::Locker>>;
 
 fn main() {
-    Registry::default().with(EnvFilter::from_default_env()).with(tracing_logfmt::layer()).init();
-
+    Registry::default()
+        .with(EnvFilter::from_default_env())
+        .with(sentry::integrations::tracing::layer())
+        .with(tracing_logfmt::layer())
+        .init();
     tracing::info!("starting subatomic");
     let term = register_termsigs().expect("cannot register termsigs");
     let config = Config::new().expect("cannot obtain config from env");
