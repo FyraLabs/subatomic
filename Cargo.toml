@@ -82,7 +82,10 @@ tempfile = "3.27.0"
 thiserror = "2.0.19"
 tracing = "0.1.44"
 tracing-logfmt = "0.3.7"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[workspace.dependencies.tracing-subscriber]
+version = "0.3.23"
+features = ["env-filter", "tracing-log"]
 
 [workspace.dependencies.tokio]
 version = "1.53.1"
