@@ -1,12 +1,12 @@
+use bytes::Bytes;
 use color_eyre::{Result, eyre::ContextCompat};
-use libsubatomic::prelude::Itertools;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use reqwest::{Client, multipart};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Digest;
-use std::io::Write;
 use std::path::Path;
+use std::sync::LazyLock;
 use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 
 #[derive(Clone)]
 pub struct ApiClient {
@@ -92,12 +92,11 @@ impl ApiClient {
         self.json(self.request_builder(reqwest::Method::PUT, &format!("/v1/repos/{name}"))).await
     }
 
-    fn calculate_csum(paths: &[&Path]) -> Result<Vec<String>> {
-        tracing::info!("calculating checksums");
-        Ok(paths.par_iter().map(|path| sha256_file_sync(path)).collect::<std::io::Result<_>>()?)
-    }
-
-    async fn sign_header(&self, repo: &str, paths: &[&Path]) -> Result<Vec<String>> {
+    async fn sign_header<P: AsRef<Path> + Send + Sync>(
+        &self,
+        repo: &str,
+        paths: &[P],
+    ) -> Result<()> {
         tracing::info!("requesting signatures");
         let mut form = multipart::Form::new();
         for path in paths {
@@ -111,45 +110,43 @@ impl ApiClient {
             .multipart(form);
         let res = req.send().await?;
         let status = res.status();
-        if status.is_success() {
-            if status == reqwest::StatusCode::NO_CONTENT {
-                return Self::calculate_csum(paths);
-            }
-            let content_type = res
-                .headers()
-                .get(reqwest::header::CONTENT_TYPE)
-                .context("server response is missing the multipart Content-Type header")?;
-            let content_type = content_type.to_str().map_err(|e| {
-                color_eyre::eyre::eyre!("server returned an invalid Content-Type header: {e}")
-            })?;
-            let bound = multer::parse_boundary(content_type).map_err(|e| {
-                color_eyre::eyre::eyre!("server returned an invalid multipart boundary: {e}")
-            })?;
-            let mut multipart = multer::Multipart::new(res.bytes_stream(), bound);
-            let mut res = vec![];
-            tracing::info!("signing rpms & calculating checksums");
-            for path in paths {
-                let field = multipart
-                    .next_field()
-                    .await
-                    .expect("can't get field")
-                    .expect("expect next field");
-                let sig = field.bytes().await.expect("can't get bytes").to_vec();
-                let mut rpm = libsubatomic::rpm::Package::open(path).expect("cannot reopen rpm");
-                rpm.apply_signature(sig)?;
-
-                let file = std::fs::File::create(path)?;
-                let mut w = HashingWriter::new(std::io::BufWriter::new(file));
-                rpm.write(&mut w)?;
-                w.flush()?;
-                res.push(w.finish());
-            }
-            Ok(res)
-        } else {
+        if !status.is_success() {
             let text = res.text().await?;
             eprintln!("{status}\n{text}");
-            Err(color_eyre::eyre::eyre!("server returned status: {status}"))
+            return Err(color_eyre::eyre::eyre!("server returned status: {status}"));
         }
+        if status == reqwest::StatusCode::NO_CONTENT {
+            tracing::info!(?repo, "proceeding without signing for this repo");
+            return Ok(());
+        }
+
+        let content_type = res
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .context("server response is missing the multipart Content-Type header")?;
+        let content_type = content_type.to_str().map_err(|e| {
+            color_eyre::eyre::eyre!("server returned an invalid Content-Type header: {e}")
+        })?;
+        let bound = multer::parse_boundary(content_type).map_err(|e| {
+            color_eyre::eyre::eyre!("server returned an invalid multipart boundary: {e}")
+        })?;
+        let mut multipart = multer::Multipart::new(res.bytes_stream(), bound);
+
+        tracing::info!("applying signatures");
+        for path in paths {
+            let field =
+                multipart.next_field().await.expect("can't get field").expect("expect next field");
+            let sig = field.bytes().await.expect("can't get bytes").to_vec();
+
+            let mut rpm = libsubatomic::rpm::Package::open(path).expect("cannot reopen rpm");
+            rpm.apply_signature(sig)?;
+
+            let file = std::fs::File::create(path)?;
+            let mut w = std::io::BufWriter::new(file);
+            rpm.write(&mut w)?;
+            std::io::Write::flush(&mut w)?;
+        }
+        Ok(())
     }
 
     pub async fn upload_pkgs<P: AsRef<Path> + Send + Sync>(
@@ -157,17 +154,29 @@ impl ApiClient {
         repo: &str,
         paths: &[P],
     ) -> Result<()> {
-        let csums = self
-            .sign_header(repo, &paths.iter().map(std::convert::AsRef::as_ref).collect_vec())
-            .await?;
+        self.sign_header(repo, &paths).await?;
 
         let mut form = multipart::Form::new();
-        for (path, csum) in paths.iter().zip_eq(csums) {
-            let filename = path.as_ref().file_name().expect("expect filename").to_string_lossy();
-            form = form.file(filename.to_string(), path).await?;
-            form = form.text("csum", csum);
+        for (i, path) in paths.iter().enumerate() {
+            let path = path.as_ref();
+            let filename = path
+                .file_name()
+                .expect("expect filename")
+                .to_str()
+                .unwrap_or_else(|| panic!("bad utf-8: {:?}", path.display()));
+            let (file_stream, checksum_stream) =
+                hashing_progress_stream(path, i, paths.len()).await?;
+
+            form = form.part(
+                "",
+                multipart::Part::stream(reqwest::Body::wrap_stream(file_stream))
+                    .file_name(filename.to_owned()),
+            );
+            form = form
+                .part("csum", multipart::Part::stream(reqwest::Body::wrap_stream(checksum_stream)));
         }
 
+        tracing::info!(total = paths.len(), "uploading");
         let req = self
             .request_builder(reqwest::Method::POST, &format!("/v1/repos/{repo}"))
             .multipart(form);
@@ -235,10 +244,10 @@ impl ApiClient {
         Ok(resp.not_found)
     }
 
-    pub async fn refresh_repo(&self, name: &str) -> Result<()> {
-        self.void(self.request_builder(reqwest::Method::POST, &format!("/v1/repos/{name}/refresh")))
-            .await
-    }
+    //pub async fn refresh_repo(&self, name: &str) -> Result<()> {
+    //    self.void(self.request_builder(reqwest::Method::POST, &format!("/v1/repos/{name}/refresh")))
+    //        .await
+    //}
 
     pub async fn list_keys(&self) -> Result<Vec<KeySummary>> {
         self.json(self.request_builder(reqwest::Method::GET, "/v1/keys")).await
@@ -259,42 +268,61 @@ impl ApiClient {
     }
 }
 
-/// A writer that forwards to `inner` while hashing everything written.
-struct HashingWriter<W> {
-    inner: W,
-    hasher: sha2::Sha256,
-}
+async fn hashing_progress_stream(
+    path: &Path,
+    n: usize,
+    all: usize,
+) -> Result<(
+    impl futures::Stream<Item = std::io::Result<Bytes>> + Send + 'static,
+    impl futures::Stream<Item = std::io::Result<Bytes>> + Send + 'static,
+)> {
+    let file = File::open(path).await?;
+    let total = file.metadata().await?.len();
+    let filename = path.file_name().unwrap().to_str().unwrap();
 
-impl<W> HashingWriter<W> {
-    fn new(inner: W) -> Self {
-        Self { inner, hasher: sha2::Sha256::new() }
-    }
-    fn finish(self) -> String {
-        hex::encode(self.hasher.finalize())
-    }
-}
+    let prec = (all.ilog10() + 1) as usize;
+    let msg = format!("[{:>prec$}/{all}] {filename}", n + 1);
 
-impl<W: Write> Write for HashingWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let n = self.inner.write(buf)?;
-        self.hasher.update(&buf[..n]);
-        Ok(n)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush()
-    }
-}
+    let pb = LazyLock::new(move || {
+        let pb = indicatif::ProgressBar::new(total);
+        pb.set_style(
+            indicatif::ProgressStyle::with_template(
+                "{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, ETA {eta})",
+            )
+            .expect("static template is valid")
+            .progress_chars("=> "),
+        );
+        pb.set_message(msg);
+        pb
+    });
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
 
-fn sha256_file_sync(path: &Path) -> std::io::Result<String> {
-    let mut f = std::fs::File::open(path)?;
-    let mut hasher = sha2::Sha256::new();
-    let mut buf = vec![0_u8; 64 * 1024].into_boxed_slice();
-    loop {
-        let n = std::io::Read::read(&mut f, &mut buf)?;
-        if n == 0 {
-            break;
+    let file_stream = {
+        let mut reader = tokio::io::BufReader::new(file);
+        let mut hasher = sha2::Sha256::new();
+        let mut buf = vec![0u8; 64 * 1024];
+        async_stream::try_stream! {
+            loop {
+                let n = reader.read(&mut buf).await?;
+                if n == 0 {
+                    break;
+                }
+                hasher.update(&buf[..n]);
+                pb.inc(n as u64);
+                yield Bytes::copy_from_slice(&buf[..n]);
+            }
+            pb.finish();
+            _ = tx.send(hex::encode(hasher.finalize()));
         }
-        hasher.update(&buf[..n]);
-    }
-    Ok(hex::encode(hasher.finalize()))
+    };
+
+    let checksum_stream = async_stream::try_stream! {
+        let digest = rx
+            .await
+            .map_err(|_| std::io::Error::other("hashing stream terminated early"))?;
+        tracing::debug!(digest);
+        yield Bytes::from(digest);
+    };
+
+    Ok((file_stream, checksum_stream))
 }

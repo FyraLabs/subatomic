@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// Tool for interactive with subatomic servers and an alternative to `createrepo_c`.
 pub struct Cli {
     #[clap(flatten)]
-    pub verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::WarnLevel>,
+    pub verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -59,9 +59,9 @@ pub enum RepoSubcommand {
         #[command(subcommand)]
         action: PkgAction,
     },
-    Refresh {
-        name: String,
-    },
+    //Refresh {
+    //    name: String,
+    //},
 }
 
 #[derive(Subcommand)]

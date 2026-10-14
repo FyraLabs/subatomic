@@ -2,26 +2,11 @@
 
 use clap::Parser;
 use color_eyre::eyre::bail;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::EnvFilter;
 
 mod api_client;
 
 mod cli;
-
-#[must_use]
-pub const fn convert_filter(
-    filter: clap_verbosity_flag::log::LevelFilter,
-) -> tracing_subscriber::filter::LevelFilter {
-    use clap_verbosity_flag::log::LevelFilter;
-    match filter {
-        LevelFilter::Off => tracing_subscriber::filter::LevelFilter::OFF,
-        LevelFilter::Error => tracing_subscriber::filter::LevelFilter::ERROR,
-        LevelFilter::Warn => tracing_subscriber::filter::LevelFilter::WARN,
-        LevelFilter::Info => tracing_subscriber::filter::LevelFilter::INFO,
-        LevelFilter::Debug => tracing_subscriber::filter::LevelFilter::DEBUG,
-        LevelFilter::Trace => tracing_subscriber::filter::LevelFilter::TRACE,
-    }
-}
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
@@ -29,10 +14,10 @@ async fn main() -> color_eyre::Result<()> {
 
     color_eyre::install().expect("cannot install color_eyre");
     let cli = cli::Cli::parse();
-    let sub = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(convert_filter(cli.verbose.log_level_filter()))
-        .finish();
-    sub.with(fmt::layer()).with(EnvFilter::from_default_env()).init();
+    let filter = EnvFilter::builder()
+        .with_default_directive(cli.verbose.tracing_level_filter().into())
+        .from_env_lossy();
+    tracing_subscriber::FmtSubscriber::builder().with_env_filter(filter).init();
 
     tracing::debug!(ver = env!("CARGO_PKG_VERSION"), "satm");
     match cli.command {
@@ -103,7 +88,7 @@ async fn handle_api_repos(
                 }
             }
         },
-        cli::RepoSubcommand::Refresh { name } => client.refresh_repo(&name).await?,
+        //cli::RepoSubcommand::Refresh { name } => client.refresh_repo(&name).await?,
     }
     Ok(())
 }
