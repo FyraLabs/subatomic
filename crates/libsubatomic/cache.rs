@@ -183,12 +183,45 @@ impl<H: Hierarchize + Sync> Cache<H> {
         self.metans.par_iter().map(|metan| Res::Ok(metan.compute(&input)?)).collect()
     }
 
+    /// Add new packages from `recv` into the cache.
+    ///
+    /// Each package is fanned out to every registered [`Metan`]. To purge other old packages, use
+    /// [`Self::update_frags`].
+    ///
+    /// # Errors
+    /// Propagates any error from [`Metan::save`], [`Metan::del`], or LMDB.
+    ///
+    /// # Panics
+    /// Panics on the (essentially impossible) system-time underflow.
+    pub fn add_frags(
+        &self,
+        recv: &crossbeam_channel::Receiver<(PathBuf, Vec<MetanComputed>)>,
+    ) -> Res<()> {
+        let epoch =
+            SystemTime::now().duration_since(UNIX_EPOCH).expect("time underflow").as_micros();
+        let mut wtxn = self.env.write_txn()?;
+
+        for (abs_path, computed) in recv {
+            let Some(filename) = abs_path.file_name() else {
+                tracing::error!(p = %abs_path.display(), "path has no filename; skipping");
+                continue;
+            };
+
+            self.wtxn(&mut wtxn, |wtxn| self.epo.put(wtxn, filename.as_bytes(), &epoch))?;
+            self.save_computed_result(&mut wtxn, computed)?;
+        }
+        wtxn.commit()?;
+        Ok(())
+    }
+
     /// Update the cache to include all and only the packages from `recv`.
     ///
     /// Each package is fanned out to every registered [`Metan`]. After the channel drains, any
     /// package whose epoch is stale (not seen this round) is purged from every metan.
     ///
     /// Return `(new, cached)` — the number of parsed packages and the number of cache hits.
+    ///
+    /// To not purge existing packages, use [`Self::add_frags`].
     ///
     /// # Errors
     /// Propagates any error from [`Metan::save`], [`Metan::del`], or LMDB.
@@ -216,7 +249,8 @@ impl<H: Hierarchize + Sync> Cache<H> {
             match req {
                 FragRequest::Cached => cached += 1,
                 FragRequest::Put(computed_results) => {
-                    self.save_computed_result(&mut wtxn, &mut new, computed_results)?;
+                    new += 1;
+                    self.save_computed_result(&mut wtxn, computed_results)?;
                 }
             }
         }
@@ -245,10 +279,8 @@ impl<H: Hierarchize + Sync> Cache<H> {
     fn save_computed_result<'a>(
         &'a self,
         wtxn: &mut heed::RwTxn<'a>,
-        new: &mut u64,
         computed_results: Vec<crate::repodata::MetanComputed>,
     ) -> Res<()> {
-        *new += 1;
         for (metan, computed) in self.metans.iter().zip_eq(computed_results) {
             self.wtxn(wtxn, |wtxn| match metan.save(wtxn, &computed) {
                 Ok(r) => Ok(Ok(r)),

@@ -8,8 +8,6 @@ use axum::extract::{Multipart, Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use futures_util::{StreamExt, TryStreamExt};
-use libsubatomic::cache::FragRequest;
-use libsubatomic::metan_prelude::*;
 use libsubatomic::prelude::Itertools;
 use libsubatomic::repo::hierarchy::Hierarchize;
 use rayon::prelude::*;
@@ -92,40 +90,35 @@ pub async fn upload_pkgs(
     processor.receive_rpms(&mut multipart).await?;
     let UploadProcessor { removed, received, .. } = processor;
 
-    let frags: Vec<(PathBuf, Vec<MetanComputed>)> = {
-        let staged = received.clone();
-        let r = locker.read(&repo, async move |hdl| {
-            staged
-                .into_par_iter()
-                .map(|ReceiveRpmOut { csum, path }| {
-                    let input = libsubatomic::cache::ComputeInput { csum: Some(csum.into()), .. };
-                    let computed = hdl.repo.cache.compute(&path, input)?;
-                    Ok::<_, libsubatomic::Error>((path, computed))
-                })
-                .collect::<Result<Vec<_>, _>>()
-        });
-        r.await?.ok_or(ApiError::NotFound)??
-    };
-
     let removed_out = removed.clone();
     let w = locker.write(&repo, async move |hdl| {
-        if !removed.is_empty() {
-            let not_found = hdl.repo.del(&removed).await?;
-            if !not_found.is_empty() {
-                tracing::error!(?not_found, "superseded packages missing from cache");
-            }
-        }
-
         let cache = &hdl.repo.cache;
         std::thread::scope(|s| {
             let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
-            let h = s.spawn(move || cache.update_frags(&rx));
-            for (p, computed) in frags {
-                tx.send((p, FragRequest::Put(computed))).expect("writer thread died");
-            }
+            let h = s.spawn(move || cache.add_frags(&rx));
+
+            received.into_par_iter().for_each(|ReceiveRpmOut { csum, path }| {
+                let input = libsubatomic::cache::ComputeInput { csum: Some(csum.into()), .. };
+                let Ok(computed) = cache
+                    .compute(&path, input)
+                    .inspect_err(|err| tracing::error!(?err, ?path, "cannot compute frag"))
+                else {
+                    return;
+                };
+                if tx.send((path, computed)).is_err() {
+                    tracing::error!("tx closed");
+                }
+            });
+
             drop(tx);
             h.join().expect("writer thread panicked")
         })?;
+        if !removed.is_empty() {
+            let not_found = hdl.repo.del(&removed).await?;
+            if !not_found.is_empty() {
+                tracing::error!(?not_found);
+            }
+        }
         hdl.repo.generate().await?;
         Ok::<_, libsubatomic::Error>(())
     });
@@ -140,7 +133,6 @@ pub async fn upload_pkgs(
             .collect_vec(),
     })))
 }
-
 struct UploadProcessor<'k, H: Hierarchize> {
     dir: PathBuf,
     hier: H,
@@ -242,6 +234,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .filter(|(_, k)| k.name == name && k.arch == arch)
             .filter(|(k, _)| &**k != filename);
         self.removed.extend(prev_versions.map(|(k, _)| k.clone()));
+        tracing::debug!(removed = ?self.removed);
         Ok(ReceiveRpmOut { csum, path })
     }
 }
