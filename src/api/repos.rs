@@ -201,27 +201,32 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
         let link = self.hier.basedir().join(&link);
 
         let body_reader = std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
-        let body_reader = body_reader.compat();
 
-        let csum = try {
-            let store_fd = self.store.writer(&link).await.map_err(std::io::Error::other)?;
-            let fd = tokio::fs::File::create(&path).await?;
-            let fd = tokio::io::BufWriter::new(fd);
-            let writer: MochiWriter =
-                kuchiyose::comp::Mochi::new(fd, kuchiyose::ftmm::Ftmm::Sha256);
-            let (mut store_fd, mut writer) = match double_write(body_reader, store_fd, writer).await
-            {
-                Ok(res) => res,
-                Err(err) => return Err(err),
-            };
-            store_fd.shutdown().await?;
-            writer.shutdown().await?;
-            let writer =
-                writer.as_any_mut().downcast_mut::<MochiWriter>().expect("can't downcast mochi");
-            let dummy = kuchiyose::FtmmDigest::Sha512(Default::default());
-            hex::encode(std::mem::replace(&mut writer.ftmm, dummy).finalize())
-        }
-        .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
+        // Threshold-based upload: small RPMs use a single PUT without ever opening a
+        // multipart session; large RPMs stream via multipart after the staged prefix is
+        // replayed. The staging (temporary) file doubles as the later metadata input.
+        //
+        // NOTE (unchanged behavior): checksum validation happens after the upload because
+        // the client sends the expected hash as the *next* multipart field. A
+        // checksum-invalid object therefore remains stored, as before; incomplete
+        // uploads, in contrast, are now aborted instead of being left behind.
+        let out = self
+            .store
+            .put_streamed(&link, &path, body_reader, kuchiyose::store::SINGLE_PUT_THRESHOLD)
+            .await
+            .map_err(|e| match e {
+                kuchiyose::store::StreamErr::Source(err) => {
+                    ApiError::BadRequest(format!("multipart: {err}"))
+                }
+                kuchiyose::store::StreamErr::Tmp(err) => {
+                    ApiError::Internal(format!("cannot write to tmpdir: {err}"))
+                }
+                kuchiyose::store::StreamErr::Store(err) => {
+                    ApiError::Internal(format!("cannot write to store: {err}"))
+                }
+                _ => ApiError::Internal("cannot process uploads".to_owned()),
+            })?;
+        let csum = out.sha256_hex;
 
         let Some(kuchiyose::rpm::ParsePathOutput { name, arch, .. }) =
             kuchiyose::rpm::parse_filename(filename)
@@ -238,44 +243,6 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
         Ok(ReceiveRpmOut { csum, path })
     }
 }
-
-type MochiWriter = kuchiyose::comp::Mochi<tokio::io::BufWriter<tokio::fs::File>>;
-
-async fn double_write(
-    mut body_reader: impl futures_util::AsyncRead + Unpin + Send,
-    store_fd: Box<dyn kuchiyose::store::StoreWrite>,
-    writer: MochiWriter,
-) -> Result<(Box<dyn kuchiyose::store::StoreWrite>, Box<dyn kuchiyose::store::StoreWrite>)> {
-    let mut multi_writer = srmw::MultiWriter::default();
-    multi_writer.insert(store_fd.compat_write());
-    multi_writer.insert((Box::new(writer) as Box<dyn kuchiyose::store::StoreWrite>).compat_write());
-    let buf = &mut vec![0u8; 64 * 1024].into_boxed_slice();
-    let mut generator = multi_writer.copy(&mut body_reader, buf);
-    while let Some(event) = generator.next().await {
-        match event {
-            srmw::CopyEvent::Progress(_) => {}
-            srmw::CopyEvent::Failure(0, err) => {
-                tracing::error!(?err, "cannot write to store");
-                return Err(ApiError::Internal(format!("cannot write to store: {err}")));
-            }
-            srmw::CopyEvent::Failure(1, err) => {
-                tracing::error!(?err, "cannot write to tmpdir");
-                return Err(ApiError::Internal(format!("cannot write to tmpdir: {err}")));
-            }
-            srmw::CopyEvent::Failure(i, _) => unreachable!("unknown writer idx {i}"),
-            srmw::CopyEvent::NoWriters => unreachable!("no writers"),
-            srmw::CopyEvent::SourceFailure(error) => {
-                tracing::warn!(?error, "source failure");
-                return Err(ApiError::BadRequest(format!("multipart: {error}")));
-            }
-        }
-    }
-    drop(generator);
-    let left = multi_writer.remove(0).into_inner();
-    let right = multi_writer.remove(1).into_inner();
-    Ok((left, right))
-}
-
 pub async fn delete_repo(
     State(locker): LockerState,
     Path(name): Path<String>,
