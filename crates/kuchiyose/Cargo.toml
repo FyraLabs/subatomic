@@ -24,6 +24,9 @@ serde = { workspace = true }
 sha2 = "0.11.0"
 preinterpret = "0.2.1"
 thiserror.workspace = true
+hex = "0.4.3"
+async-trait = "0.1.92"
+tempfile = "3.27.0"
 
 [dependencies.async-compression]
 version = "0.4.46"
