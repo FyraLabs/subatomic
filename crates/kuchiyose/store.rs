@@ -13,11 +13,12 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::FutureExt;
+use futures::TryFutureExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use object_store::{Extensions, MultipartUpload, ObjectStoreExt, PutPayload, UploadPart};
-use sha2::Digest;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufWriter};
 
+use crate::ftmm::{Ftmm, FtmmDigest};
 use crate::link::Link;
 
 #[non_exhaustive]
@@ -46,6 +47,34 @@ pub enum StoreErr {
 /// This is deliberately distinct from [`MIN_PART_SIZE`]: the threshold decides *whether* to
 /// use multipart, while the part size decides how multipart payloads are chunked.
 pub const SINGLE_PUT_THRESHOLD: u64 = 50 * 1024 * 1024;
+
+/// Parameters for [`StoreBackend::put_streamed`] other than the request `body`, which is
+/// passed separately; all parameters are required.
+///
+/// It is `#[non_exhaustive]` so fields can be added backwards-compatibly.
+#[non_exhaustive]
+pub struct PutStreamedParams<'a> {
+    link: &'a Link,
+    tmp_path: &'a Path,
+    threshold: u64,
+    ftmm: Ftmm,
+}
+
+impl<'a> PutStreamedParams<'a> {
+    /// Create parameters for a streamed upload into `link`, staging into `tmp_path`.
+    ///
+    /// # Arguments
+    /// - `link`: destination of the uploaded object.
+    /// - `tmp_path`: staging file the received bytes are written to.
+    /// - `threshold`: received size deciding between a single PUT and a multipart upload
+    ///   (remote backend only; the local backend ignores it).
+    /// - `ftmm`: hash algorithm used to compute the digest of the received bytes
+    ///   ([`StreamedPut::digest_hex`]).
+    #[must_use]
+    pub const fn new(link: &'a Link, tmp_path: &'a Path, threshold: u64, ftmm: Ftmm) -> Self {
+        Self { link, tmp_path, threshold, ftmm }
+    }
+}
 
 /// Maximum number of in-flight part uploads retained by [`MultipartUploadWriter`].
 ///
@@ -94,8 +123,10 @@ impl<W: AsyncWrite + Send + Unpin + std::any::Any> StoreWrite for W {
 /// Result of [`StoreBackend::put_streamed`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StreamedPut {
-    /// Hex-encoded SHA-256 of the received bytes.
-    pub sha256_hex: String,
+    /// Hex-encoded digest of the received bytes, computed with algorithm `ftmm`.
+    pub digest_hex: String,
+    /// The checksum algorithm used to compute `digest_hex`.
+    pub ftmm: Ftmm,
     /// Total number of received bytes.
     pub size: u64,
     /// Whether a multipart upload was used (only possible on [`StoreBackend::Remote`]).
@@ -180,24 +211,26 @@ impl StoreBackend {
         }
     }
 
-    /// Stream `body` into the store while staging into `tmp_path` and hashing with SHA-256.
+    /// Stream `body` into the store while staging into `params.tmp_path` and hashing with
+    /// `params.ftmm`.
     ///
-    /// `threshold` only affects [`StoreBackend::Remote`]; [`StoreBackend::Local`] streams
-    /// directly to the destination (and the staging file) exactly as before, ignoring it.
+    /// `params.threshold` only affects [`StoreBackend::Remote`]; [`StoreBackend::Local`]
+    /// streams directly to the destination (and the staging file) exactly as before,
+    /// ignoring it.
     ///
     /// Remote behavior:
     /// - Bytes are written to the staging file and hashed as they arrive. No multipart
-    ///   session is created until the received size exceeds `threshold`.
+    ///   session is created until the received size exceeds `params.threshold`.
     /// - On crossing, a multipart upload is initiated and the staged prefix is replayed
     ///   from disk with a bounded (`IO_BUF_SIZE`) buffer, then newly received bytes are
     ///   written to both the staging file and the multipart writer in order. Each byte is
     ///   uploaded exactly once.
-    /// - At EOF, sizes at most `threshold` are uploaded with a single PUT by reading the
-    ///   staged file back into a [`PutPayload`]. This is the only point where up to
-    ///   `threshold` bytes are held in RAM at once (transient peak ~= object size, at most
-    ///   50 MiB with [`SINGLE_PUT_THRESHOLD`]); reception itself never buffers the whole
-    ///   object. Larger objects finish the multipart upload without ever holding the whole
-    ///   object in memory.
+    /// - At EOF, sizes at most `params.threshold` are uploaded with a single PUT by reading
+    ///   the staged file back into a [`PutPayload`]. This is the only point where up to
+    ///   `params.threshold` bytes are held in RAM at once (transient peak ~= object size,
+    ///   at most 50 MiB with [`SINGLE_PUT_THRESHOLD`]); reception itself never buffers the
+    ///   whole object. Larger objects finish the multipart upload without ever holding the
+    ///   whole object in memory.
     ///
     /// Failure handling: if a multipart upload was initiated but a later read, write, part
     /// upload, or completion fails, the upload is aborted where supported. The original
@@ -212,15 +245,15 @@ impl StoreBackend {
     /// - [`StreamErr::Store`] if the destination store fails (server error).
     pub async fn put_streamed<R: AsyncRead + Unpin + Send>(
         &self,
-        link: &Link,
-        tmp_path: &Path,
+        params: PutStreamedParams<'_>,
         body: R,
-        threshold: u64,
     ) -> Result<StreamedPut, StreamErr> {
+        let PutStreamedParams { link, tmp_path, threshold, ftmm } = params;
         match self {
-            Self::Local => self.put_streamed_local(link, tmp_path, body).await,
+            Self::Local => self.put_streamed_local(link, tmp_path, body, ftmm).await,
             Self::Remote(store) => {
-                Self::put_streamed_remote(Arc::clone(store), link, tmp_path, body, threshold).await
+                Self::put_streamed_remote(Arc::clone(store), link, tmp_path, body, threshold, ftmm)
+                    .await
             }
         }
     }
@@ -233,6 +266,7 @@ impl StoreBackend {
         link: &Link,
         tmp_path: &Path,
         body: R,
+        ftmm: Ftmm,
     ) -> Result<StreamedPut, StreamErr> {
         debug_assert!(matches!(self, Self::Local));
         if let Some(parent) = link.as_path().parent() {
@@ -244,7 +278,7 @@ impl StoreBackend {
         let mut dest = BufWriter::new(dest);
         let tmp = tokio::fs::File::create(tmp_path).await.map_err(StreamErr::Tmp)?;
         let mut tmp = BufWriter::new(tmp);
-        let mut hasher = sha2::Sha256::new();
+        let mut hasher = ftmm.to_digest();
         let mut total: u64 = 0;
         let mut body = body;
         let mut buf = vec![0u8; IO_BUF_SIZE];
@@ -258,10 +292,15 @@ impl StoreBackend {
             hasher.update(&buf[..n]);
             total += n as u64;
         }
-        dest.shutdown().await.map_err(|e| StreamErr::Store(e.into()))?;
-        tmp.shutdown().await.map_err(StreamErr::Tmp)?;
+        // Both writers are shut down concurrently and each branch keeps its own error
+        // class.
+        futures::try_join!(
+            dest.shutdown().map_err(|e| StreamErr::Store(e.into())),
+            tmp.shutdown().map_err(StreamErr::Tmp),
+        )?;
         Ok(StreamedPut {
-            sha256_hex: hex::encode(hasher.finalize()),
+            digest_hex: hex::encode(hasher.finalize()),
+            ftmm,
             size: total,
             used_multipart: false,
         })
@@ -274,69 +313,25 @@ impl StoreBackend {
         tmp_path: &Path,
         body: R,
         threshold: u64,
+        ftmm: Ftmm,
     ) -> Result<StreamedPut, StreamErr> {
-        let tmp = tokio::fs::File::create(tmp_path).await.map_err(StreamErr::Tmp)?;
-        let mut tmp = BufWriter::new(tmp);
-        let mut hasher = sha2::Sha256::new();
-        let mut total: u64 = 0;
-        let mut multipart: Option<MultipartUploadWriter> = None;
+        let mut upload = StreamedUpload::staging(store, link, tmp_path, threshold, ftmm).await?;
         let mut body = body;
         let mut buf = vec![0u8; IO_BUF_SIZE];
-
-        loop {
-            let n = match body.read(&mut buf).await {
-                Ok(n) => n,
-                Err(e) => {
-                    abort_started(&mut multipart).await;
-                    return Err(StreamErr::Source(e));
+        if let Err(e) = try {
+            loop {
+                let n = body.read(&mut buf).await.map_err(StreamErr::Source)?;
+                if n == 0 {
+                    break;
                 }
-            };
-            if n == 0 {
-                break;
+                upload.write(&buf[..n]).await?;
             }
-            if let Err(e) = tmp.write_all(&buf[..n]).await {
-                abort_started(&mut multipart).await;
-                return Err(StreamErr::Tmp(e));
-            }
-            hasher.update(&buf[..n]);
-            total += n as u64;
-
-            if let Some(w) = multipart.as_mut() {
-                if let Err(e) = w.write_all(&buf[..n]).await {
-                    abort_started(&mut multipart).await;
-                    return Err(StreamErr::Store(e.into()));
-                }
-            } else if total > threshold {
-                match Self::start_multipart(&store, link, tmp_path, &mut tmp).await {
-                    Ok(writer) => multipart = Some(writer),
-                    Err(e) => return Err(e),
-                }
-            }
+        } {
+            // The single abort site for loop failures: nothing is leaked.
+            upload.abort().await;
+            return Err(e);
         }
-
-        if let Err(e) = tmp.shutdown().await {
-            abort_started(&mut multipart).await;
-            return Err(StreamErr::Tmp(e));
-        }
-        let sha256_hex = hex::encode(hasher.finalize());
-
-        if let Some(mut w) = multipart {
-            if let Err(e) = w.shutdown().await {
-                abort_and_log(w).await;
-                return Err(StreamErr::Store(e.into()));
-            }
-            Ok(StreamedPut { sha256_hex, size: total, used_multipart: true })
-        } else {
-            // Single-PUT path. The staged file (at most `threshold` bytes) is read back
-            // into a `PutPayload`, so transient memory peaks at roughly the object size.
-            let bytes = tokio::fs::read(tmp_path).await.map_err(StreamErr::Tmp)?;
-            debug_assert_eq!(bytes.len() as u64, total);
-            store
-                .put(&link.to_storepath(), PutPayload::from(bytes))
-                .await
-                .map_err(|e| StreamErr::Store(e.into()))?;
-            Ok(StreamedPut { sha256_hex, size: total, used_multipart: false })
-        }
+        upload.finish().await
     }
 
     /// Start a multipart upload for `link` and replay the staged prefix into it.
@@ -362,7 +357,10 @@ impl StoreBackend {
         let mut writer = MultipartUploadWriter::with_defaults(upload);
         match replay_prefix(tmp_path, &mut writer).await {
             Ok(()) => Ok(writer),
-            Err(ReplayErr::Read(e)) => Err(StreamErr::Tmp(e)),
+            Err(ReplayErr::Read(e)) => {
+                abort_and_log(writer).await;
+                Err(StreamErr::Tmp(e))
+            }
             Err(ReplayErr::Write(e)) => {
                 abort_and_log(writer).await;
                 Err(StreamErr::Store(e.into()))
@@ -407,6 +405,144 @@ impl StoreBackend {
     }
 }
 
+/// A streamed remote upload in progress, driving [`StreamedUploadState`]: the staging
+/// writer, hasher, and byte count are shared by every state; only the store session
+/// differs. Typed methods instead of [`AsyncWrite`] keep the Source/Tmp/Store error
+/// split, which [`AsyncWrite`] cannot carry ([`std::io::Error`] only).
+struct StreamedUpload<'a> {
+    store: Arc<dyn object_store::ObjectStore>,
+    link: &'a Link,
+    tmp_path: &'a Path,
+    threshold: u64,
+    tmp: BufWriter<tokio::fs::File>,
+    hasher: FtmmDigest,
+    total: u64,
+    state: StreamedUploadState,
+}
+
+/// Store session of [`StreamedUpload`]: before `threshold` no session exists yet.
+enum StreamedUploadState {
+    /// Only the staged prefix has been written so far.
+    Staging,
+    /// A live multipart session, after [`StoreBackend::start_multipart`].
+    Multipart {
+        /// The bounded part writer opened after crossing the threshold.
+        writer: MultipartUploadWriter,
+    },
+}
+
+impl<'a> StreamedUpload<'a> {
+    /// Create a new streamed upload: the staging file is opened and the state is
+    /// [`StreamedUploadState::Staging`].
+    ///
+    /// # Errors
+    /// [`StreamErr::Tmp`] if the staging file cannot be created.
+    async fn staging(
+        store: Arc<dyn object_store::ObjectStore>,
+        link: &'a Link,
+        tmp_path: &'a Path,
+        threshold: u64,
+        ftmm: Ftmm,
+    ) -> Result<Self, StreamErr> {
+        let tmp = tokio::fs::File::create(tmp_path).await.map_err(StreamErr::Tmp)?;
+        Ok(Self {
+            store,
+            link,
+            tmp_path,
+            threshold,
+            tmp: BufWriter::new(tmp),
+            hasher: ftmm.to_digest(),
+            total: 0,
+            state: StreamedUploadState::Staging,
+        })
+    }
+
+    /// Write one chunk to the staging file and, past `threshold`, to the multipart
+    /// writer. On failure the state is left unchanged so [`Self::abort`] can still
+    /// clean up a live session.
+    ///
+    /// # Errors
+    /// - [`StreamErr::Tmp`] if the staging file (or its replay in `start_multipart`)
+    ///   cannot be written.
+    /// - [`StreamErr::Store`] if the multipart session cannot be initiated or written.
+    async fn write(&mut self, data: &[u8]) -> Result<(), StreamErr> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        self.tmp.write_all(data).await.map_err(StreamErr::Tmp)?;
+        self.hasher.update(data);
+        self.total += data.len() as u64;
+        match &mut self.state {
+            StreamedUploadState::Staging => {
+                if self.total > self.threshold {
+                    // The chunk just written is already part of the staged prefix that
+                    // `start_multipart` replays; do not write it to the new writer too.
+                    let writer = StoreBackend::start_multipart(
+                        &self.store,
+                        self.link,
+                        self.tmp_path,
+                        &mut self.tmp,
+                    )
+                    .await?;
+                    self.state = StreamedUploadState::Multipart { writer };
+                }
+            }
+            StreamedUploadState::Multipart { writer } => {
+                writer.write_all(data).await.map_err(|e| StreamErr::Store(e.into()))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Finish the upload: flush staging, then complete via single PUT or multipart
+    /// shutdown. A failed staging flush aborts a live multipart session; abort failures
+    /// are logged, never propagated.
+    ///
+    /// # Errors
+    /// - [`StreamErr::Tmp`] if the staging file cannot be flushed or read back.
+    /// - [`StreamErr::Store`] if the store put or writer shutdown fails.
+    async fn finish(mut self) -> Result<StreamedPut, StreamErr> {
+        if let Err(e) = self.tmp.shutdown().await {
+            if let StreamedUploadState::Multipart { writer } = self.state {
+                abort_and_log(writer).await;
+            }
+            return Err(StreamErr::Tmp(e));
+        }
+        let ftmm = self.hasher.as_ftmm();
+        let digest_hex = hex::encode(self.hasher.finalize());
+        match self.state {
+            StreamedUploadState::Multipart { mut writer } => {
+                if let Err(e) = writer.shutdown().await {
+                    abort_and_log(writer).await;
+                    return Err(StreamErr::Store(e.into()));
+                }
+                Ok(StreamedPut { digest_hex, ftmm, size: self.total, used_multipart: true })
+            }
+            StreamedUploadState::Staging => {
+                // Single-PUT path. The staged file (at most `threshold` bytes) is read
+                // back into a `PutPayload`, so transient memory peaks at roughly the
+                // object size.
+                let Self { store, link, tmp_path, total, .. } = self;
+                let bytes = tokio::fs::read(tmp_path).await.map_err(StreamErr::Tmp)?;
+                debug_assert_eq!(bytes.len() as u64, total);
+                store
+                    .put(&link.to_storepath(), PutPayload::from(bytes))
+                    .await
+                    .map_err(|e| StreamErr::Store(e.into()))?;
+                Ok(StreamedPut { digest_hex, ftmm, size: total, used_multipart: false })
+            }
+        }
+    }
+
+    /// Abort a started multipart session; [`StreamedUploadState::Staging`] has no
+    /// session, so nothing is done (staging files are the caller's RAII concern).
+    async fn abort(self) {
+        if let StreamedUploadState::Multipart { writer } = self.state {
+            abort_and_log(writer).await;
+        }
+    }
+}
+
 /// Abort a finished writer, logging (but never propagating) abort failures.
 ///
 /// The original upload error is always reported by the caller; cleanup failures must not
@@ -414,16 +550,6 @@ impl StoreBackend {
 async fn abort_and_log(writer: MultipartUploadWriter) {
     if let Err(ab) = writer.abort().await {
         tracing::warn!(%ab, "failed to abort multipart upload after failure");
-    }
-}
-
-/// Abort an in-progress multipart writer if one was started.
-///
-/// Used on failure paths after the threshold was crossed. Abort errors are logged but
-/// never replace the original error.
-async fn abort_started(multipart: &mut Option<MultipartUploadWriter>) {
-    if let Some(writer) = multipart.take() {
-        abort_and_log(writer).await;
     }
 }
 
@@ -580,48 +706,43 @@ impl AsyncWrite for MultipartUploadWriter {
             return Poll::Ready(Err(e));
         }
 
-        // If at the concurrency limit, wait for at least one part to finish instead
-        // of queueing another payload.
-        if ongoing.len() >= MAX_CONCURRENT_PARTS {
-            match ongoing.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(()))) => {
-                    if let Err(e) = drain_ready_parts(ongoing, cx) {
-                        return Poll::Ready(Err(e));
-                    }
-                }
-                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(io::Error::other(e))),
-                Poll::Ready(None) | Poll::Pending => return Poll::Pending,
+        // Fill the part buffer first: a partially-filled buffer can only become a part
+        // once it is full, so absorb as much input into it as it can take.
+        let n = std::cmp::min(buffer.capacity() - buffer.len(), buf.len());
+        buffer.extend_from_slice(&buf[..n]);
+        let mut consumed = n;
+        if buffer.len() < buffer.capacity() {
+            return Poll::Ready(Ok(consumed));
+        }
+
+        let cap = buffer.capacity();
+        // At most this many parts may be queued in this call.
+        let m = MAX_CONCURRENT_PARTS - ongoing.len();
+        if m > 0 {
+            // Queue the full buffer as the first part, then up to `m - 1` further full
+            // chunks of the remaining input. The next full chunk becomes the new buffer;
+            // if the input ran out, the partial remainder does. The buffer's capacity is
+            // never changed, and no byte is dropped or duplicated.
+            let mut it = buf[consumed..].chunks_exact(cap);
+            let payload: PutPayload = std::mem::replace(buffer, Vec::with_capacity(cap)).into();
+            ongoing.push(upload.put_part(payload));
+            for chunk in it.by_ref().take(m - 1) {
+                ongoing.push(upload.put_part(PutPayload::from_bytes(chunk.to_owned().into())));
+                consumed += cap;
+            }
+            if let Some(chunk) = it.next() {
+                buffer.extend_from_slice(chunk);
+                consumed += cap;
+            } else {
+                buffer.extend_from_slice(it.remainder());
+                consumed += it.remainder().len();
             }
         }
 
-        let mut consumed: usize = 0;
-        loop {
-            let space = buffer.capacity() - buffer.len();
-            if space == 0 {
-                if ongoing.len() >= MAX_CONCURRENT_PARTS {
-                    break;
-                }
-                let cap = buffer.capacity();
-                let payload: PutPayload = std::mem::replace(buffer, Vec::with_capacity(cap)).into();
-                ongoing.push(upload.put_part(payload));
-                continue;
-            }
-            if consumed >= buf.len() {
-                break;
-            }
-            let n = std::cmp::min(space, buf.len() - consumed);
-            buffer.extend_from_slice(&buf[consumed..consumed + n]);
-            consumed += n;
-            if buffer.len() == buffer.capacity() {
-                if ongoing.len() >= MAX_CONCURRENT_PARTS {
-                    break;
-                }
-                let cap = buffer.capacity();
-                let payload: PutPayload = std::mem::replace(buffer, Vec::with_capacity(cap)).into();
-                ongoing.push(upload.put_part(payload));
-            } else {
-                break;
-            }
+        // The queued futures must be polled once for the runtime to actually start them;
+        // failures that are already ready surface here instead of at the next write.
+        if let Err(e) = drain_ready_parts(ongoing, cx) {
+            return Poll::Ready(Err(e));
         }
 
         if consumed == 0 {
@@ -642,14 +763,11 @@ impl AsyncWrite for MultipartUploadWriter {
             return Poll::Ready(Ok(()));
         };
 
-        loop {
-            match ongoing.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(()))) => {}
-                Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(io::Error::other(e))),
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(None) => return Poll::Ready(Ok(())),
-            }
-        }
+        // A mid-stream flush cannot send the partial buffer because a non-last part must
+        // be at least MIN_PART_SIZE anyway, so waiting for all in-flight parts would only
+        // stall the pipeline; `poll_shutdown` drains everything before completing. A
+        // non-blocking sweep still surfaces failed parts early.
+        Poll::Ready(drain_ready_parts(ongoing, cx))
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -657,6 +775,17 @@ impl AsyncWrite for MultipartUploadWriter {
             match self.as_mut().poll_flush(cx) {
                 Poll::Ready(Ok(())) => {}
                 other => return other,
+            }
+
+            // `poll_flush` no longer drains every in-flight part, so queueing the final
+            // part here could exceed MAX_CONCURRENT_PARTS and break the documented bound.
+            // The flush drain already registered the waker; wait for a slot to free up.
+            // The `Active` state is intentionally preserved on this path.
+            let Self::Active { ongoing, buffer, .. } = self.as_mut().get_mut() else {
+                unreachable!()
+            };
+            if !buffer.is_empty() && ongoing.len() >= MAX_CONCURRENT_PARTS {
+                return Poll::Pending;
             }
 
             let Self::Active { mut upload, buffer, ongoing } =
@@ -711,6 +840,10 @@ mod test {
     fn sha256_hex(data: &[u8]) -> String {
         use sha2::Digest as _;
         hex::encode(sha2::Sha256::digest(data))
+    }
+
+    fn params<'a>(link: &'a Link, tmp_path: &'a Path, threshold: u64) -> PutStreamedParams<'a> {
+        PutStreamedParams::new(link, tmp_path, threshold, Ftmm::Sha256)
     }
 
     #[derive(Debug, Default)]
@@ -969,10 +1102,13 @@ mod test {
         let tmp_path = tmp.path().join("pkg.rpm");
         let link = Link::new("repo/empty-1-1.noarch.rpm");
 
-        let out = store.put_streamed(link, &tmp_path, &[][..], SMALL_THRESHOLD).await.expect("put");
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &[][..])
+            .await
+            .expect("put");
         assert!(!out.used_multipart);
         assert_eq!(out.size, 0);
-        assert_eq!(out.sha256_hex, sha256_hex(&[]));
+        assert_eq!(out.digest_hex, sha256_hex(&[]));
         assert_eq!(spy.create_count(), 0);
         let puts = spy.puts();
         assert_eq!(puts.len(), 1);
@@ -988,11 +1124,13 @@ mod test {
         let link = Link::new("repo/small-1-1.noarch.rpm");
         let data = test_data(SMALL_THRESHOLD as usize - 1, 7);
 
-        let out =
-            store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..])
+            .await
+            .expect("put");
         assert!(!out.used_multipart);
         assert_eq!(out.size, data.len() as u64);
-        assert_eq!(out.sha256_hex, sha256_hex(&data));
+        assert_eq!(out.digest_hex, sha256_hex(&data));
         assert_eq!(spy.create_count(), 0);
         let puts = spy.puts();
         assert_eq!(puts.len(), 1);
@@ -1008,8 +1146,10 @@ mod test {
         let link = Link::new("repo/exact-1-1.noarch.rpm");
         let data = test_data(SMALL_THRESHOLD as usize, 9);
 
-        let out =
-            store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..])
+            .await
+            .expect("put");
         assert!(!out.used_multipart);
         assert_eq!(spy.create_count(), 0);
         assert_eq!(spy.puts().len(), 1);
@@ -1024,10 +1164,12 @@ mod test {
         let link = Link::new("repo/above-1-1.noarch.rpm");
         let data = test_data(SMALL_THRESHOLD as usize + 1, 11);
 
-        let out =
-            store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..])
+            .await
+            .expect("put");
         assert!(out.used_multipart);
-        assert_eq!(out.sha256_hex, sha256_hex(&data));
+        assert_eq!(out.digest_hex, sha256_hex(&data));
         assert_eq!(spy.create_count(), 1);
         assert_eq!(spy.puts().len(), 0);
         let uploads = spy.uploads();
@@ -1044,11 +1186,13 @@ mod test {
         let link = Link::new("repo/large-1-1.noarch.rpm");
         let data = test_data(10_000, 13);
 
-        let out =
-            store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..])
+            .await
+            .expect("put");
         assert!(out.used_multipart);
         assert_eq!(out.size, data.len() as u64);
-        assert_eq!(out.sha256_hex, sha256_hex(&data));
+        assert_eq!(out.digest_hex, sha256_hex(&data));
         let uploads = spy.uploads();
         assert_eq!(uploads.len(), 1);
         assert_eq!(assembled(&uploads[0]), data);
@@ -1063,8 +1207,8 @@ mod test {
             &spy,
             &object_store::path::Path::from("repo/x.rpm"),
         )
-            .await
-            .expect("multipart");
+        .await
+        .expect("multipart");
         let mut writer = MultipartUploadWriter::new(upload, 16);
         let data = test_data(256, 21);
         writer.write_all(&data).await.expect("write");
@@ -1082,8 +1226,8 @@ mod test {
             &spy,
             &object_store::path::Path::from("repo/x.rpm"),
         )
-            .await
-            .expect("multipart");
+        .await
+        .expect("multipart");
         let mut writer = MultipartUploadWriter::new(upload, 16);
         let chunks = [test_data(5, 1), test_data(40, 2), test_data(7, 3), test_data(100, 4)];
         let mut expected = Vec::new();
@@ -1104,8 +1248,8 @@ mod test {
             &spy,
             &object_store::path::Path::from("repo/x.rpm"),
         )
-            .await
-            .expect("multipart");
+        .await
+        .expect("multipart");
         let mut writer = MultipartUploadWriter::new(upload, 16);
         writer.write_all(b"hello world, this is a flush test").await.expect("write");
         for _ in 0..5 {
@@ -1129,12 +1273,14 @@ mod test {
         let link = Link::new("repo/hash-1-1.noarch.rpm");
         let data = test_data(1_000, 31);
 
-        let out =
-            store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
-        assert_eq!(out.sha256_hex, sha256_hex(&data));
+        let out = store
+            .put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..])
+            .await
+            .expect("put");
+        assert_eq!(out.digest_hex, sha256_hex(&data));
         // The server compares this hex against the client-supplied checksum field;
         // a corrupted expectation must not compare equal.
-        assert_ne!(out.sha256_hex, sha256_hex(b"something else entirely"));
+        assert_ne!(out.digest_hex, sha256_hex(b"something else entirely"));
     }
 
     #[tokio::test]
@@ -1146,7 +1292,8 @@ mod test {
         let data = test_data(100, 41);
         let body = FailReader { data, pos: 0, fail_after: 10 };
 
-        let err = store.put_streamed(link, &tmp_path, body, 50).await.expect_err("must fail");
+        let err =
+            store.put_streamed(params(link, &tmp_path, 50), body).await.expect_err("must fail");
         assert!(
             matches!(err, StreamErr::Source(_)),
             "storage errors must not mask source: {err:?}"
@@ -1164,7 +1311,8 @@ mod test {
         let data = test_data(200, 43);
         let body = FailReader { data, pos: 0, fail_after: 120 };
 
-        let err = store.put_streamed(link, &tmp_path, body, 50).await.expect_err("must fail");
+        let err =
+            store.put_streamed(params(link, &tmp_path, 50), body).await.expect_err("must fail");
         assert!(matches!(err, StreamErr::Source(_)), "must stay a client error: {err:?}");
         assert_eq!(spy.create_count(), 1);
         assert_eq!(spy.puts().len(), 0);
@@ -1184,7 +1332,10 @@ mod test {
         let link = Link::new("repo/noinit-1-1.noarch.rpm");
         let data = test_data(200, 47);
 
-        let err = store.put_streamed(link, &tmp_path, &data[..], 50).await.expect_err("must fail");
+        let err = store
+            .put_streamed(params(link, &tmp_path, 50), &data[..])
+            .await
+            .expect_err("must fail");
         assert!(matches!(err, StreamErr::Store(_)), "must not look like client error: {err:?}");
         assert_eq!(spy.create_count(), 1);
         assert_eq!(spy.puts().len(), 0);
@@ -1203,7 +1354,10 @@ mod test {
         // via multiple threshold-exceeding bytes instead. Any multipart failure suffices.
         let data = test_data(500, 53);
 
-        let err = store.put_streamed(link, &tmp_path, &data[..], 50).await.expect_err("must fail");
+        let err = store
+            .put_streamed(params(link, &tmp_path, 50), &data[..])
+            .await
+            .expect_err("must fail");
         assert!(matches!(err, StreamErr::Store(_)), "must stay a store error: {err:?}");
         assert_eq!(spy.puts().len(), 0);
         let uploads = spy.uploads();
@@ -1221,7 +1375,10 @@ mod test {
         let link = Link::new("repo/badcomplete-1-1.noarch.rpm");
         let data = test_data(200, 59);
 
-        let err = store.put_streamed(link, &tmp_path, &data[..], 50).await.expect_err("must fail");
+        let err = store
+            .put_streamed(params(link, &tmp_path, 50), &data[..])
+            .await
+            .expect_err("must fail");
         assert!(matches!(err, StreamErr::Store(_)), "must stay a store error: {err:?}");
         let uploads = spy.uploads();
         assert_eq!(uploads.len(), 1);
@@ -1241,7 +1398,10 @@ mod test {
         let link = Link::new("repo/badabort-1-1.noarch.rpm");
         let data = test_data(200, 61);
 
-        let err = store.put_streamed(link, &tmp_path, &data[..], 50).await.expect_err("must fail");
+        let err = store
+            .put_streamed(params(link, &tmp_path, 50), &data[..])
+            .await
+            .expect_err("must fail");
         // The completion error is preserved even though the abort also failed (which is
         // only logged); it must still surface as a store error, never a validation error.
         assert!(matches!(err, StreamErr::Store(_)), "original error lost: {err:?}");
@@ -1257,7 +1417,7 @@ mod test {
         let (store, _spy) = remote_backend(SpyConfig::default());
         let tmp_path = dir.path().join("ok.rpm");
         let link = Link::new("repo/ok-1-1.noarch.rpm");
-        store.put_streamed(link, &tmp_path, &data[..], SMALL_THRESHOLD).await.expect("put");
+        store.put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), &data[..]).await.expect("put");
         assert!(tmp_path.exists());
         drop(dir);
         assert!(!dir_path.exists());
@@ -1268,7 +1428,7 @@ mod test {
         let tmp_path = dir.path().join("fail.rpm");
         let link = Link::new("repo/fail-1-1.noarch.rpm");
         let body = FailReader { data, pos: 0, fail_after: 10 };
-        let err = store.put_streamed(link, &tmp_path, body, SMALL_THRESHOLD).await;
+        let err = store.put_streamed(params(link, &tmp_path, SMALL_THRESHOLD), body).await;
         assert!(matches!(err, Err(StreamErr::Source(_))));
         drop(dir);
         assert!(!dir_path.exists(), "RAII tempdir must clean up after failure");
@@ -1284,10 +1444,11 @@ mod test {
         // Far above any threshold: Local must still stream directly, never multipart.
         let data = test_data(5_000, 71);
 
-        let out = store.put_streamed(link, &tmp_path, &data[..], 8).await.expect("local put");
+        let out =
+            store.put_streamed(params(link, &tmp_path, 8), &data[..]).await.expect("local put");
         assert!(!out.used_multipart);
         assert_eq!(out.size, data.len() as u64);
-        assert_eq!(out.sha256_hex, sha256_hex(&data));
+        assert_eq!(out.digest_hex, sha256_hex(&data));
         assert_eq!(std::fs::read(&dest).expect("dest"), data);
         assert_eq!(std::fs::read(&tmp_path).expect("staged"), data);
     }
@@ -1301,7 +1462,8 @@ mod test {
         let store = StoreBackend::Local;
         let body = FailReader { data: test_data(100, 73), pos: 0, fail_after: 10 };
 
-        let err = store.put_streamed(link, &tmp_path, body, 8).await.expect_err("must fail");
+        let err =
+            store.put_streamed(params(link, &tmp_path, 8), body).await.expect_err("must fail");
         assert!(matches!(err, StreamErr::Source(_)));
     }
 
@@ -1337,8 +1499,8 @@ mod test {
             &spy,
             &object_store::path::Path::from("repo/x.rpm"),
         )
-            .await
-            .expect("multipart");
+        .await
+        .expect("multipart");
         // Tiny parts plus a slow store: an unbounded writer would queue dozens of
         // in-flight parts for a single large write.
         let mut writer = MultipartUploadWriter::new(upload, 16);
@@ -1374,10 +1536,10 @@ mod test {
                 let link_str = format!("repo/concurrent-{i}-1-1.noarch.rpm");
                 let link = Link::new(&link_str);
                 let out = store
-                    .put_streamed(link, &tmp_path, &expected[..], threshold)
+                    .put_streamed(params(link, &tmp_path, threshold), &expected[..])
                     .await
                     .expect("concurrent put");
-                assert_eq!(out.sha256_hex, sha256_hex(&expected));
+                assert_eq!(out.digest_hex, sha256_hex(&expected));
                 (expected, out.used_multipart, dir)
             }));
         }
@@ -1412,4 +1574,6 @@ mod test {
         let mut expected_large: Vec<Vec<u8>> =
             seen.into_iter().filter(|data| data.len() > threshold as usize).collect();
         expected_large.sort();
-        assert_eq!(contents, expected_large);}}
+        assert_eq!(contents, expected_large);
+    }
+}

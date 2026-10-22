@@ -97,7 +97,7 @@ pub async fn upload_pkgs(
             let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
             let h = s.spawn(move || cache.add_frags(&rx));
 
-            received.into_par_iter().for_each(|ReceiveRpmOut { csum, path }| {
+            received.into_par_iter().for_each(|ReceiveRpmOut { csum, path, .. }| {
                 let input = libsubatomic::cache::ComputeInput { csum: Some(csum.into()), .. };
                 let Ok(computed) = cache
                     .compute(&path, input)
@@ -146,6 +146,7 @@ struct UploadProcessor<'k, H: Hierarchize> {
 struct ReceiveRpmOut {
     csum: String,
     path: PathBuf,
+    ftmm: kuchiyose::ftmm::Ftmm,
 }
 
 impl<H: Hierarchize> UploadProcessor<'_, H> {
@@ -154,14 +155,19 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
         {
             let received = self.receive_rpm(field).await?;
-            let ReceiveRpmOut { csum, .. } = &received;
-            self.check_csum(multipart, csum).await?;
+            let ReceiveRpmOut { csum, ftmm, .. } = &received;
+            self.check_csum(multipart, csum, *ftmm).await?;
             self.received.push(received);
         }
         Ok(())
     }
 
-    async fn check_csum(&self, multipart: &mut Multipart, csum: &str) -> Result<()> {
+    async fn check_csum(
+        &self,
+        multipart: &mut Multipart,
+        csum: &str,
+        ftmm: kuchiyose::ftmm::Ftmm,
+    ) -> Result<()> {
         let field = (multipart.next_field().await)
             .map_err(|e| {
                 ApiError::Internal(format!("can't get hash field: {e}: {}", e.body_text()))
@@ -171,7 +177,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .map_err(|e| ApiError::BadRequest(format!("can't get hash text: {e}")))?
             != csum
         {
-            return Err(ApiError::BadRequest(format!("calculated sha256: {csum}")));
+            return Err(ApiError::BadRequest(format!("calculated {}: {csum}", ftmm.as_str())));
         }
         Ok(())
     }
@@ -210,9 +216,20 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
         // the client sends the expected hash as the *next* multipart field. A
         // checksum-invalid object therefore remains stored, as before; incomplete
         // uploads, in contrast, are now aborted instead of being left behind.
+        // TODO: the checksum algorithm should come from a follow-up source
+        // (repo config / server config / client field); SHA-256 is the current default.
+        let ftmm = kuchiyose::ftmm::Ftmm::Sha256;
         let out = self
             .store
-            .put_streamed(&link, &path, body_reader, kuchiyose::store::SINGLE_PUT_THRESHOLD)
+            .put_streamed(
+                kuchiyose::store::PutStreamedParams::new(
+                    &link,
+                    &path,
+                    kuchiyose::store::SINGLE_PUT_THRESHOLD,
+                    ftmm,
+                ),
+                body_reader,
+            )
             .await
             .map_err(|e| match e {
                 kuchiyose::store::StreamErr::Source(err) => {
@@ -226,7 +243,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
                 }
                 _ => ApiError::Internal("cannot process uploads".to_owned()),
             })?;
-        let csum = out.sha256_hex;
+        let csum = out.digest_hex;
 
         let Some(kuchiyose::rpm::ParsePathOutput { name, arch, .. }) =
             kuchiyose::rpm::parse_filename(filename)
@@ -240,7 +257,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .filter(|(k, _)| &**k != filename);
         self.removed.extend(prev_versions.map(|(k, _)| k.clone()));
         tracing::debug!(removed = ?self.removed);
-        Ok(ReceiveRpmOut { csum, path })
+        Ok(ReceiveRpmOut { csum, path, ftmm })
     }
 }
 pub async fn delete_repo(
