@@ -97,7 +97,7 @@ pub async fn upload_pkgs(
             let (tx, rx) = crossbeam_channel::bounded(num_cpus::get() * 20);
             let h = s.spawn(move || cache.add_frags(&rx));
 
-            received.into_par_iter().for_each(|ReceiveRpmOut { csum, path }| {
+            received.into_par_iter().for_each(|ReceiveRpmOut { csum, path, .. }| {
                 let input = libsubatomic::cache::ComputeInput { csum: Some(csum.into()), .. };
                 let Ok(computed) = cache
                     .compute(&path, input)
@@ -146,6 +146,7 @@ struct UploadProcessor<'k, H: Hierarchize> {
 struct ReceiveRpmOut {
     csum: String,
     path: PathBuf,
+    ftmm: kuchiyose::ftmm::Ftmm,
 }
 
 impl<H: Hierarchize> UploadProcessor<'_, H> {
@@ -154,14 +155,19 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             multipart.next_field().await.map_err(|e| ApiError::Internal(e.to_string()))?
         {
             let received = self.receive_rpm(field).await?;
-            let ReceiveRpmOut { csum, .. } = &received;
-            self.check_csum(multipart, csum).await?;
+            let ReceiveRpmOut { csum, ftmm, .. } = &received;
+            self.check_csum(multipart, csum, *ftmm).await?;
             self.received.push(received);
         }
         Ok(())
     }
 
-    async fn check_csum(&self, multipart: &mut Multipart, csum: &str) -> Result<()> {
+    async fn check_csum(
+        &self,
+        multipart: &mut Multipart,
+        csum: &str,
+        ftmm: kuchiyose::ftmm::Ftmm,
+    ) -> Result<()> {
         let field = (multipart.next_field().await)
             .map_err(|e| {
                 ApiError::Internal(format!("can't get hash field: {e}: {}", e.body_text()))
@@ -171,7 +177,7 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .map_err(|e| ApiError::BadRequest(format!("can't get hash text: {e}")))?
             != csum
         {
-            return Err(ApiError::BadRequest(format!("calculated sha256: {csum}")));
+            return Err(ApiError::BadRequest(format!("calculated {}: {csum}", ftmm.as_str())));
         }
         Ok(())
     }
@@ -201,27 +207,43 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
         let link = self.hier.basedir().join(&link);
 
         let body_reader = std::pin::pin!(StreamReader::new(field.map_err(std::io::Error::other)));
-        let body_reader = body_reader.compat();
 
-        let csum = try {
-            let store_fd = self.store.writer(&link).await.map_err(std::io::Error::other)?;
-            let fd = tokio::fs::File::create(&path).await?;
-            let fd = tokio::io::BufWriter::new(fd);
-            let writer: MochiWriter =
-                kuchiyose::comp::Mochi::new(fd, kuchiyose::ftmm::Ftmm::Sha256);
-            let (mut store_fd, mut writer) = match double_write(body_reader, store_fd, writer).await
-            {
-                Ok(res) => res,
-                Err(err) => return Err(err),
-            };
-            store_fd.shutdown().await?;
-            writer.shutdown().await?;
-            let writer =
-                writer.as_any_mut().downcast_mut::<MochiWriter>().expect("can't downcast mochi");
-            let dummy = kuchiyose::FtmmDigest::Sha512(Default::default());
-            hex::encode(std::mem::replace(&mut writer.ftmm, dummy).finalize())
-        }
-        .map_err(|e| ApiError::Internal(format!("cannot process uploads: {e}")))?;
+        // Threshold-based upload: small RPMs use a single PUT without ever opening a
+        // multipart session; large RPMs stream via multipart after the staged prefix is
+        // replayed. The staging (temporary) file doubles as the later metadata input.
+        //
+        // NOTE (unchanged behavior): checksum validation happens after the upload because
+        // the client sends the expected hash as the *next* multipart field. A
+        // checksum-invalid object therefore remains stored, as before; incomplete
+        // uploads, in contrast, are now aborted instead of being left behind.
+        // TODO: the checksum algorithm should come from a follow-up source
+        // (repo config / server config / client field); SHA-256 is the current default.
+        let ftmm = kuchiyose::ftmm::Ftmm::Sha256;
+        let out = self
+            .store
+            .put_streamed(
+                kuchiyose::store::PutStreamedParams::new(
+                    &link,
+                    &path,
+                    kuchiyose::store::SINGLE_PUT_THRESHOLD,
+                    ftmm,
+                ),
+                body_reader,
+            )
+            .await
+            .map_err(|e| match e {
+                kuchiyose::store::StreamErr::Source(err) => {
+                    ApiError::BadRequest(format!("multipart: {err}"))
+                }
+                kuchiyose::store::StreamErr::Tmp(err) => {
+                    ApiError::Internal(format!("cannot write to tmpdir: {err}"))
+                }
+                kuchiyose::store::StreamErr::Store(err) => {
+                    ApiError::Internal(format!("cannot write to store: {err}"))
+                }
+                _ => ApiError::Internal("cannot process uploads".to_owned()),
+            })?;
+        let csum = out.digest_hex;
 
         let Some(kuchiyose::rpm::ParsePathOutput { name, arch, .. }) =
             kuchiyose::rpm::parse_filename(filename)
@@ -235,47 +257,9 @@ impl<H: Hierarchize> UploadProcessor<'_, H> {
             .filter(|(k, _)| &**k != filename);
         self.removed.extend(prev_versions.map(|(k, _)| k.clone()));
         tracing::debug!(removed = ?self.removed);
-        Ok(ReceiveRpmOut { csum, path })
+        Ok(ReceiveRpmOut { csum, path, ftmm })
     }
 }
-
-type MochiWriter = kuchiyose::comp::Mochi<tokio::io::BufWriter<tokio::fs::File>>;
-
-async fn double_write(
-    mut body_reader: impl futures_util::AsyncRead + Unpin + Send,
-    store_fd: Box<dyn kuchiyose::store::StoreWrite>,
-    writer: MochiWriter,
-) -> Result<(Box<dyn kuchiyose::store::StoreWrite>, Box<dyn kuchiyose::store::StoreWrite>)> {
-    let mut multi_writer = srmw::MultiWriter::default();
-    multi_writer.insert(store_fd.compat_write());
-    multi_writer.insert((Box::new(writer) as Box<dyn kuchiyose::store::StoreWrite>).compat_write());
-    let buf = &mut vec![0u8; 64 * 1024].into_boxed_slice();
-    let mut generator = multi_writer.copy(&mut body_reader, buf);
-    while let Some(event) = generator.next().await {
-        match event {
-            srmw::CopyEvent::Progress(_) => {}
-            srmw::CopyEvent::Failure(0, err) => {
-                tracing::error!(?err, "cannot write to store");
-                return Err(ApiError::Internal(format!("cannot write to store: {err}")));
-            }
-            srmw::CopyEvent::Failure(1, err) => {
-                tracing::error!(?err, "cannot write to tmpdir");
-                return Err(ApiError::Internal(format!("cannot write to tmpdir: {err}")));
-            }
-            srmw::CopyEvent::Failure(i, _) => unreachable!("unknown writer idx {i}"),
-            srmw::CopyEvent::NoWriters => unreachable!("no writers"),
-            srmw::CopyEvent::SourceFailure(error) => {
-                tracing::warn!(?error, "source failure");
-                return Err(ApiError::BadRequest(format!("multipart: {error}")));
-            }
-        }
-    }
-    drop(generator);
-    let left = multi_writer.remove(0).into_inner();
-    let right = multi_writer.remove(1).into_inner();
-    Ok((left, right))
-}
-
 pub async fn delete_repo(
     State(locker): LockerState,
     Path(name): Path<String>,

@@ -2857,12 +2857,15 @@ name = "libsubatomic-kuchiyose"
 version = "1.1.2"
 dependencies = [
  "async-compression",
+ "async-trait",
  "atoi 3.1.0",
  "futures",
+ "hex",
  "object_store",
  "preinterpret",
  "serde",
  "sha2 0.11.1",
+ "tempfile",
  "thiserror",
  "tokio",
  "tracing",

@@ -110,6 +110,14 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/subatomic
       ZSTD_SYS_USE_PKG_CONFIG: "1"
+      # S3 integration tests (SUBATOMIC_S3_TESTS-gated) run against the RustFS service below.
+      SUBATOMIC_S3_TESTS: "1"
+      AWS_ENDPOINT: http://rustfs:9000
+      AWS_BUCKET_NAME: kuchiyose-test
+      AWS_ACCESS_KEY_ID: subatomic-ci
+      AWS_SECRET_ACCESS_KEY: subatomic-ci-secret
+      AWS_ALLOW_HTTP: "true"
+      AWS_REGION: us-east-1
     services:
       postgres:
         image: postgres:16
@@ -122,6 +130,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # Started from the image's default CMD (`rustfs` with RUSTFS_VOLUMES=/data); the image
+      # ships curl, so the health check probes the S3 API /health endpoint directly.
+      rustfs:
+        image: rustfs/rustfs:1.0.3
+        env:
+          RUSTFS_ACCESS_KEY: subatomic-ci
+          RUSTFS_SECRET_KEY: subatomic-ci-secret
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Install dependencies
         run: dnf in -y clang gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)'
@@ -158,6 +178,17 @@ jobs:
 
       - name: Perform database migration
         run: cargo sqlx migrate run
+
+      - name: Create test bucket on RustFS
+        run: |
+          # dl.min.io no longer serves archived MinIO community dm (HTTP 410), so use the
+          # first-party RustFS client, pinned, from GitHub releases. The tarball extracts rc.
+          curl -sSLo /tmp/rc.tar.gz https://github.com/rustfs/cli/releases/download/v0.1.36/rustfs-cli-linux-amd64-v0.1.36.tar.gz
+          echo "4a8128911ccad4e7b481f26635a4cfd1ec064412210526e57ad2c748d356f3b7  /tmp/rc.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/rc.tar.gz -C /tmp
+          /tmp/rc alias set rustfs "$AWS_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"
+          # Idempotent: if create fails, the bucket must already exist (reruns/stale services).
+          /tmp/rc bucket create "rustfs/$AWS_BUCKET_NAME" || /tmp/rc bucket list rustfs | grep -qF "/$AWS_BUCKET_NAME"
 
       - name: Run tests
         run: cargo llvm-cov
