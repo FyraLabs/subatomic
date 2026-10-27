@@ -448,6 +448,8 @@ impl<H: Hierarchize + Sync> Cache<H> {
     }
 
     /// Generate and write the xml for one [`Metan`].
+    ///
+    /// This also removes the old repodata file.
     async fn write_one(
         &self,
         metan: &Arc<dyn Metan>,
