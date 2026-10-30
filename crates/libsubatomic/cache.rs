@@ -12,16 +12,28 @@ use crate::repo::hierarchy::Hierarchize;
 use crate::repodata::{MetanGeneration, MetanReady, repomd};
 use kuchiyose::comp::{CompConfig, Mochi};
 use kuchiyose::ftmm::Ftmm;
+use kuchiyose::link::{Link, LinkBuf};
 use kuchiyose::store::StoreBackend;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncWriteExt;
 
+/// Directory (relative to [`Hierarchize::basedir`]) where all metadata is published.
+///
+/// Aliased here (instead of repeating the literal) because it is part of the *deletion* contract
+/// in [`Cache::cleanup_obsolete_repodata`], which must not operate outside this directory.
+const REPODATA_DIR: &str = "repodata";
+
 pub(crate) type DataDb = heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
 pub(crate) type FragDb = heed::Database<heed::types::Bytes, heed::types::Bytes>;
 pub(crate) type MarkDb =
     heed::Database<heed::types::Bytes, heed::types::U128<heed::byteorder::NativeEndian>>;
+/// Persistent map of the `<data>` entries of the last successfully published `repomd.xml`,
+/// keyed by href: the tracked state used for obsolete-metadata cleanup.
+pub(crate) type TrackedDb =
+    heed::Database<heed::types::Str, heed::types::SerdeBincode<repomd::Data>>;
 
 pub const DEFAULT_MAP_SIZE: usize = 10 * 1024 * 1024 * 1024;
 
@@ -62,6 +74,12 @@ pub struct Cache<H: Hierarchize + Sync> {
     pub epo: MarkDb,
     /// User-supplied custom datatypes keyed by [`repomd::Data::r#type`].
     pub cus: DataDb,
+    /// The `<data>` entries of the last successfully published `repomd.xml`, keyed by href.
+    ///
+    /// This is the persistent source for obsolete-metadata cleanup: [`Self::write_all`] reads it
+    /// to learn which files the previous publication referenced, never reading `repomd.xml`
+    /// from (or listing) the storage backend.
+    pub tracked: TrackedDb,
     /// All datatypes this repo generates.
     metans: Metans,
 }
@@ -84,7 +102,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         }
         std::fs::create_dir_all(&path)?;
 
-        let max_dbs = metans.iter().map(|m| m.db_count()).sum::<u32>() + 2; // + env & cus
+        let max_dbs = metans.iter().map(|m| m.db_count()).sum::<u32>() + 3; // + epo & cus & tracked
         // SAFETY: assume this file is not modified concurrently
         let env = unsafe {
             heed::EnvOpenOptions::new()
@@ -99,12 +117,13 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let mut txn = env.write_txn()?;
         let epo = env.create_database(&mut txn, Some("epo"))?;
         let cus = env.create_database(&mut txn, Some("cus"))?;
+        let tracked = env.create_database(&mut txn, Some("tracked"))?;
         for metan in &metans {
             metan.db_init(Arc::clone(&env), &mut txn)?;
         }
         txn.commit()?;
 
-        Ok(Self { cfg, env, epo, cus, metans })
+        Ok(Self { cfg, env, epo, cus, tracked, metans })
     }
 
     #[inline]
@@ -382,6 +401,14 @@ impl<H: Hierarchize + Sync> Cache<H> {
     /// envelope plus all cached fragments through a compression + checksum pipeline, then returns
     /// its [`repomd::Data`] entry through [`Metan::on_ready`].
     ///
+    /// After the new `repomd.xml` is successfully published, metadata files that were referenced
+    /// by the *previously* publication are removed (see [`Self::cleanup_obsolete_repodata`]).
+    /// Which files the previous publication referenced is learned from the persistent [`Cache`]
+    /// tracking database — never by reading `repomd.xml` from, or listing, the storage backend.
+    /// Obsolete-file removal is best-effort: a failed individual deletion is logged and its
+    /// tracking entry is kept, so a later publication retries it and the publication itself never
+    /// fails.
+    ///
     /// # Errors
     /// Propagates writer creation, compression, LMDB, and IO errors.
     ///
@@ -389,7 +416,11 @@ impl<H: Hierarchize + Sync> Cache<H> {
     /// Panics if [`SystemTime::now`] is before the unix epoch.
     pub async fn write_all(&self, comp_cfg: &CompConfig) -> Res<Vec<u8>> {
         tracing::info!("writing repodata");
-        let repodata_dir = self.cfg.hier.basedir().join("repodata");
+        // Snapshot the tracked metadata locations of the last *successful* publication before
+        // anything changes, so superseded files can be garbage collected afterwards.
+        let previous = self.tracked_datas()?;
+
+        let repodata_dir = self.cfg.hier.basedir().join(REPODATA_DIR);
         if let StoreBackend::Local = &*self.cfg.store {
             tokio::fs::create_dir_all(&repodata_dir).await?;
         }
@@ -402,7 +433,18 @@ impl<H: Hierarchize + Sync> Cache<H> {
         let mut data = data.into_iter().flatten().collect();
 
         self.extend_custom_datatypes(&mut data)?;
-        self.write_repomd(data).await
+        // `data` is about to be published by `write_repomd` verbatim; snapshot its hrefs so that
+        // cleanup can prove it never deletes a file the fresh manifest still references, and the
+        // entries themselves so that the tracked state can be mirrored onto it.
+        let kept: HashSet<LinkBuf> = data.iter().map(|d| d.location.href.clone()).collect();
+        let fresh = data.clone();
+        let repomd_bytes = self.write_repomd(data).await?;
+
+        // The new manifest is now published; everything else the tracked state referenced is
+        // obsolete. The tracked state is only updated (in `cleanup_and_track`) after this point,
+        // so a failed publication leaves it exactly as it was.
+        self.cleanup_obsolete_repodata(previous, fresh, &kept).await;
+        Ok(repomd_bytes)
     }
 
     /// Generate and write the xml for one [`Metan`].
@@ -412,7 +454,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         comp_cfg: &CompConfig,
         timestamp: i64,
     ) -> Res<Option<repomd::Data>> {
-        let repodata_dir = self.cfg.hier.basedir().join("repodata");
+        let repodata_dir = self.cfg.hier.basedir().join(REPODATA_DIR);
         let link = repodata_dir.join(metan.filename());
 
         // `StoreBackend::writer` is async because a remote backend must open a multipart upload.
@@ -460,7 +502,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
     }
 
     async fn write_repomd(&self, data: Vec<repomd::Data>) -> Res<Vec<u8>> {
-        let repodata_dir = self.cfg.hier.basedir().join("repodata");
+        let repodata_dir = self.cfg.hier.basedir().join(REPODATA_DIR);
         let link = repodata_dir.join("repomd.xml");
         let mut async_writer =
             self.cfg.store.writer(&link).await.map_err(crate::err::Error::from)?;
@@ -478,6 +520,94 @@ impl<H: Hierarchize + Sync> Cache<H> {
         async_writer.write_all(&buf).await.map_err(crate::err::Error::from)?;
         async_writer.shutdown().await?;
         Ok(buf)
+    }
+
+    /// Read the `<data>` entries tracked for the previously successful publication.
+    ///
+    /// Returns an empty vector before the very first publication (nothing to clean up) or when
+    /// there simply was nothing published. The state is local (LMDB) and self-authoritative: it
+    /// is written back only by [`Self::cleanup_obsolete_repodata`], which runs after a
+    /// successful publication. Errors are LMDB errors; a corrupt record cannot be repaired from
+    /// the store because cleanup never reads the backend — this matches every other LMDB
+    /// failure mode of the cache.
+    ///
+    /// # Errors
+    /// Propagates LMDB errors.
+    pub(crate) fn tracked_datas(&self) -> Res<Vec<repomd::Data>> {
+        let txn = self.env.read_txn()?;
+        Ok(self
+            .tracked
+            .iter(&txn)?
+            .map(|res| res.map(|(_, data)| data))
+            .collect::<heed::Result<_>>()?)
+    }
+
+    /// Garbage-collect metadata orphaned by this publication and update the tracked state.
+    ///
+    /// Only runs after [`Self::write_repomd`] has published the new manifest, so the tracked
+    /// state describes *the last successful publication*. Every candidate href is validated
+    /// against [`is_deletable_repodata_href`] before deletion; `kept` guarantees a file the
+    /// fresh manifest still references is never removed.
+    ///
+    /// Two-phase update: the remote deletions run first (outside the LMDB transaction, so the
+    /// write lock is never held across await points), then one short LMDB write transaction
+    /// (1) drops the entries whose deletion succeeded and (2) mirrors the freshly published
+    /// entries. Deletion is best-effort: a failed individual removal is logged and its entry is
+    /// *kept*, so the file keeps being tracked and a later publication retries the deletion —
+    /// it must never roll back or fail the publication that already succeeded.
+    async fn cleanup_obsolete_repodata(
+        &self,
+        previous: Vec<repomd::Data>,
+        fresh: Vec<repomd::Data>,
+        kept: &HashSet<LinkBuf>,
+    ) {
+        let mut removed: Vec<LinkBuf> = Vec::new();
+        for data in previous {
+            let href = data.location.href;
+            if kept.contains(&href) {
+                continue; // still referenced by the newly published repomd.xml
+            }
+            if !is_deletable_repodata_href(&href) {
+                tracing::debug!(href = %href, "skipping unexpected tracked repomd href");
+                continue;
+            }
+            let link = self.cfg.hier.basedir().join(&href);
+            match self.cfg.store.delete(&link).await {
+                Ok(()) => {
+                    tracing::debug!(href = %href, "removed obsolete metadata file");
+                    removed.push(href);
+                }
+                Err(e) => {
+                    tracing::warn!(href = %href, %e, "cannot remove obsolete metadata file; its tracking entry is kept so a later publication retries");
+                }
+            }
+        }
+
+        // Mirror the freshly published manifest and forget the successfully removed files.
+        // Even if this fails, the stale state converges on its own: leftover entries are
+        // re-checked (and deleting an already-deleted file maps to success) on the next
+        // publication, and cleanup only ever touches tracked hrefs that `kept` no longer has.
+        let res = (|| -> heed::Result<()> {
+            let mut wtxn = self.env.write_txn()?;
+            for href in &removed {
+                // SAFETY: we do not keep any references to the database's contents
+                self.tracked.delete(&mut wtxn, href.as_str())?;
+            }
+            for data in &fresh {
+                // Defense in depth: never track a href that the cleanup machinery could not
+                // delete. (Tracked entries only ever originate here, so this is a no-op guard.)
+                if !is_deletable_repodata_href(&data.location.href) {
+                    tracing::warn!(href = %data.location.href, "metadata href is not deletable; it will not be garbage collected");
+                    continue;
+                }
+                self.tracked.put(&mut wtxn, data.location.href.as_str(), data)?;
+            }
+            wtxn.commit()?;
+            Ok(())
+        })();
+        if let Err(e) = res {
+            tracing::warn!(error = %e, "cannot update the tracked metadata locations");
+        }
     }
 
     /// Compact the underlying LMDB file by writing a fresh copy.
@@ -511,6 +641,21 @@ impl<H: Hierarchize + Sync> Cache<H> {
         tracing::info!(dir = %env_dir.display(), "cache compacted");
         Ok(())
     }
+}
+
+/// Whether `href` — as recorded in a `<data>` entry of a previously published `repomd.xml` — is
+/// safe to use as a deletion target.
+///
+/// Only metadata published by this crate qualifies: a relative path strictly under
+/// [`REPODATA_DIR`] that cannot escape it (no `..` or empty path segments). The manifest
+/// `repodata/repomd.xml` is excluded — it is rewritten, never removed by cleanup. This is
+/// defense in depth for hrefs that were never written by us (e.g. hand-crafted tracking state).
+fn is_deletable_repodata_href(href: &Link) -> bool {
+    let Some(rest) = href.as_str().strip_prefix(REPODATA_DIR).and_then(|r| r.strip_prefix('/'))
+    else {
+        return false;
+    };
+    rest != "repomd.xml" && !rest.split('/').any(|segment| segment.is_empty() || segment == "..")
 }
 
 fn digest(ftmm: Ftmm, path: &Path) -> std::io::Result<String> {
@@ -580,4 +725,436 @@ pub enum FragRequest {
     /// This requests [`crate::Cache::update_frags`] to insert a new package that was not previously
     /// in the cache. Obtain the computed vector via [`Cache::compute`].
     Put(Vec<crate::repodata::MetanComputed>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `super::*` carries the crate-wide `String` alias (smartstring); tests use the std one.
+    use std::string::String;
+
+    /// A minimal RPM, built in-process so tests do not depend on external fixture files.
+    fn build_rpm(dir: &Path, name: &str) -> PathBuf {
+        let path = dir.join(format!("{name}-1.0-1.noarch.rpm"));
+        let pkg = rpm::PackageBuilder::new(name, "1.0", "MIT", "noarch", "Test package")
+            .with_file_contents(
+                b"hello world",
+                rpm::FileOptions::new(format!("/usr/share/doc/{name}/readme.md")),
+            )
+            .expect("rpm builds")
+            .build()
+            .expect("rpm builds");
+        pkg.write_file(&path).expect("rpm writes");
+        path
+    }
+
+    fn local_test_cache(out: &Path) -> Cache<crate::repo::hierarchy::Satm0Flat> {
+        let cfg = CacheConfig {
+            repo: "repotest".into(),
+            cache_dir: out.join("cache"),
+            hier: crate::repo::hierarchy::Satm0Flat { base: out.display().to_string().into(), .. },
+            store: Arc::new(StoreBackend::Local),
+            ftmm: Ftmm::Sha256,
+            ..
+        };
+        let metans: Metans = vec![
+            Arc::new(PrimaryMetan::default()) as Arc<dyn Metan>,
+            Arc::new(FilelistsMetan::default()),
+            Arc::new(OtherMetan::default()),
+        ];
+        Cache::new(cfg, metans).expect("cache opens")
+    }
+
+    /// Insert one package into the cache (without the epoch-purge semantics of
+    /// [`Cache::update_frags`]).
+    fn add_pkg(cache: &Cache<impl Hierarchize>, path: &Path) {
+        let computed = cache.compute(path, ComputeInput::default()).expect("fragment computes");
+        let (tx, rx) = crossbeam_channel::bounded(1);
+        tx.send((path.into(), computed)).expect("channel open");
+        drop(tx);
+        cache.add_frags(&rx).unwrap();
+    }
+
+    /// Publish and return the hrefs of the freshly written `repomd.xml`.
+    async fn publish(cache: &Cache<impl Hierarchize>) -> Vec<String> {
+        let buf = cache
+            .write_all(&kuchiyose::comp::CompConfig::default())
+            .await
+            .expect("repodata published");
+        let text = std::str::from_utf8(&buf).expect("repomd is utf-8");
+        quick_xml::de::from_str::<repomd_datas>(text)
+            .expect("freshly serialized repomd.xml parses back")
+            .data
+            .into_iter()
+            .map(|d| d.location.href.as_str().to_owned())
+            .collect()
+    }
+
+    /// Root-level shape to recover the `<data>` entries from freshly serialized `repomd.xml`
+    /// bytes. Deliberately test-local, so that [`publish`] verifies what was *published*
+    /// independently of the tracked state ([`Cache::tracked_datas`]) the cleanup uses.
+    #[expect(non_camel_case_types)]
+    #[derive(serde::Deserialize)]
+    struct repomd_datas {
+        #[serde(default)]
+        data: Vec<repomd::Data>,
+    }
+
+    /// Bare filenames currently present inside the local store's `repodata/` directory.
+    fn repodata_files(base: &Path) -> HashSet<String> {
+        std::fs::read_dir(base.join(REPODATA_DIR))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect()
+    }
+
+    fn hrefs_to_filenames(hrefs: &[String]) -> HashSet<String> {
+        hrefs
+            .iter()
+            .map(|h| {
+                h.strip_prefix(REPODATA_DIR)
+                    .and_then(|r| r.strip_prefix('/'))
+                    .expect("test hrefs always start with repodata/")
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn removes_obsolete_metadata_files_after_publication() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+        assert_eq!(old.len(), 3, "primary+filelists+other published: {old:?}");
+        // Nothing was published before this run, so nothing may have been deleted: every href
+        // (and the manifest) must exist on disk.
+        let files = repodata_files(out.path());
+        let expected = {
+            let mut e = hrefs_to_filenames(&old);
+            e.insert("repomd.xml".to_owned());
+            e
+        };
+        assert_eq!(files, expected);
+
+        // Adding a package changes every metan's content → every checksum filename changes.
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testb"));
+        let fresh: Vec<String> = publish(&cache).await;
+        assert_eq!(fresh.len(), 3);
+        assert!(fresh.iter().all(|h| !old.contains(h)), "filenames must change: {old:?} {fresh:?}");
+
+        // Obsolete files are gone; fresh files and the manifest are the whole directory.
+        let mut expected = hrefs_to_filenames(&fresh);
+        expected.insert("repomd.xml".to_owned());
+        assert_eq!(repodata_files(out.path()), expected);
+    }
+
+    #[tokio::test]
+    async fn unchanged_metadata_is_preserved_and_not_deleted() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+        // Second publication without any cache changes: hrefs must be identical, and cleanup
+        // must not touch (or remove) any of the current files.
+        let fresh: Vec<String> = publish(&cache).await;
+        assert_eq!(old, fresh);
+        let mut expected = hrefs_to_filenames(&fresh);
+        expected.insert("repomd.xml".to_owned());
+        assert_eq!(repodata_files(out.path()), expected);
+    }
+
+    #[tokio::test]
+    async fn failed_publication_preserves_previous_metadata() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+
+        // Sabotage the manifest target so that everything except the final publication succeeds.
+        let repomd_path = out.path().join(REPODATA_DIR).join("repomd.xml");
+        std::fs::remove_file(&repomd_path).unwrap();
+        std::fs::create_dir(&repomd_path).unwrap();
+        let res = cache.write_all(&CompConfig::default()).await;
+        assert!(res.is_err(), "sabotaged repomd.xml target must fail the publication");
+        std::fs::remove_dir(&repomd_path).unwrap();
+
+        // Nothing may have been removed — cleanup runs strictly after publication succeeds.
+        for href in &old {
+            assert!(out.path().join(href).exists(), "old file must survive: {href}");
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_generation_preserves_previous_metadata() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+
+        // Make `repodata/` unwritable so that metan generation itself fails.
+        let repodata = out.path().join(REPODATA_DIR);
+        std::fs::set_permissions(&repodata, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let res = cache.write_all(&CompConfig::default()).await;
+        std::fs::set_permissions(&repodata, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let Err(e) = res else { panic!("read-only repodata must fail generation") };
+        assert!(matches!(e, crate::Error::Kuchiyose(_)), "e={e:?}");
+
+        for href in &old {
+            assert!(out.path().join(href).exists(), "old file must survive: {href}");
+        }
+    }
+
+    #[tokio::test]
+    async fn obsolete_custom_datatype_files_are_removed() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        // Plant a custom datatype (`group`) file + cache entry, as [`crate::repo::Repo`] does.
+        let group_href = "repodata/deadbeef-group.zst";
+        let group_path = out.path().join(group_href);
+        std::fs::create_dir_all(group_path.parent().unwrap()).unwrap();
+        std::fs::write(&group_path, b"").unwrap();
+        let data = repomd::Data {
+            r#type: "group".into(),
+            checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "deadbeef".into() },
+            open_checksum: repomd::Checksum { r#type: Ftmm::Sha256, sha: "cafe".into() },
+            location: repomd::Location { href: group_href.into() },
+            timestamp: 1,
+            size: 0,
+            open_size: 0,
+        };
+        assert!(cache.write_custom_datatype(&data).unwrap().is_none());
+
+        let published: Vec<String> = publish(&cache).await;
+        assert!(
+            published.iter().any(|h| h == group_href),
+            "group must be referenced: {published:?}"
+        );
+        assert!(group_path.exists());
+
+        // Removing the custom datatype from the cache means the next publication no longer
+        // references its file → the file must be deleted, while the regular metadata stays.
+        assert!(cache.del_custom_datatype("group").unwrap().is_some());
+        let fresh: Vec<String> = publish(&cache).await;
+        assert!(!fresh.iter().any(|h| h == group_href));
+        assert!(!group_path.exists(), "obsolete custom datatype file must be removed");
+        for href in &fresh {
+            assert!(out.path().join(href).exists(), "still-referenced file must remain: {href}");
+        }
+    }
+
+    #[tokio::test]
+    async fn cleanup_works_with_remote_store() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let backend =
+            Arc::new(StoreBackend::Remote(Arc::new(object_store::memory::InMemory::new())));
+        let cache_dir = tempfile::tempdir_in(out.path()).unwrap();
+        std::mem::forget(cache_dir);
+        let cfg = CacheConfig {
+            repo: "repotest".into(),
+            cache_dir: out.path().join("cache"),
+            hier: crate::repo::hierarchy::Satm0Flat {
+                base: out.path().display().to_string().into(),
+                ..
+            },
+            store: Arc::clone(&backend),
+            ftmm: Ftmm::Sha256,
+            ..
+        };
+        let metans: Metans = vec![
+            Arc::new(PrimaryMetan::default()) as Arc<dyn Metan>,
+            Arc::new(FilelistsMetan::default()),
+            Arc::new(OtherMetan::default()),
+        ];
+        let cache = Cache::new(cfg, metans).expect("cache opens");
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testb"));
+        let fresh: Vec<String> = publish(&cache).await;
+        assert!(fresh.iter().all(|h| !old.contains(h)));
+
+        // Everything still referenced must be in the remote store; obsolete files must not.
+        let StoreBackend::Remote(inner) = &*backend else { unreachable!() };
+        use futures::StreamExt as _;
+        let all = inner
+            .list(None)
+            .map(|meta| meta.unwrap().location.as_ref().to_owned())
+            .collect::<Vec<_>>()
+            .await;
+        for href in &fresh {
+            let hit = all.iter().any(|p| p.ends_with(&**href));
+            assert!(hit, "fresh file must be stored: {href} (have {all:?})");
+        }
+        for href in &old {
+            let hit = all.iter().any(|p| p.ends_with(&**href));
+            assert!(!hit, "obsolete file must be removed: {href} (have {all:?})");
+        }
+        assert_eq!(all.len(), fresh.len() + 1, "repomd.xml plus fresh metadata");
+    }
+
+    /// Hrefs currently present in the tracked (LMDB) publication state, as a set.
+    fn tracked_hrefs(cache: &Cache<impl Hierarchize>) -> std::collections::HashSet<String> {
+        cache
+            .tracked_datas()
+            .unwrap()
+            .into_iter()
+            .map(|d| d.location.href.as_str().to_owned())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn tracked_state_is_empty_before_first_publication() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+        assert!(tracked_hrefs(&cache).is_empty(), "fresh cache tracks nothing");
+
+        // Even with fragments staged, nothing is tracked until a publication succeeds: the
+        // tracked state always describes the last *successful* publication, not a draft.
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        assert!(tracked_hrefs(&cache).is_empty());
+
+        let published: Vec<String> = publish(&cache).await;
+        assert_eq!(
+            tracked_hrefs(&cache),
+            published.into_iter().collect(),
+            "first publication is tracked"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_publication_leaves_tracked_state_unchanged() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+        assert_eq!(tracked_hrefs(&cache), old.iter().map(|s| s.clone()).collect());
+
+        // Sabotage the manifest target so that everything except the final publication succeeds.
+        let repomd_path = out.path().join(REPODATA_DIR).join("repomd.xml");
+        std::fs::remove_file(&repomd_path).unwrap();
+        std::fs::create_dir(&repomd_path).unwrap();
+        let res = cache.write_all(&CompConfig::default()).await;
+        assert!(res.is_err(), "sabotaged repomd.xml target must fail the publication");
+        std::fs::remove_dir(&repomd_path).unwrap();
+
+        // Nothing may have been removed, and the tracked state must still be the OLD one:
+        // cleanup and tracking updates run strictly after publication succeeds.
+        for href in &old {
+            assert!(out.path().join(href).exists(), "old file must survive: {href}");
+        }
+        assert_eq!(tracked_hrefs(&cache), old.iter().map(|s| s.clone()).collect());
+
+        // A later successful publication still garbage-collects the old state (convergence).
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testb"));
+        let fresh: Vec<String> = publish(&cache).await;
+        assert_eq!(tracked_hrefs(&cache), fresh.iter().map(|s| s.clone()).collect());
+        for href in &old {
+            assert!(!out.path().join(href).exists(), "obsolete file removed later: {href}");
+        }
+    }
+
+    #[tokio::test]
+    async fn tracked_state_persists_across_cache_reopen() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+        drop(cache);
+
+        // Reopening the cache must restore the tracked state from LMDB (and not lose database
+        // count/mappings): the persisted state is what enables cleanup after a restart.
+        let cache = local_test_cache(out.path());
+        assert_eq!(tracked_hrefs(&cache), old.iter().map(|s| s.clone()).collect());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testb"));
+        let fresh: Vec<String> = publish(&cache).await;
+        for href in &old {
+            assert!(!out.path().join(href).exists(), "obsolete removed after reopen: {href}");
+        }
+        assert_eq!(tracked_hrefs(&cache), fresh.iter().map(|s| s.clone()).collect());
+    }
+
+    #[tokio::test]
+    async fn failed_deletion_is_retried_on_a_later_publication() {
+        let out = tempfile::tempdir().unwrap();
+        let in_dir = tempfile::tempdir().unwrap();
+        let cache = local_test_cache(out.path());
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
+        let old: Vec<String> = publish(&cache).await;
+
+        // Sabotage one obsolete metadata file by replacing it with a directory: its deletion
+        // must fail (and only its deletion), without failing the publication itself.
+        let sab_path = out.path().join(&old[0]);
+        std::fs::remove_file(&sab_path).unwrap();
+        std::fs::create_dir(&sab_path).unwrap();
+
+        add_pkg(&cache, &build_rpm(in_dir.path(), "testb"));
+        let fresh: Vec<String> = publish(&cache).await;
+        assert!(fresh.iter().all(|h| !old.contains(h)));
+        for (i, href) in old.iter().enumerate() {
+            if i == 0 {
+                assert!(sab_path.exists(), "sabotaged file must keep failing to delete");
+            } else {
+                assert!(!out.path().join(href).exists(), "file must be removed: {href}");
+            }
+        }
+        // The failed deletion's tracking entry survives; the fresh manifest is also tracked.
+        let mut expected =
+            fresh.iter().map(|s| s.clone()).collect::<std::collections::HashSet<_>>();
+        expected.insert(old[0].clone());
+        assert_eq!(tracked_hrefs(&cache), expected);
+
+        // Resolve the failure; the next publication must retry (Task: NotFound on the now
+        // absent path maps to success) and converge.
+        std::fs::remove_dir(&sab_path).unwrap();
+        let again: Vec<String> = publish(&cache).await;
+        assert_eq!(again, fresh, "unchanged cache must produce identical hrefs");
+        assert_eq!(tracked_hrefs(&cache), fresh.iter().map(|s| s.clone()).collect());
+    }
+
+    #[test]
+    fn href_validation_allows_only_metadata_paths() {
+        let ok =
+            ["repodata/ab12-primary.xml.zst", "repodata/ab12-other.xml.gz", "repodata/a/b/c.xml"];
+        let bad = [
+            "",
+            "repodata",
+            "repodata/",
+            "repodata//",
+            "repodata/repomd.xml",
+            "repodata/../sneaky.txt",
+            "repodata/a/../../sneaky.txt",
+            "repodatas/ab12.xml",
+            "/repodata/ab12.xml",
+            "repodata//x.xml",
+            "http://evil.example/repodata/x.xml",
+            "rpm/testa-1.0-1.noarch.rpm",
+        ];
+        for href in ok {
+            assert!(is_deletable_repodata_href(Link::new(href)), "{href} must be allowed");
+        }
+        for href in bad {
+            assert!(!is_deletable_repodata_href(Link::new(href)), "{href} must be rejected");
+        }
+    }
 }
