@@ -555,6 +555,10 @@ impl<H: Hierarchize + Sync> Cache<H> {
     /// entries. Deletion is best-effort: a failed individual removal is logged and its entry is
     /// *kept*, so the file keeps being tracked and a later publication retries the deletion —
     /// it must never roll back or fail the publication that already succeeded.
+    ///
+    /// A missing file is not a failure: [`StoreBackend::delete`] maps `NotFound` to success for
+    /// both backends, so an already-vanished file joins `removed` and its entry is dropped like
+    /// any other successful removal.
     async fn cleanup_obsolete_repodata(
         &self,
         previous: Vec<repomd::Data>,
@@ -587,7 +591,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
         // Even if this fails, the stale state converges on its own: leftover entries are
         // re-checked (and deleting an already-deleted file maps to success) on the next
         // publication, and cleanup only ever touches tracked hrefs that `kept` no longer has.
-        let res = (|| -> heed::Result<()> {
+        let res: heed::Result<()> = try {
             let mut wtxn = self.env.write_txn()?;
             for href in &removed {
                 // SAFETY: we do not keep any references to the database's contents
@@ -603,8 +607,7 @@ impl<H: Hierarchize + Sync> Cache<H> {
                 self.tracked.put(&mut wtxn, data.location.href.as_str(), data)?;
             }
             wtxn.commit()?;
-            Ok(())
-        })();
+        };
         if let Err(e) = res {
             tracing::warn!(error = %e, "cannot update the tracked metadata locations");
         }
