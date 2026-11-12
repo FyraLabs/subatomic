@@ -1,3 +1,5 @@
+#![feature(exit_status_error)]
+
 use std::io::Write;
 mod common;
 

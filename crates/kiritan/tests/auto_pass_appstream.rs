@@ -6,7 +6,6 @@ mod common;
 
 #[test]
 fn auto_pass_appstream() {
-    let workspace = env!("CARGO_WORKSPACE_DIR");
     let dir = tempfile::tempdir().unwrap();
     common::run_once(&dir, |cmd| _ = cmd.arg("--appstream"), |_| {});
 

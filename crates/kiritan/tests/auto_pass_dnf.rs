@@ -1,3 +1,5 @@
+#![feature(exit_status_error)]
+
 mod common;
 
 #[test]

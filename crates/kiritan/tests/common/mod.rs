@@ -1,10 +1,9 @@
-#![feature(exit_status_error)]
 pub fn run_once(
     dir: &tempfile::TempDir,
     pre: impl FnOnce(&mut assert_cmd::Command),
     post: impl FnOnce(&mut assert_cmd::Command),
 ) {
-    // SAFETY: safe when single-threaded.
+    // SAFETY: single-threaded
     unsafe {
         std::env::set_var("RUST_LOG", "trace");
     }
