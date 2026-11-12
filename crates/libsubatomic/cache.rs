@@ -911,7 +911,7 @@ mod tests {
         std::fs::create_dir(&blocked).unwrap();
         let res = cache.write_all(&CompConfig::default()).await;
         std::fs::remove_dir(&blocked).unwrap();
-        res.expect_err("blocked metan output must fail generation");
+        let e = res.expect_err("blocked metan output must fail generation");
         assert!(matches!(e, crate::Error::Kuchiyose(_)), "e={e:?}");
 
         for href in &old {

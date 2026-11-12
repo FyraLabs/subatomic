@@ -61,7 +61,7 @@ fn manual_add_remove_with_comps() {
     cmd.arg("--add").arg(&broken).arg("--comps").arg(&comps);
     cmd.assert().success();
 
-    let mut names = dnf_names(&out);
+    let names = dnf_names(&out);
     names.sort_unstable();
     assert_eq!(names, ["terra-release", "terra-release-extras"]);
 
