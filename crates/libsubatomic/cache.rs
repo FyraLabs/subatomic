@@ -906,12 +906,12 @@ mod tests {
         add_pkg(&cache, &build_rpm(in_dir.path(), "testa"));
         let old: Vec<String> = publish(&cache).await;
 
-        // Make `repodata/` unwritable so that metan generation itself fails.
-        let repodata = out.path().join(REPODATA_DIR);
-        std::fs::set_permissions(&repodata, std::fs::Permissions::from_mode(0o555)).unwrap();
+        // make primary.xml unwritable by creating a dir there
+        let blocked = out.path().join(REPODATA_DIR).join("primary.xml");
+        std::fs::create_dir(&blocked).unwrap();
         let res = cache.write_all(&CompConfig::default()).await;
-        std::fs::set_permissions(&repodata, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let Err(e) = res else { panic!("read-only repodata must fail generation") };
+        std::fs::remove_dir(&blocked).unwrap();
+        res.expect_err("blocked metan output must fail generation");
         assert!(matches!(e, crate::Error::Kuchiyose(_)), "e={e:?}");
 
         for href in &old {
