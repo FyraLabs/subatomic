@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 #[command(name = "kiritan")]
 /// Alternative to `createrepo_c`.
 pub struct Cli {
+    #[clap(flatten)]
+    pub verbose: clap_verbosity_flag::Verbosity<clap_verbosity_flag::InfoLevel>,
     /// Path to directory for a list of rpms, which will be searched recursively.
     #[arg(default_value = ".")]
     pub input: PathBuf,

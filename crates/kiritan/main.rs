@@ -3,16 +3,19 @@
 #![feature(iterator_try_collect)]
 
 use clap::Parser;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::EnvFilter;
 
 mod cli;
 mod createrepo;
 
 fn main() -> color_eyre::Result<()> {
-    tracing_subscriber::registry().with(fmt::layer()).with(EnvFilter::from_default_env()).init();
     color_eyre::install().expect("cannot install color_eyre");
+    let cli = cli::Cli::parse();
+    let filter = EnvFilter::builder()
+        .with_default_directive(cli.verbose.tracing_level_filter().into())
+        .from_env_lossy();
+    tracing_subscriber::FmtSubscriber::builder().with_env_filter(filter).init();
 
     tracing::debug!(ver = env!("CARGO_PKG_VERSION"), "きりたん");
-    let cli = cli::Cli::parse();
     createrepo::run(cli)
 }

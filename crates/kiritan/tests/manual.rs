@@ -10,12 +10,8 @@ fn examples() -> PathBuf {
 }
 
 fn kiritan(dir: &tempfile::TempDir) -> assert_cmd::Command {
-    // SAFETY: single-threaded
-    unsafe {
-        std::env::set_var("RUST_LOG", "trace");
-    }
     let mut cmd = assert_cmd::Command::cargo_bin(assert_cmd::pkg_name!()).unwrap();
-    cmd.arg("-c").arg(dir.path().join("cache"));
+    cmd.arg("-c").arg(dir.path().join("cache")).arg("-vv");
     cmd
 }
 
@@ -61,9 +57,7 @@ fn manual_add_remove_with_comps() {
     cmd.arg("--add").arg(&broken).arg("--comps").arg(&comps);
     cmd.assert().success();
 
-    let names = dnf_names(&out);
-    names.sort_unstable();
-    assert_eq!(names, ["terra-release", "terra-release-extras"]);
+    assert_eq!(dnf_names(&out), ["terra-release", "terra-release-extras"]);
 
     let repomd = std::fs::read_to_string(out.join("repodata/repomd.xml")).unwrap();
     assert!(repomd.contains(r#"type="group""#));
@@ -75,8 +69,7 @@ fn manual_add_remove_with_comps() {
     cmd.arg("--remove").arg("does-not-exist.rpm");
     cmd.assert().success();
 
-    let mut names = dnf_names(&out);
-    assert_eq!(names, ["terra-release"]);
+    assert_eq!(dnf_names(&out), ["terra-release"]);
 }
 
 #[test]

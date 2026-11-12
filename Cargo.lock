@@ -2766,6 +2766,7 @@ version = "1.1.1"
 dependencies = [
  "assert_cmd",
  "clap",
+ "clap-verbosity-flag",
  "color-eyre",
  "crossbeam-channel",
  "jwalk",
