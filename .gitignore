@@ -5,3 +5,4 @@ test
 test/
 rustc-ice-*.txt
 .idea/
+repodata/
