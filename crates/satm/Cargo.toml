@@ -20,9 +20,7 @@ path = "./main.rs"
 
 [dependencies]
 clap = { version = "4.6.4", features = ["derive", "env"] }
-clap-verbosity-flag = { version = "3.0.4", features = [
-  "tracing",
-], default-features = false }
+clap-verbosity-flag = { workspace = true }
 color-eyre = "0.6.5"
 dotenvy = { workspace = true }
 hex = { workspace = true }

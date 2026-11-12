@@ -1,7 +1,6 @@
 //! Wrappers and Utilities for `libsubatomic`.
 #![warn(rust_2018_idioms)]
 #![feature(error_generic_member_access)]
-#![feature(slice_split_once)]
 #![feature(try_blocks)]
 
 pub mod comp;

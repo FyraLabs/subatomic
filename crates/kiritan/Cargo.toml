@@ -8,7 +8,11 @@ homepage = "https://github.com/FyraLabs/subatomic/tree/main/crates/kiritan"
 repository = "https://github.com/FyraLabs/subatomic"
 readme = "README.md"
 keywords = ["fedora", "dnf", "rpm", "repodata", "createrepo"]
-categories = ["development-tools::build-utils", "command-line-utilities", "caching"]
+categories = [
+  "development-tools::build-utils",
+  "command-line-utilities",
+  "caching",
+]
 
 [[bin]]
 name = "kiritan"
@@ -16,6 +20,7 @@ path = "./main.rs"
 
 [dependencies]
 clap = { version = "4.6.4", features = ["derive", "env"] }
+clap-verbosity-flag = { workspace = true }
 color-eyre = "0.6.5"
 crossbeam-channel = { workspace = true }
 # WARN: deprecated
@@ -26,6 +31,11 @@ num_cpus = "1.17.0"
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+assert_cmd.workspace = true
+tempfile.workspace = true
+zstd.workspace = true
 
 [lints]
 workspace = true
