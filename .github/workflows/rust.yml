@@ -55,7 +55,7 @@ jobs:
           --health-retries 5
     steps:
       - name: Install dependencies
-        run: dnf in -y clang gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)'
+        run: dnf in -y clang gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)' appstream
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,7 +143,7 @@ jobs:
           --health-retries 10
     steps:
       - name: Install dependencies
-        run: dnf in -y clang gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)'
+        run: dnf in -y clang gcc 'pkgconfig(libzstd)' 'pkgconfig(openssl)' appstream
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

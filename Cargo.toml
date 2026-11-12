@@ -72,6 +72,7 @@ version = "0.9.0"
 features = ["postgres", "runtime-tokio", "tls-native-tls", "migrate"]
 
 [workspace.dependencies]
+assert_cmd = "2.2.2"
 crossbeam-channel = "0.5.16"
 dotenvy = "0.15.7"
 hex = "0.4.3"
@@ -86,6 +87,7 @@ tempfile = "3.27.0"
 thiserror = "2.0.19"
 tracing = "0.1.44"
 tracing-logfmt = "0.3.7"
+zstd = "0.14.2"
 
 [workspace.dependencies.tracing-subscriber]
 version = "0.3.23"
